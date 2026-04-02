@@ -17,8 +17,9 @@ uniform float     band_activation;
 
 uniform float grid_size;       /* 2-20, default 6 */
 uniform float wave_speed;      /* 0.5-10.0, default 3.0 */
-uniform float pattern;         /* 0-7: wave,seq,random,spiral,radial,cross,diamond,checker */
-uniform float logo_in_cells;   /* 0=off, 1=logo shape lights up, 2=logo dark silhouette */
+uniform float intensity;       /* 0.0-3.0, default 1.0 — overall brightness */
+uniform float pattern;         /* 0-11: wave L/R/T/B, seq, random, spiral, radial, cross, diamond, checker, diag */
+uniform float logo_in_cells;   /* 0=off, 1=logo shape lights up, 2=logo dark silhouette, 3=logo colors */
 uniform float flash_color_r;   /* default 1.0 */
 uniform float flash_color_g;   /* default 1.0 */
 uniform float flash_color_b;   /* default 1.0 */
@@ -106,8 +107,9 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
         /* 4: Sequential L→R, Top→Bottom */
         cell_phase = (cell_id.y * gsize_x + cell_id.x) / (gsize_x * gsize_y);
     } else if (pmode < 5.5) {
-        /* 5: Random */
-        cell_phase = hash21(cell_id);
+        /* 5: Random — pattern changes on beats, freezes in silence */
+        float beat_tick = floor(time * max(bass, 0.01) * 4.0);
+        cell_phase = hash21(cell_id + beat_tick);
     } else if (pmode < 6.5) {
         /* 6: Spiral — uses normalized delta for circular shape */
         float angle = atan2(delta_norm.y, delta_norm.x);
@@ -132,12 +134,6 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
         cell_phase = (cell_id.x / gsize_x + cell_id.y / gsize_y) * 0.5;
     }
 
-    /* Strobe timing: cell flashes at its phase position */
-    float strobe_t = frac(time * wspd * 0.5 + cell_phase);
-    /* Wider, punchier pulse */
-    float strobe = smoothstep(0.0, 0.03, strobe_t) *
-                   smoothstep(0.45, 0.2, strobe_t);
-
     /* Activation gate: only flash when band is active */
     float activation = band_activation;
     if (activation < 0.01) {
@@ -146,9 +142,18 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
 
     /* Sharpen activation curve for punchier response */
     activation = saturate(activation * 1.8);
-    activation = activation * activation; /* quadratic = more on/off feel */
+    activation = activation * activation;
 
-    float strength = strobe * activation * cell_shape * 1.5;
+    /* Strobe timing: animation pauses when audio is silent */
+    float audio_time = time * max(activation, 0.001);
+    float strobe_t = frac(audio_time * wspd * 0.5 + cell_phase);
+    float strobe = smoothstep(0.0, 0.03, strobe_t) *
+                   smoothstep(0.45, 0.2, strobe_t);
+
+    /* Intensity control (fallback to 1.0 if not set) */
+    float intens = intensity > 0.01 ? intensity : 1.0;
+
+    float strength = strobe * activation * cell_shape * intens * 1.5;
 
     /* Color with slight per-cell variation */
     float cell_hue = hash21(cell_id * 7.3) * 0.15;
