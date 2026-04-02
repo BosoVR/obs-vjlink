@@ -4,6 +4,12 @@ Audio-reactive VJ visuals plugin for OBS Studio. Turn OBS into a real-time visua
 
 Inspired by [AudioLink](https://github.com/llealloo/vrc-udon-audio-link) for VRChat.
 
+---
+
+Hey, I'm **Boso** (BosoVR on VRChat) - DJ and visual artist. You can find my mixes on [SoundCloud](https://soundcloud.com/bosovr). I DJ in VRChat and needed a better VJ system because I was never fully satisfied with just using images or GIFs as visuals. So I built this plugin with the help of AI. Hope this helps all my fellow DJs out there - if you want to work with it or collaborate, add me on Discord: **bosovr**
+
+---
+
 ## Features
 
 - **53 Shader Effects** across 11 categories (Tunnels, Plasma, Particles, Fractals, Geometric, Glitch, Retro, 3D, Audio Viz, Post-Processing, Flash/Strobe)
