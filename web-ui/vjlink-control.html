@@ -2267,17 +2267,10 @@ async function selectEffect(effectId) {
   renderEffects();
 }
 
-let _bandParamSilent = false; /* suppress flash during audio polling */
+let _bandParamSilent = false;
 async function setBandParam(bandIndex, name, value) {
   if (!ws || !connected) return;
-  const resp = await sendRequest('SetBandParam', { band: bandIndex, param: name, value: parseFloat(value) });
-  if (!_bandParamSilent) {
-    const el = document.getElementById('paramVal_' + name);
-    if (el) {
-      el.style.color = resp ? 'var(--green)' : 'var(--red)';
-      setTimeout(() => { el.style.color = ''; }, 200);
-    }
-  }
+  sendRequest('SetBandParam', { band: bandIndex, param: name, value: parseFloat(value) });
 }
 
 async function setParam(name, value) {
@@ -2334,8 +2327,8 @@ function setParamBandThreshold(paramName, threshold) {
 // Called each poll cycle to send band-modulated params
 function updateBandModulatedParams(state) {
   const bands = [
-    state.bass || 0, state.lowmid || 0,
-    state.highmid || 0, state.treble || 0
+    state.band_bass || 0, state.band_lowmid || 0,
+    state.band_highmid || 0, state.band_treble || 0
   ];
 
   /* Main effect param modulation */
@@ -2786,17 +2779,19 @@ function renderBandParams(bandIndex) {
         oninput="document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setBandParam(${bandIndex},'${p.name}',this.value);if(bandParamMappings['${p.name}'])bandParamMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
 
       /* Audio band mapping for this param */
-      html += `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
-        <select style="flex:1;font-size:11px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
-          onchange="setBandParamAudioMapping(${bandIndex},'${p.name}',parseInt(this.value),${p.min},${p.max});renderBandParamControls('${p.name}',this.parentElement)">
-          <option value="-1">None</option>
-          <option value="0">Bass</option>
-          <option value="1">Low-Mid</option>
-          <option value="2">High-Mid</option>
-          <option value="3">Treble</option>
-        </select>
-        <span id="bandParamExtra_${p.name}"></span>
+      html += `<div style="margin-top:4px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
+          <select style="flex:1;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
+            onchange="setBandParamAudioMapping(${bandIndex},'${p.name}',parseInt(this.value),${p.min},${p.max});renderBandParamControls('${p.name}')">
+            <option value="-1">None</option>
+            <option value="0">Bass</option>
+            <option value="1">Low-Mid</option>
+            <option value="2">High-Mid</option>
+            <option value="3">Treble</option>
+          </select>
+        </div>
+        <div id="bandParamExtra_${p.name}"></div>
       </div>`;
     }
 
@@ -2827,7 +2822,7 @@ function setBandParamAudioMapping(bandIdx, paramName, audioBand, min, max) {
   }
 }
 
-function renderBandParamControls(paramName, parentEl) {
+function renderBandParamControls(paramName) {
   const wrap = document.getElementById('bandParamExtra_' + paramName);
   if (!wrap) return;
   const m = bandParamMappings[paramName];

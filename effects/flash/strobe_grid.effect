@@ -107,8 +107,8 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
         /* 4: Sequential L→R, Top→Bottom */
         cell_phase = (cell_id.y * gsize_x + cell_id.x) / (gsize_x * gsize_y);
     } else if (pmode < 5.5) {
-        /* 5: Random — pattern changes on beats, freezes in silence */
-        float beat_tick = floor(time * max(bass, 0.01) * 4.0);
+        /* 5: Random — pattern changes on beat phase, stable between beats */
+        float beat_tick = floor(beat_phase * 2.0 + time * 0.5);
         cell_phase = hash21(cell_id + beat_tick);
     } else if (pmode < 6.5) {
         /* 6: Spiral — uses normalized delta for circular shape */
@@ -144,9 +144,8 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
     activation = saturate(activation * 1.8);
     activation = activation * activation;
 
-    /* Strobe timing: animation pauses when audio is silent */
-    float audio_time = time * max(activation, 0.001);
-    float strobe_t = frac(audio_time * wspd * 0.5 + cell_phase);
+    /* Strobe timing: runs on normal time, activation gates brightness */
+    float strobe_t = frac(time * wspd * 0.5 + cell_phase);
     float strobe = smoothstep(0.0, 0.03, strobe_t) *
                    smoothstep(0.45, 0.2, strobe_t);
 

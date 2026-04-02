@@ -242,4 +242,4 @@ Effects are HLSL `.effect` files in `effects/<category>/`. Metadata is defined i
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+**Free for personal use** (DJing, VJing, streaming, events). Commercial license required if you integrate VJLink into software that is sold. See [LICENSE](LICENSE) for details. Contact **bosovr** on Discord for commercial licensing.
