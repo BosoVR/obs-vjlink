@@ -1,0 +1,186 @@
+/*
+ * VJLink - Beat Blocks
+ * Audio-reactive colored squares spawn across the screen on beat.
+ * Patterns: random, grid, checkerboard, diagonal, spiral.
+ * Optional logo in 4 corners.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform texture2d logo_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float block_size;      /* 0.02-0.3, default 0.08 */
+uniform float density;         /* 0.0-1.0, default 0.5 */
+uniform float pattern_mode;    /* 0=random,1=grid,2=checker,3=diag,4=spiral */
+uniform float flash_color_r;   /* default 1.0 */
+uniform float flash_color_g;   /* default 1.0 */
+uniform float flash_color_b;   /* default 1.0 */
+uniform float logo_scale;      /* 0.01-0.5, default 0.12 */
+uniform float color_variation; /* 0.0-1.0, default 0.3 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float4 PSBeatBlocks(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    /* Beat envelope: sharp attack, exponential decay */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    /* Effective block size pulses with bass */
+    float bsize = max(block_size, 0.02) * (1.0 + bass * 0.3);
+
+    /* Grid cell */
+    float2 cell_uv = uv;
+    cell_uv.x *= aspect;
+    float2 cell_id = floor(cell_uv / bsize);
+    float2 cell_frac = frac(cell_uv / bsize);
+
+    /* Cell hash for activation decisions */
+    float cell_hash = hash21(cell_id + floor(time * 4.0));
+    float cell_hash_stable = hash21(cell_id);
+
+    /* Pattern-based activation */
+    int ix = (int)cell_id.x;
+    int iy = (int)cell_id.y;
+    float pattern = saturate(pattern_mode);
+    float activation = 0.0;
+
+    float mode = pattern_mode;
+    if (mode < 0.5) {
+        /* Random: hash-based, density threshold */
+        activation = step(1.0 - density * (0.5 + bass * 0.5), cell_hash);
+    } else if (mode < 1.5) {
+        /* Grid: every Nth cell */
+        int n = max(2, (int)(5.0 - density * 4.0));
+        activation = (ix % n == 0 && iy % n == 0) ? 1.0 : 0.0;
+        activation *= step(0.3, cell_hash + bass * 0.5);
+    } else if (mode < 2.5) {
+        /* Checkerboard */
+        activation = ((ix + iy) % 2 == 0) ? 1.0 : 0.0;
+        activation *= step(1.0 - density, cell_hash + bass * 0.3);
+    } else if (mode < 3.5) {
+        /* Diagonal stripes */
+        activation = ((ix + iy) % 3 == 0) ? 1.0 : 0.0;
+        activation *= step(0.4 - density * 0.3, cell_hash + bass * 0.3);
+    } else {
+        /* Spiral: distance from center drives activation */
+        float2 center = float2(0.5 * aspect, 0.5);
+        float dist = length(cell_id * bsize - center);
+        float ring = frac(dist * 5.0 - time * 2.0);
+        activation = step(1.0 - density, ring) * step(0.3, cell_hash + bass * 0.3);
+    }
+
+    /* Only show on beat (fade with beat envelope) */
+    activation *= smoothstep(0.0, 0.3, beat + bass * 0.5);
+
+    /* Block color */
+    float3 base_col = float3(
+        saturate(flash_color_r),
+        saturate(flash_color_g),
+        saturate(flash_color_b)
+    );
+
+    /* Color variation per cell */
+    float var = saturate(color_variation);
+    if (var > 0.01) {
+        float hue_shift = cell_hash_stable * var;
+        float3 hsv_col = hsv2rgb(float3(hue_shift + time * 0.05, 0.8, 1.0));
+        base_col = lerp(base_col, hsv_col, var);
+    }
+
+    /* Block shape: slight inner margin for spacing */
+    float2 edge = smoothstep(0.0, 0.08, cell_frac) *
+                  smoothstep(0.0, 0.08, 1.0 - cell_frac);
+    float block_shape = edge.x * edge.y;
+
+    float3 col = base_col * activation * block_shape;
+
+    /* Add some glow/bloom to active blocks */
+    col += base_col * activation * 0.1 * (1.0 - block_shape);
+
+    /* === Logo in 4 corners === */
+    float lscale = max(logo_scale, 0.01);
+    float4 logo_col = float4(0.0, 0.0, 0.0, 0.0);
+
+    /* Corner positions */
+    float2 corners[4];
+    corners[0] = float2(lscale * 0.5, lscale * 0.5);             /* top-left */
+    corners[1] = float2(1.0 - lscale * 0.5, lscale * 0.5);       /* top-right */
+    corners[2] = float2(lscale * 0.5, 1.0 - lscale * 0.5);       /* bottom-left */
+    corners[3] = float2(1.0 - lscale * 0.5, 1.0 - lscale * 0.5); /* bottom-right */
+
+    for (int c = 0; c < 4; c++) {
+        float2 logo_uv = (uv - corners[c]) / lscale + 0.5;
+        if (logo_uv.x >= 0.0 && logo_uv.x <= 1.0 &&
+            logo_uv.y >= 0.0 && logo_uv.y <= 1.0) {
+            float4 lsample = logo_tex.Sample(texSampler, logo_uv);
+            float lvis = max(max(lsample.r, lsample.g), lsample.b);
+            if (lsample.a > 0.01 && lvis > 0.01) {
+                float logo_brightness = 0.7 + beat * bass * 0.3;
+                col = lerp(col, lsample.rgb * logo_brightness, lsample.a);
+            }
+        }
+    }
+
+    /* Alpha from brightness for transparency */
+    float out_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSBeatBlocks(vert_in);
+    }
+}

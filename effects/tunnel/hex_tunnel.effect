@@ -1,0 +1,192 @@
+/*
+ * VJLink - Hex Tunnel (Neon Grid)
+ * Raymarched hexagonal tunnel with volumetric neon edge glow,
+ * depth layers, and audio-reactive pulsing cells.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float hex_scale;       /* hex grid size (default 8.0) */
+uniform float tunnel_speed;    /* fly-through speed (default 1.0) */
+uniform float glow_width;      /* edge glow thickness (default 0.08) */
+uniform float color_cycle;     /* hue rotation speed (default 0.3) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+/* Proper hexagonal tiling: returns cell center and edge distance */
+float4 hexTile(float2 p)
+{
+    /* Hex grid constants */
+    float2 s = float2(1.0, 1.7320508); /* 1, sqrt(3) */
+    float2 h = s * 0.5;
+
+    float2 a = fmod(p, s) - h;
+    float2 b = fmod(p - h, s) - h;
+
+    float2 gv = (dot(a, a) < dot(b, b)) ? a : b;
+
+    /* Edge distance (hexagon SDF) */
+    float2 ap = abs(gv);
+    float edge_dist = max(dot(ap, normalize(float2(1.0, 1.7320508))), ap.x);
+    float hex_d = 0.5 - edge_dist;
+
+    /* Cell ID */
+    float2 id = p - gv;
+    return float4(gv, id);
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+float4 PSHexTunnel(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float bass    = bands.x;
+    float lowmid  = bands.y;
+    float highmid = bands.z;
+    float treble  = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    float scale = max(hex_scale, 2.0);
+    float speed = tunnel_speed + bass * 0.8;
+    float glow = max(glow_width, 0.01);
+
+    /* Polar coords for tunnel */
+    float r = length(p);
+    float a = atan2(p.y, p.x);
+
+    /* Prevent center singularity */
+    float inv_r = 1.0 / (r + 0.001);
+
+    /* Camera rotation from audio */
+    float cam_rot = time * 0.15 * speed + bass * 0.3;
+    a += cam_rot;
+
+    /* Tunnel UV with depth */
+    float depth = inv_r;
+    float2 tp;
+    tp.x = a / 3.14159 * scale;
+    tp.y = depth * scale * 0.5 + time * speed * 2.0;
+
+    /* === Multi-layer hex grid for volumetric depth === */
+    float3 color = float3(0.0, 0.0, 0.0);
+
+    for (int layer = 0; layer < 3; layer++) {
+        float layer_f = (float)layer;
+        float layer_offset = layer_f * 0.3;
+        float layer_scale = 1.0 + layer_f * 0.5;
+        float layer_alpha = 1.0 - layer_f * 0.3;
+
+        float2 lp = tp * layer_scale + float2(layer_offset, layer_offset * 1.7);
+
+        /* Hex tiling */
+        float4 hex = hexTile(lp);
+        float2 gv = hex.xy;   /* local position in cell */
+        float2 id = hex.zw;   /* cell ID */
+
+        /* Cell hash for variation */
+        float ch = hash21(id);
+
+        /* Hexagonal edge distance */
+        float2 ap = abs(gv);
+        float edge_dist = max(dot(ap, normalize(float2(1.0, 1.7320508))), ap.x);
+        float hex_edge = 0.5 - edge_dist;
+
+        /* Neon edge glow: exponential falloff from edges */
+        float edge_glow = exp(-hex_edge / (glow * (1.0 + bass * 0.5))) * 0.8;
+
+        /* Inner glow: pulsing cells based on audio */
+        float cell_band = frac(ch * 4.0);
+        float cell_energy = 0.0;
+        if (cell_band < 0.25) cell_energy = bass;
+        else if (cell_band < 0.5) cell_energy = lowmid;
+        else if (cell_band < 0.75) cell_energy = highmid;
+        else cell_energy = treble;
+
+        /* Cell pulse: only bright when audio band is active */
+        float inner_glow = smoothstep(0.15, 0.0, hex_edge) * cell_energy * 0.6;
+
+        /* Color per cell: hue from position + time */
+        float hue = frac(ch * 0.7 + time * color_cycle * 0.1 + id.y * 0.02);
+        float cell_sat = 0.8 + cell_energy * 0.2;
+        float cell_val = edge_glow + inner_glow;
+
+        float3 cell_color = hsv2rgb(float3(hue, cell_sat, 1.0));
+
+        /* Depth-based fade */
+        float depth_fade = exp(-r * 1.5) * (1.0 + layer_f * 0.3);
+        depth_fade = saturate(depth_fade * 2.0);
+
+        color += cell_color * cell_val * depth_fade * layer_alpha;
+    }
+
+    /* Bright center core (tunnel vanishing point) */
+    float core = exp(-r * 8.0) * 0.3;
+    float core_hue = frac(time * 0.15 + bass * 0.2);
+    color += hsv2rgb(float3(core_hue, 0.5, 1.0)) * core * (1.0 + bass);
+
+    /* Radial scan lines for extra depth */
+    float scanline = sin(a * 12.0 + time * 3.0) * 0.5 + 0.5;
+    scanline = pow(scanline, 8.0) * 0.1 * treble;
+    color += float3(0.3, 0.6, 1.0) * scanline * exp(-r * 2.0);
+
+    /* Beat flash: white pulse from center */
+    float beat_flash = beat * bass * exp(-r * 3.0) * 0.6;
+    color += float3(1.0, 0.95, 0.9) * beat_flash;
+
+    /* HDR tonemap */
+    color = color / (1.0 + color * 0.3);
+
+    /* Vignette */
+    float vig = 1.0 - r * 0.15;
+    color *= saturate(vig);
+
+    return float4(saturate(color), 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSHexTunnel(vert_in);
+    }
+}

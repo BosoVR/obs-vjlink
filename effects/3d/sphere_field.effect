@@ -1,0 +1,150 @@
+/*
+ * VJLink Sphere Field Effect
+ * Raymarched field of spheres with audio-reactive pulsing.
+ * Bass drives sphere size, treble adds glow intensity.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom params */
+uniform float sphere_count;    /* grid dimension (default 5) */
+uniform float sphere_spacing;  /* spacing between spheres (default 2.5) */
+uniform float cam_distance;    /* camera distance (default 8.0) */
+uniform float glow_intensity;  /* glow strength (default 1.5) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float sdSphere(float3 p, float r)
+{
+    return length(p) - r;
+}
+
+float sceneSDF(float3 p)
+{
+    float grid = max(sphere_spacing, 1.0);
+    float count = max(sphere_count, 2.0);
+
+    /* Repeat space */
+    float3 q = p;
+    q.xz = fmod(abs(q.xz) + grid * 0.5, grid) - grid * 0.5;
+    q.y  = fmod(abs(q.y) + grid * 0.5, grid) - grid * 0.5;
+
+    /* Audio-reactive radius */
+    float base_r = 0.4 + bands.x * 0.4;
+
+    /* Beat pulse */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+    base_r += beat * 0.2;
+
+    /* Limit to finite grid */
+    float bound = count * grid * 0.5;
+    float box = max(max(abs(p.x) - bound, abs(p.y) - bound), abs(p.z) - bound);
+
+    return max(sdSphere(q, base_r), box);
+}
+
+float3 calcNormal(float3 p)
+{
+    float2 e = float2(0.001, 0.0);
+    return normalize(float3(
+        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+    ));
+}
+
+float4 PSSphereField(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float dist = max(cam_distance, 3.0);
+
+    /* Orbiting camera */
+    float angle = time * 0.3;
+    float3 ro = float3(cos(angle) * dist, 2.0 + sin(time * 0.2), sin(angle) * dist);
+    float3 ta = float3(0.0, 0.0, 0.0);
+
+    float3 ww = normalize(ta - ro);
+    float3 uu = normalize(cross(ww, float3(0.0, 1.0, 0.0)));
+    float3 vv = cross(uu, ww);
+
+    float3 rd = normalize(p.x * uu + p.y * vv + 1.5 * ww);
+
+    /* Raymarch */
+    float t = 0.0;
+    float3 color = float3(0.0, 0.0, 0.0);
+    float glow = 0.0;
+
+    for (int i = 0; i < 80; i++) {
+        float3 pos = ro + rd * t;
+        float d = sceneSDF(pos);
+
+        /* Accumulate glow near surfaces */
+        glow += 0.02 / (0.1 + d * d);
+
+        if (d < 0.002) {
+            float3 n = calcNormal(pos);
+            float3 light_dir = normalize(float3(0.5, 0.8, -0.3));
+            float diff = max(dot(n, light_dir), 0.0);
+            float spec = pow(max(dot(reflect(-light_dir, n), -rd), 0.0), 32.0);
+
+            /* Audio-reactive color */
+            float hue = frac(length(pos.xz) * 0.1 + time * 0.1 + bands.y * 0.5);
+            float3 base_col;
+            base_col.r = abs(hue * 6.0 - 3.0) - 1.0;
+            base_col.g = 2.0 - abs(hue * 6.0 - 2.0);
+            base_col.b = 2.0 - abs(hue * 6.0 - 4.0);
+            base_col = saturate(base_col);
+
+            color = base_col * (diff * 0.8 + 0.2) + float3(1.0, 1.0, 1.0) * spec * 0.5;
+            break;
+        }
+
+        t += d;
+        if (t > 50.0) break;
+    }
+
+    /* Add glow */
+    float glow_str = max(glow_intensity, 0.0);
+    float3 glow_col = float3(0.3 + bands.x * 0.7, 0.1 + bands.z * 0.4, 0.5 + bands.w * 0.5);
+    color += glow_col * glow * 0.015 * glow_str;
+
+    /* Tone mapping */
+    color = color / (1.0 + color);
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSphereField(vert_in);
+    }
+}

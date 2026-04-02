@@ -1,0 +1,13 @@
+{
+    "effect_id": "lava_lamp",
+    "name": "Lava Lamp",
+    "category": "plasma",
+    "description": "Organic metaball blobs with warm lava color palette and audio-reactive sizing",
+    "author": "VJLink",
+    "params": [
+        { "id": "blob_scale", "name": "Blob Scale", "type": "float", "default": 3.0, "min": 1.0, "max": 8.0, "step": 0.5 },
+        { "id": "flow_speed", "name": "Flow Speed", "type": "float", "default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05 },
+        { "id": "warmth", "name": "Warmth", "type": "float", "default": 0.7, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "glow_amount", "name": "Glow", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 0.1 }
+    ]
+}

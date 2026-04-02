@@ -1,0 +1,45 @@
+{
+    "effect_id": "torus_knot",
+    "name": "Torus Knot",
+    "category": "3d",
+    "description": "Raymarched torus knot with audio-reactive deformation and iridescent coloring",
+    "author": "VJLink",
+    "params": [
+        {
+            "id": "knot_p",
+            "name": "Knot P",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 7.0,
+            "step": 1.0
+        },
+        {
+            "id": "knot_q",
+            "name": "Knot Q",
+            "type": "float",
+            "default": 2.0,
+            "min": 1.0,
+            "max": 7.0,
+            "step": 1.0
+        },
+        {
+            "id": "knot_radius",
+            "name": "Major Radius",
+            "type": "float",
+            "default": 2.0,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.1
+        },
+        {
+            "id": "tube_radius",
+            "name": "Tube Radius",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.05,
+            "max": 1.5,
+            "step": 0.05
+        }
+    ]
+}

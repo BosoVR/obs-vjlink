@@ -1,0 +1,99 @@
+/*
+ * VJLink Particle Render Shader
+ * Reads particle state texture and renders each particle as a
+ * screen-space point sprite with size/color interpolation.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d state_tex;   /* pos.xyz + lifetime(0..1) */
+
+uniform float2 resolution;
+uniform float  particle_size_start;
+uniform float  particle_size_end;
+uniform float4 color_start;
+uniform float4 color_end;
+uniform float  tex_size;       /* particle texture dimension (128) */
+
+sampler_state pointSampler {
+    Filter   = Point;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSRender(VertInOut vert_in) : TARGET
+{
+    float2 screen_uv = vert_in.uv;
+    float2 screen_pos = screen_uv * resolution;
+
+    float4 total_color = float4(0.0, 0.0, 0.0, 0.0);
+
+    /* Iterate over all particles in state texture */
+    float inv_size = 1.0 / tex_size;
+
+    for (float py = 0.0; py < tex_size; py += 1.0) {
+        for (float px = 0.0; px < tex_size; px += 1.0) {
+            float2 puv = float2((px + 0.5) * inv_size,
+                                (py + 0.5) * inv_size);
+
+            float4 state = state_tex.Sample(pointSampler, puv);
+
+            float3 pos = state.xyz;
+            float life = state.w;
+
+            /* Skip dead particles */
+            if (life >= 1.0)
+                continue;
+
+            /* Simple orthographic projection to screen */
+            float2 proj_pos;
+            proj_pos.x = (pos.x * 0.3 + 0.5) * resolution.x;
+            proj_pos.y = (1.0 - (pos.y * 0.3 + 0.5)) * resolution.y;
+
+            /* Particle size interpolation */
+            float sz = lerp(particle_size_start, particle_size_end, life);
+            float pixel_size = sz * resolution.y;
+
+            /* Distance from pixel to particle center */
+            float2 diff = screen_pos - proj_pos;
+            float dist = length(diff);
+
+            if (dist < pixel_size) {
+                /* Soft circle falloff */
+                float alpha = 1.0 - (dist / pixel_size);
+                alpha = alpha * alpha;
+
+                /* Color interpolation over lifetime */
+                float4 col = lerp(color_start, color_end, life);
+                col.a *= alpha;
+
+                /* Additive accumulation */
+                total_color.rgb += col.rgb * col.a;
+                total_color.a = max(total_color.a, col.a);
+            }
+        }
+    }
+
+    return float4(total_color.rgb, saturate(total_color.a));
+}
+
+technique Render
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSRender(vert_in);
+    }
+}

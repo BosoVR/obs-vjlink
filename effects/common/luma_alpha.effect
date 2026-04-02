@@ -1,0 +1,51 @@
+/*
+ * VJLink - Luminance to Alpha Post-Process
+ * Converts opaque generative effect output to proper alpha channel.
+ * alpha = max(r, g, b) → dark/black areas become transparent.
+ * Output is premultiplied (RGB * alpha) for correct OBS compositing.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSLumaAlpha(VertInOut vert_in) : TARGET
+{
+    float4 src = image.Sample(texSampler, vert_in.uv);
+
+    /* Alpha from maximum color channel (brightness) */
+    float a = max(max(src.r, src.g), src.b);
+
+    /* Slight curve to avoid near-black fringing */
+    a = smoothstep(0.02, 0.15, a) * a + (1.0 - smoothstep(0.02, 0.15, a)) * 0.0;
+
+    /* Premultiply RGB for correct alpha blending in OBS */
+    return float4(src.rgb * a, a);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSLumaAlpha(vert_in);
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "id": "waveform_bars",
+    "name": "Waveform Bars",
+    "category": "audio_viz",
+    "description": "Spectrum analyzer with frequency bars reading FFT data",
+    "params": [
+        { "name": "bar_count", "label": "Bar Count", "type": "float", "default": 64.0, "min": 16.0, "max": 128.0, "step": 1.0 },
+        { "name": "bar_width", "label": "Bar Width", "type": "float", "default": 0.8, "min": 0.3, "max": 0.95, "step": 0.05 },
+        { "name": "sensitivity", "label": "Sensitivity", "type": "float", "default": 5.0, "min": 1.0, "max": 10.0, "step": 0.5 },
+        { "name": "mirror", "label": "Mirror Mode", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+    ]
+}

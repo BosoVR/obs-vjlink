@@ -1,0 +1,45 @@
+{
+    "effect_id": "fire_emitter",
+    "name": "Fire Emitter",
+    "category": "particle",
+    "description": "Procedural fire with heat colormap, sparks, and audio-reactive flame height",
+    "author": "VJLink",
+    "params": [
+        {
+            "id": "flame_height",
+            "name": "Flame Height",
+            "type": "float",
+            "default": 1.5,
+            "min": 0.5,
+            "max": 4.0,
+            "step": 0.1
+        },
+        {
+            "id": "flame_detail",
+            "name": "Detail",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 8.0,
+            "step": 0.5
+        },
+        {
+            "id": "heat_intensity",
+            "name": "Heat Intensity",
+            "type": "float",
+            "default": 1.2,
+            "min": 0.5,
+            "max": 3.0,
+            "step": 0.1
+        },
+        {
+            "id": "wind_strength",
+            "name": "Wind",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.1
+        }
+    ]
+}

@@ -1,0 +1,151 @@
+/*
+ * VJLink ASCII Art Effect
+ * Converts image to ASCII character rendering.
+ * Bass drives character density, treble drives color saturation.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float char_size;       /* character cell size in pixels (default 8.0) */
+uniform float color_preserve;  /* keep original color vs green (default 0.5) */
+uniform float contrast;        /* contrast boost (default 1.5) */
+uniform float bg_brightness;   /* background brightness (default 0.05) */
+uniform float has_input_source; /* 1.0 when used as filter */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float luminance(float3 c)
+{
+    return dot(c, float3(0.299, 0.587, 0.114));
+}
+
+/*
+ * Pseudo-character rendering via bit patterns.
+ * Maps brightness to increasingly dense dot patterns.
+ */
+float charPattern(float2 local_uv, float brightness)
+{
+    /* 10 density levels represented as 3x5 dot patterns */
+    int level = int(brightness * 9.99);
+
+    /* Quantize local UV to 3x5 grid */
+    int gx = int(local_uv.x * 3.0);
+    int gy = int(local_uv.y * 5.0);
+
+    if (gx < 0 || gx >= 3 || gy < 0 || gy >= 5)
+        return 0.0;
+
+    int bit_idx = gy * 3 + gx;
+
+    /* Pattern lookup: increasing density
+     * Each int encodes a 3x5 character (15 bits) */
+    int patterns[10] = {
+        0,        /* level 0: empty */
+        256,      /* level 1: single dot */
+        4228,     /* level 2: period-like */
+        4836,     /* level 3: colon-like */
+        5765,     /* level 4: minus-like */
+        11565,    /* level 5: plus-like */
+        15239,    /* level 6: asterisk */
+        23487,    /* level 7: hash */
+        31599,    /* level 8: at-sign dense */
+        32767     /* level 9: full block */
+    };
+
+    int pattern = patterns[clamp(level, 0, 9)];
+    int bit = (pattern >> bit_idx) & 1;
+
+    return float(bit);
+}
+
+float4 PSAscii(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float cell = max(char_size, 4.0);
+    float col_pres = saturate(color_preserve);
+    float contr = max(contrast, 0.5);
+    float bg_bright = saturate(bg_brightness);
+
+    /* Cell coordinates */
+    float2 cell_size = float2(cell, cell * 1.6) / resolution;
+    float2 cell_id = floor(uv / cell_size);
+    float2 cell_uv = frac(uv / cell_size);
+
+    /* Sample center of cell */
+    float2 sample_uv = (cell_id + 0.5) * cell_size;
+
+    float lum;
+    float4 src;
+    bool has_input = (has_input_source > 0.5);
+
+    if (has_input) {
+        src = image.Sample(texSampler, sample_uv);
+        lum = luminance(src.rgb);
+    } else {
+        /* Standalone: generate procedural content for ASCII conversion */
+        float2 p = sample_uv * 8.0 + time * 0.5;
+        float n = sin(p.x * 3.0 + time) * cos(p.y * 2.0 + time * 0.7) * 0.5 + 0.5;
+        n += sin(length(sample_uv - 0.5) * 10.0 - time * 2.0) * 0.3;
+        n *= 0.5 + bands.x * 0.5;
+        lum = saturate(n);
+        src = float4(lum, lum, lum, 1.0);
+    }
+
+    /* Luminance with contrast */
+    lum = saturate((lum - 0.5) * contr + 0.5);
+
+    /* Audio boost */
+    lum *= (1.0 + bands.x * 0.3);
+
+    /* Get character pixel */
+    float char_px = charPattern(cell_uv, lum);
+
+    /* Color */
+    float3 fg_color;
+    float3 terminal_green = float3(0.0, 1.0, 0.3);
+    fg_color = lerp(terminal_green, src.rgb, col_pres);
+
+    /* Beat flash */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    fg_color += float3(0.2, 0.3, 0.1) * beat * bands.x * 0.3;
+
+    float3 bg_color = fg_color * bg_bright;
+    float3 color = lerp(bg_color, fg_color * lum, char_px);
+
+    float out_alpha = has_input ? src.a : max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSAscii(vert_in);
+    }
+}

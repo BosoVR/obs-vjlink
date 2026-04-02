@@ -1,0 +1,204 @@
+/*
+ * VJLink VHS Glitch Effect
+ * Subtle VHS tape artifacts: tracking wobble, gentle noise, color bleed.
+ * Audio gently modulates the effect - not overwhelming.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float tracking_error;  /* horizontal shift (default 0.02) */
+uniform float noise_intensity; /* tape noise (default 0.3) */
+uniform float color_bleed;     /* chroma smearing (default 0.005) */
+uniform float jitter;          /* vertical jitter (default 0.002) */
+uniform float has_input_source; /* 1.0 when used as filter */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash(float p)
+{
+    return frac(sin(p * 127.1) * 43758.5453);
+}
+
+float hash2d(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise1d(float p)
+{
+    float i = floor(p);
+    float f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(hash(i), hash(i + 1.0), f);
+}
+
+/* Standalone VHS pattern when no input */
+float3 vhsPattern(float2 uv, float t, float bass, float treble)
+{
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    /* Static noise background */
+    float n = hash2d(uv * 200.0 + floor(t * 30.0));
+    col = float3(n, n, n) * 0.15;
+
+    /* Color bars (classic TV test pattern) */
+    float bar_x = floor(uv.x * 7.0) / 7.0;
+    float3 bar_colors[7];
+    bar_colors[0] = float3(1.0, 1.0, 1.0);
+    bar_colors[1] = float3(1.0, 1.0, 0.0);
+    bar_colors[2] = float3(0.0, 1.0, 1.0);
+    bar_colors[3] = float3(0.0, 1.0, 0.0);
+    bar_colors[4] = float3(1.0, 0.0, 1.0);
+    bar_colors[5] = float3(1.0, 0.0, 0.0);
+    bar_colors[6] = float3(0.0, 0.0, 1.0);
+    int bar_idx = clamp((int)(uv.x * 7.0), 0, 6);
+    float3 bar = bar_colors[bar_idx];
+
+    /* Distorted color bars with VHS artifacts */
+    float distort = noise1d(uv.y * 20.0 + t * 3.0) * 0.05;
+    float bar_blend = smoothstep(0.3, 0.7, uv.y + distort);
+    col = lerp(bar * 0.4, col, bar_blend);
+
+    /* Tracking lines */
+    float track_y = frac(t * 0.15);
+    float track_dist = abs(uv.y - track_y);
+    float track = exp(-track_dist * 20.0) * 0.5;
+    col += float3(track, track, track);
+
+    /* Rolling horizontal noise bands */
+    float band = noise1d(uv.y * 50.0 + t * 8.0);
+    if (band > 0.95) col += float3(0.3, 0.25, 0.2) * bass;
+
+    /* Chromatic shift */
+    col.r = lerp(col.r, col.g, 0.1 + bass * 0.1);
+    col.b = lerp(col.b, col.r, 0.05);
+
+    /* VHS warm tint */
+    col *= float3(1.05, 1.0, 0.92);
+
+    return saturate(col);
+}
+
+float4 PSVhs(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    bool has_input = (has_input_source > 0.5);
+
+    if (!has_input) {
+        float3 pattern = vhsPattern(uv, time, bands.x, bands.w);
+        float out_alpha = max(max(pattern.r, pattern.g), pattern.b);
+        return float4(pattern, out_alpha);
+    }
+
+    float src_alpha = image.Sample(texSampler, uv).a;
+
+    /* Scale parameters gently with audio - never more than 2x base */
+    float tracking = tracking_error * (1.0 + bands.x * 0.5);
+    float noise_int = noise_intensity;
+    float bleed = color_bleed * (1.0 + bands.x * 0.3);
+    float jit = jitter;
+
+    /* Beat: subtle pulse, not explosive */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    tracking += beat * tracking_error * 0.5 * bands.x;
+
+    /* Vertical jitter - very subtle */
+    float v_jitter = (noise1d(time * 15.0) * 2.0 - 1.0) * jit;
+    v_jitter += bands.x * jit * 0.3;
+    uv.y += v_jitter;
+
+    /* Tracking error: horizontal displacement varies by scanline */
+    float scanline = floor(uv.y * resolution.y);
+    float tracking_noise = noise1d(scanline * 0.3 + time * 2.0);
+
+    /* One slow tracking band that drifts across the screen */
+    float band_pos = frac(time * 0.15);
+    float band_dist = abs(uv.y - band_pos);
+    float band_strength = exp(-band_dist * 30.0);
+
+    float h_shift = tracking * (tracking_noise * 2.0 - 1.0) * 0.3;
+    h_shift += tracking * band_strength * (tracking_noise - 0.5) * 1.5;
+
+    float2 shifted_uv = uv;
+    shifted_uv.x += h_shift;
+    shifted_uv = saturate(shifted_uv);
+
+    /* Color bleeding (chroma smear) - subtle */
+    float r = image.Sample(texSampler, shifted_uv + float2(bleed, 0.0)).r;
+    float g = image.Sample(texSampler, shifted_uv).g;
+    float b = image.Sample(texSampler, shifted_uv - float2(bleed * 0.5, 0.0)).b;
+
+    float3 color = float3(r, g, b);
+
+    /* VHS noise - sparse, not overwhelming */
+    float noise_px = hash2d(uv * resolution + floor(time * 500.0));
+    float noise_line = hash2d(float2(scanline, floor(time * 30.0)));
+
+    /* Light snow noise - only visible on treble */
+    float snow = noise_px * noise_int * 0.08 * (0.3 + bands.w * 0.7);
+    color += float3(snow, snow, snow);
+
+    /* Occasional horizontal static line (rare) */
+    if (noise_line > (1.0 - noise_int * 0.02)) {
+        float line_noise = hash2d(float2(scanline * 3.0, time * 20.0));
+        color = lerp(color, float3(line_noise, line_noise, line_noise), 0.25);
+    }
+
+    /* Head switching noise at very bottom */
+    float head_switch = smoothstep(0.97, 1.0, uv.y);
+    if (head_switch > 0.0) {
+        float hs_noise = hash(floor(uv.x * 20.0 + time * 50.0));
+        color = lerp(color, float3(hs_noise, hs_noise * 0.8, hs_noise * 0.6),
+                     head_switch * 0.6);
+    }
+
+    /* Subtle scanline darkening (VHS resolution lines) */
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    color *= 0.95 + scan * 0.05;
+
+    /* Slight desaturation (VHS color loss) */
+    float lum = dot(color, float3(0.299, 0.587, 0.114));
+    color = lerp(float3(lum, lum, lum), color, 0.88);
+
+    /* Subtle warm tint (VHS yellowish) */
+    color *= float3(1.02, 1.0, 0.96);
+
+    /* Tape edge darkening - very subtle */
+    float edge_fade = smoothstep(0.0, 0.01, uv.y) * smoothstep(1.0, 0.99, uv.y);
+    color *= edge_fade;
+
+    return float4(saturate(color), src_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSVhs(vert_in);
+    }
+}

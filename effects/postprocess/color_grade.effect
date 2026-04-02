@@ -1,0 +1,122 @@
+/*
+ * VJLink - Color Grade
+ * Post-processing: saturation, contrast, brightness, vignette, hue shift.
+ * Applies to the input_tex (previous layer output).
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;      /* OBS filter pipeline binds source here */
+uniform texture2d input_tex;  /* compositor chain binds previous layer here */
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float     has_input_source; /* 1.0 when used as filter */
+
+/* Custom parameters */
+uniform float     pp_brightness;    /* -1.0 - 1.0, default 0.0 */
+uniform float     pp_contrast;      /* 0.5 - 2.0, default 1.0 */
+uniform float     pp_saturation;    /* 0.0 - 3.0, default 1.0 */
+uniform float     pp_hue_shift;     /* 0.0 - 1.0, default 0.0 */
+uniform float     pp_vignette;      /* 0.0 - 1.0, default 0.3 */
+uniform float     pp_gamma;         /* 0.5 - 2.0, default 1.0 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 rgb2hsv(float3 c)
+{
+    float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+    float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+    float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+float4 PSColorGrade(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float4 src;
+    bool has_input = (has_input_source > 0.5);
+
+    if (has_input) {
+        src = image.Sample(texSampler, uv);
+    } else {
+        /* Standalone: color wheel / gradient for previewing grading */
+        float2 p = uv - 0.5;
+        float angle = atan2(p.y, p.x);
+        float dist = length(p) * 2.0;
+        float hue = frac(angle / 6.28318 + time * 0.05);
+        float sat = saturate(dist);
+        float val = smoothstep(1.0, 0.8, dist) * (0.7 + bands.x * 0.3);
+        src = float4(hsv2rgb(float3(hue, sat, val)), 1.0);
+    }
+
+    float3 color = src.rgb;
+
+    /* Brightness */
+    color += pp_brightness;
+
+    /* Contrast (around 0.5 midpoint) */
+    color = (color - 0.5) * pp_contrast + 0.5;
+
+    /* Convert to HSV for saturation and hue */
+    float3 hsv = rgb2hsv(color);
+
+    /* Hue shift */
+    hsv.x = frac(hsv.x + pp_hue_shift);
+
+    /* Saturation */
+    hsv.y *= pp_saturation;
+
+    /* Back to RGB */
+    color = hsv2rgb(hsv);
+
+    /* Gamma correction */
+    color = pow(max(color, 0.001), 1.0 / pp_gamma);
+
+    /* Vignette */
+    float2 vig_uv = uv - 0.5;
+    float vig = 1.0 - dot(vig_uv, vig_uv) * pp_vignette * 2.0;
+    vig = clamp(vig, 0.0, 1.0);
+    color *= vig;
+
+    float out_alpha = has_input ? src.a : max(max(color.r, color.g), color.b);
+    return float4(clamp(color, 0.0, 1.0), out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSColorGrade(vert_in);
+    }
+}

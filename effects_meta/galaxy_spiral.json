@@ -1,0 +1,45 @@
+{
+    "effect_id": "galaxy_spiral",
+    "name": "Galaxy Spiral",
+    "category": "particle",
+    "description": "Spiral galaxy with differential rotation, dust lanes, and audio-reactive star brightness",
+    "author": "VJLink",
+    "params": [
+        {
+            "id": "arm_count",
+            "name": "Spiral Arms",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 6.0,
+            "step": 1.0
+        },
+        {
+            "id": "arm_tightness",
+            "name": "Tightness",
+            "type": "float",
+            "default": 2.5,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.1
+        },
+        {
+            "id": "rotation_speed",
+            "name": "Rotation Speed",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.05
+        },
+        {
+            "id": "star_density",
+            "name": "Star Density",
+            "type": "float",
+            "default": 1.5,
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.1
+        }
+    ]
+}

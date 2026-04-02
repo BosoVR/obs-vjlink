@@ -1,0 +1,134 @@
+/*
+ * VJLink - Logo Pulse
+ * Logo appears center screen, scales up on beat, fades with decay.
+ * Additive glow around edges.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d logo_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float logo_scale;      /* 0.05-0.8, default 0.25 */
+uniform float pulse_strength;  /* 0.0-3.0, default 1.5 */
+uniform float decay_rate;      /* 0.5-5.0, default 2.0 */
+uniform float glow_amount;     /* 0.0-2.0, default 0.8 */
+uniform float rotation_speed;  /* 0.0-2.0, default 0.0 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSLogoPulse(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    /* Beat envelope with configurable decay */
+    float beat = 1.0 - beat_phase;
+    float dec = max(decay_rate, 0.5);
+    float envelope = pow(beat, dec) * bass;
+
+    /* Scale: base + pulse on beat */
+    float scale = max(logo_scale, 0.05);
+    float pulse = max(pulse_strength, 0.0);
+    float effective_scale = scale * (1.0 + envelope * pulse);
+
+    /* Center coords with aspect correction */
+    float2 centered = uv - 0.5;
+    centered.x *= aspect;
+
+    /* Optional rotation */
+    float rot_spd = rotation_speed;
+    if (rot_spd > 0.01) {
+        float angle = time * rot_spd + beat * bass * 0.5;
+        float cs = cos(angle);
+        float sn = sin(angle);
+        float2 rotated;
+        rotated.x = centered.x * cs - centered.y * sn;
+        rotated.y = centered.x * sn + centered.y * cs;
+        centered = rotated;
+    }
+
+    /* Logo UV */
+    float2 logo_uv = centered / effective_scale + 0.5;
+
+    float3 col = float3(0.0, 0.0, 0.0);
+    float out_alpha = 0.0;
+
+    /* Main logo sample */
+    if (logo_uv.x >= 0.0 && logo_uv.x <= 1.0 &&
+        logo_uv.y >= 0.0 && logo_uv.y <= 1.0) {
+        float4 lsample = logo_tex.Sample(texSampler, logo_uv);
+        float lvis = max(max(lsample.r, lsample.g), lsample.b);
+
+        if (lvis > 0.01 || lsample.a < 0.99) {
+            /* Real logo content (not fallback black) */
+            float brightness = 0.6 + envelope * 0.4 + bass * 0.2;
+            col = lsample.rgb * brightness;
+            out_alpha = lsample.a;
+        }
+    }
+
+    /* Additive glow: sample at slightly larger scale */
+    float glow = max(glow_amount, 0.0);
+    if (glow > 0.01) {
+        float glow_scale = effective_scale * (1.0 + glow * 0.3);
+        float2 glow_uv = centered / glow_scale + 0.5;
+
+        if (glow_uv.x >= 0.0 && glow_uv.x <= 1.0 &&
+            glow_uv.y >= 0.0 && glow_uv.y <= 1.0) {
+            float4 gsample = logo_tex.Sample(texSampler, glow_uv);
+
+            /* Glow color based on logo, blurred feel via larger scale */
+            float glow_intensity = gsample.a * glow * 0.3 *
+                                   (0.5 + envelope * 0.5);
+            col += gsample.rgb * glow_intensity;
+            out_alpha = max(out_alpha, glow_intensity);
+        }
+
+        /* Distance-based outer glow */
+        float dist = length(centered);
+        float outer_glow = exp(-dist / effective_scale * 3.0) *
+                           glow * 0.15 * (0.3 + envelope * 0.7);
+        float3 glow_col = float3(1.0, 0.9, 0.8) * outer_glow;
+        col += glow_col;
+        out_alpha = max(out_alpha, outer_glow);
+    }
+
+    /* Beat flash overlay */
+    col += float3(1.0, 1.0, 1.0) * envelope * 0.1;
+
+    col = saturate(col);
+    out_alpha = saturate(out_alpha);
+    return float4(col, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSLogoPulse(vert_in);
+    }
+}

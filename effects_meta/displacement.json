@@ -1,0 +1,13 @@
+{
+    "effect_id": "displacement",
+    "name": "Displacement",
+    "category": "postprocess",
+    "description": "UV distortion via animated noise with audio-reactive swirl and beat bursts",
+    "author": "VJLink",
+    "params": [
+        { "id": "disp_amount", "name": "Amount", "type": "float", "default": 0.05, "min": 0.0, "max": 0.2, "step": 0.005 },
+        { "id": "disp_scale", "name": "Scale", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.5 },
+        { "id": "disp_speed", "name": "Speed", "type": "float", "default": 0.5, "min": 0.0, "max": 3.0, "step": 0.1 },
+        { "id": "disp_detail", "name": "Detail", "type": "float", "default": 3.0, "min": 1.0, "max": 6.0, "step": 1.0 }
+    ]
+}

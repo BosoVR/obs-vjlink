@@ -1,0 +1,32 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Deep Space",
+    "category": "3d",
+    "description": "Metaballs in space with galaxy background and audio-reactive motion",
+    "effect_chain": [
+        {
+            "effect_id": "galaxy_spiral",
+            "blend_mode": "normal",
+            "params": {
+                "arm_count": 3.0,
+                "arm_tightness": 2.5,
+                "rotation_speed": 0.2,
+                "star_density": 1.5
+            }
+        },
+        {
+            "effect_id": "metaballs",
+            "blend_mode": "add",
+            "params": {
+                "ball_count": 5.0,
+                "ball_size": 0.6,
+                "smoothness": 0.6,
+                "motion_speed": 0.8
+            },
+            "animations": [
+                { "param": "ball_size", "source": "audio_band", "config": { "band": "bass", "scale": 0.5, "offset": 0.4 } },
+                { "param": "motion_speed", "source": "audio_band", "config": { "band": "lowmid", "scale": 1.0, "offset": 0.3 } }
+            ]
+        }
+    ]
+}

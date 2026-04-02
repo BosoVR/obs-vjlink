@@ -1,0 +1,232 @@
+/*
+ * VJLink - Debug Overlay
+ * Visual debug display: band level bars, beat indicator, BPM bar, FPS.
+ * Drawn as additive overlay on top of compositor output.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;       /* compositor output (pass-through) */
+uniform float2    resolution;
+uniform float4    bands;       /* bass, lowmid, highmid, treble */
+uniform float     beat_phase;
+uniform float     bpm;
+uniform float     time;
+uniform float     fps;
+uniform float     onset_strength;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+/* Draw a filled rectangle */
+float box(float2 uv, float2 pos, float2 size)
+{
+    float2 d = abs(uv - pos) - size * 0.5;
+    return step(max(d.x, d.y), 0.0);
+}
+
+/* Simple 3x5 digit renderer (0-9) */
+float digit(float2 uv, int d)
+{
+    /* 3x5 pixel font packed into bits */
+    /* Each digit is 15 bits: row0(3) row1(3) row2(3) row3(3) row4(3) */
+    int font[10];
+    font[0] = 31599;  /* 111 100 100 100 111 = 0 -> 111 101 101 101 111 */
+    font[1] = 9362;   /* 010 010 010 010 010 */
+    font[2] = 29671;  /* 111 001 111 100 111 */
+    font[3] = 29647;  /* 111 001 111 001 111 */
+    font[4] = 23497;  /* 101 101 111 001 001 */
+    font[5] = 31183;  /* 111 100 111 001 111 */
+    font[6] = 31215;  /* 111 100 111 101 111 */
+    font[7] = 29257;  /* 111 001 001 001 001 */
+    font[8] = 31727;  /* 111 101 111 101 111 */
+    font[9] = 31695;  /* 111 101 111 001 111 */
+
+    if (d < 0 || d > 9) return 0.0;
+
+    int ix = (int)(uv.x * 3.0);
+    int iy = (int)(uv.y * 5.0);
+    if (ix < 0 || ix > 2 || iy < 0 || iy > 4) return 0.0;
+
+    int bit = iy * 3 + (2 - ix);
+    int val = font[d];
+    return ((val >> bit) & 1) != 0 ? 1.0 : 0.0;
+}
+
+/* Render a number (up to 3 digits) */
+float renderNumber(float2 uv, float2 pos, float2 charSize, int number)
+{
+    float result = 0.0;
+    int hundreds = number / 100;
+    int tens = (number / 10) % 10;
+    int ones = number % 10;
+
+    /* Digit 1 (hundreds) */
+    if (number >= 100) {
+        float2 duv = (uv - pos) / charSize;
+        if (duv.x >= 0.0 && duv.x <= 1.0 && duv.y >= 0.0 && duv.y <= 1.0)
+            result += digit(duv, hundreds);
+    }
+
+    /* Digit 2 (tens) */
+    float2 pos2 = pos + float2(charSize.x * 1.2, 0.0);
+    if (number >= 10) {
+        float2 duv = (uv - pos2) / charSize;
+        if (duv.x >= 0.0 && duv.x <= 1.0 && duv.y >= 0.0 && duv.y <= 1.0)
+            result += digit(duv, tens);
+    }
+
+    /* Digit 3 (ones) */
+    float2 pos3 = pos + float2(charSize.x * 2.4, 0.0);
+    {
+        float2 duv = (uv - pos3) / charSize;
+        if (duv.x >= 0.0 && duv.x <= 1.0 && duv.y >= 0.0 && duv.y <= 1.0)
+            result += digit(duv, ones);
+    }
+
+    return result;
+}
+
+float4 PSDebugOverlay(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    /* Pass through compositor output */
+    float4 src = image.Sample(texSampler, uv);
+    float3 col = src.rgb;
+    float alpha = src.a;
+
+    /* === Debug panel in bottom-left corner === */
+    float2 panel_origin = float2(0.01, 0.82);
+    float panel_w = 0.25;
+    float panel_h = 0.17;
+
+    /* Panel background */
+    float in_panel = box(uv, panel_origin + float2(panel_w, panel_h) * 0.5,
+                         float2(panel_w, panel_h));
+
+    if (in_panel > 0.0) {
+        /* Semi-transparent dark background */
+        col = lerp(col, float3(0.0, 0.0, 0.0), 0.7);
+        alpha = max(alpha, 0.8);
+
+        /* Normalize UV within panel */
+        float2 puv = (uv - panel_origin) / float2(panel_w, panel_h);
+
+        /* === 4 Band level bars === */
+        float bar_w = 0.18;
+        float bar_gap = 0.05;
+        float bar_bottom = 0.15;
+        float bar_top = 0.75;
+        float bar_max_h = bar_top - bar_bottom;
+
+        float3 band_colors[4];
+        band_colors[0] = float3(1.0, 0.2, 0.1);  /* Bass: red */
+        band_colors[1] = float3(1.0, 0.7, 0.1);  /* LowMid: orange */
+        band_colors[2] = float3(0.2, 1.0, 0.3);  /* HighMid: green */
+        band_colors[3] = float3(0.3, 0.5, 1.0);  /* Treble: blue */
+
+        float band_vals[4];
+        band_vals[0] = bands.x;
+        band_vals[1] = bands.y;
+        band_vals[2] = bands.z;
+        band_vals[3] = bands.w;
+
+        for (int i = 0; i < 4; i++) {
+            float fi = (float)i;
+            float bar_x = 0.05 + fi * (bar_w + bar_gap);
+            float bar_level = saturate(band_vals[i]);
+
+            /* Bar background (dark) */
+            float in_bar_bg = box(puv,
+                float2(bar_x + bar_w * 0.5, (bar_bottom + bar_top) * 0.5),
+                float2(bar_w, bar_max_h));
+
+            if (in_bar_bg > 0.0) {
+                col = lerp(col, band_colors[i] * 0.15, 0.5);
+
+                /* Filled portion */
+                float fill_h = bar_max_h * bar_level;
+                float fill_center = bar_top - fill_h * 0.5;
+                float in_fill = box(puv,
+                    float2(bar_x + bar_w * 0.5, fill_center),
+                    float2(bar_w - 0.01, fill_h));
+
+                if (in_fill > 0.0) {
+                    col = band_colors[i] * (0.6 + bar_level * 0.4);
+                }
+            }
+        }
+
+        /* === Beat indicator (circle, top-right of panel) === */
+        float2 beat_center = float2(0.88, 0.3);
+        float beat_r = 0.08;
+        float beat_dist = length(puv - beat_center);
+        float beat_val = 1.0 - beat_phase;
+        beat_val = beat_val * beat_val * beat_val;
+
+        if (beat_dist < beat_r) {
+            float3 beat_col = float3(1.0, 1.0, 1.0) * beat_val;
+            col = lerp(col, beat_col, 0.9);
+        }
+
+        /* Beat ring */
+        float ring = abs(beat_dist - beat_r);
+        if (ring < 0.008) {
+            col = lerp(col, float3(0.5, 0.5, 0.5), 0.6);
+        }
+
+        /* === Onset indicator (small dot) === */
+        float2 onset_pos = float2(0.88, 0.55);
+        float onset_dist = length(puv - onset_pos);
+        if (onset_dist < 0.04) {
+            col = lerp(col, float3(1.0, 0.5, 0.0) * onset_strength, 0.9);
+        }
+
+        /* === BPM number === */
+        float2 bpm_pos = float2(0.72, 0.78);
+        float2 charSize = float2(0.04, 0.08);
+        int bpm_int = clamp((int)bpm, 0, 999);
+        float bpm_text = renderNumber(puv, bpm_pos, charSize, bpm_int);
+        if (bpm_text > 0.0) {
+            col = float3(1.0, 1.0, 1.0);
+        }
+
+        /* === FPS number (top-left of panel) === */
+        float2 fps_pos = float2(0.05, 0.78);
+        int fps_int = clamp((int)fps, 0, 999);
+        float fps_text = renderNumber(puv, fps_pos, charSize, fps_int);
+        if (fps_text > 0.0) {
+            float3 fps_col = fps_int >= 55 ? float3(0.2, 1.0, 0.3) :
+                             fps_int >= 25 ? float3(1.0, 1.0, 0.2) :
+                                             float3(1.0, 0.2, 0.1);
+            col = fps_col;
+        }
+    }
+
+    return float4(col, alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSDebugOverlay(vert_in);
+    }
+}

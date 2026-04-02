@@ -1,0 +1,122 @@
+/*
+ * VJLink - Waveform Bars
+ * Spectrum analyzer visualization with frequency bars.
+ * Reads FFT data directly from audio_tex row 0.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom parameters */
+uniform float     bar_count;       /* 16.0 - 128.0, default 64.0 */
+uniform float     bar_width;       /* 0.3 - 0.95, default 0.8 */
+uniform float     sensitivity;     /* 1.0 - 10.0, default 5.0 */
+uniform float     mirror;          /* 0.0 or 1.0, default 1.0 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+float4 PSWaveformBars(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float bass = bands.x;
+
+    int num_bars = max(16, (int)bar_count);
+    float bar_w = 1.0 / (float)num_bars;
+
+    /* Which bar are we in? */
+    int bar_index = (int)(uv.x * (float)num_bars);
+    float bar_pos = frac(uv.x * (float)num_bars);
+
+    /* Sample FFT magnitude from audio_tex row 0 */
+    /* Map bar_index to FFT bin (logarithmic for perceptual spacing) */
+    float norm_idx = (float)bar_index / (float)num_bars;
+    float log_idx = pow(norm_idx, 2.0); /* quadratic for pseudo-log spacing */
+    float fft_u = log_idx * 0.5; /* use first half of 512 bins (0-256) */
+
+    /* Sample audio texture: row 0 = FFT spectrum */
+    float2 fft_uv = float2(fft_u, 0.125); /* y=0.125 = center of row 0 in 4-row texture */
+    float4 fft_sample = audio_tex.Sample(texSampler, fft_uv);
+    float magnitude = fft_sample.r * sensitivity;
+
+    /* Clamp magnitude */
+    magnitude = clamp(magnitude, 0.0, 1.0);
+
+    /* Bar rendering */
+    float y;
+    if (mirror > 0.5) {
+        /* Mirrored: bars grow from center */
+        y = abs(uv.y - 0.5) * 2.0;
+    } else {
+        /* Bottom-up */
+        y = 1.0 - uv.y;
+    }
+
+    /* Is this pixel inside the bar? */
+    float bar_edge = abs(bar_pos - 0.5) * 2.0;
+    float in_bar = step(bar_edge, bar_width);
+    float in_height = step(y, magnitude);
+
+    /* Color: hue based on frequency, brightness based on amplitude */
+    float hue = norm_idx * 0.8 + time * 0.02; /* frequency-based rainbow */
+    float sat = 0.8;
+    float val = in_bar * in_height;
+
+    /* Gradient within bar: brighter at base */
+    float gradient = 1.0 - (y / (magnitude + 0.001)) * 0.3;
+    val *= gradient;
+
+    /* Peak indicator line */
+    float peak_line = smoothstep(0.02, 0.0, abs(y - magnitude));
+    float3 peak_color = float3(1.0, 1.0, 1.0) * peak_line * in_bar;
+
+    float3 color = hsv2rgb(float3(frac(hue), sat, clamp(val, 0.0, 1.0)));
+    color += peak_color;
+
+    /* Beat flash on background */
+    float beat = (1.0 - beat_phase);
+    beat = beat * beat * beat;
+    float3 bg = float3(0.02, 0.02, 0.05) + beat * bass * 0.1 * float3(0.3, 0.1, 0.5);
+
+    /* Final: bar or background */
+    float3 final_color = lerp(bg, color, in_bar * in_height);
+    final_color += peak_color;
+
+    return float4(clamp(final_color, 0.0, 1.0), 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSWaveformBars(vert_in);
+    }
+}

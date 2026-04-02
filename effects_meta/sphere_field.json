@@ -1,0 +1,45 @@
+{
+    "effect_id": "sphere_field",
+    "name": "Sphere Field",
+    "category": "3d",
+    "description": "Raymarched grid of pulsing spheres with audio-reactive glow",
+    "author": "VJLink",
+    "params": [
+        {
+            "id": "sphere_count",
+            "name": "Grid Size",
+            "type": "float",
+            "default": 5.0,
+            "min": 2.0,
+            "max": 10.0,
+            "step": 1.0
+        },
+        {
+            "id": "sphere_spacing",
+            "name": "Spacing",
+            "type": "float",
+            "default": 2.5,
+            "min": 1.0,
+            "max": 5.0,
+            "step": 0.1
+        },
+        {
+            "id": "cam_distance",
+            "name": "Camera Distance",
+            "type": "float",
+            "default": 8.0,
+            "min": 3.0,
+            "max": 20.0,
+            "step": 0.5
+        },
+        {
+            "id": "glow_intensity",
+            "name": "Glow",
+            "type": "float",
+            "default": 1.5,
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.1
+        }
+    ]
+}

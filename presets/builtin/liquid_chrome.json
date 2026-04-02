@@ -1,0 +1,22 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Liquid Chrome",
+    "category": "plasma",
+    "description": "Liquid metal surface with kaleidoscope overlay",
+    "effect_chain": [
+        {
+            "effect_id": "liquid_metal",
+            "blend_mode": "normal",
+            "params": {
+                "cell_scale": 6.0,
+                "distortion": 1.2,
+                "reflectivity": 0.9,
+                "flow_speed": 0.4
+            },
+            "animations": [
+                { "param": "distortion", "source": "audio_band", "config": { "band": "bass", "scale": 2.0, "offset": 0.5 } },
+                { "param": "flow_speed", "source": "audio_band", "config": { "band": "lowmid", "scale": 1.0, "offset": 0.2 } }
+            ]
+        }
+    ]
+}

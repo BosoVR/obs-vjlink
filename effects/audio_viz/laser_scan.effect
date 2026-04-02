@@ -1,0 +1,130 @@
+/*
+ * VJLink - Laser Scan
+ * Scanning laser beam lines across the screen.
+ * Audio-reactive sweep speed and intensity.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float line_count;      /* 1-10, default 3 */
+uniform float line_width;      /* 0.001-0.03, default 0.005 */
+uniform float scan_speed;      /* 0.1-5.0, default 1.0 */
+uniform float laser_color_r;   /* default 0.2 */
+uniform float laser_color_g;   /* default 1.0 */
+uniform float laser_color_b;   /* default 0.3 */
+uniform float scan_angle;      /* 0.0-1.0, default 0.0 (0=horiz, 0.25=diag, 0.5=vert) */
+uniform float glow_size;       /* 0.0-2.0, default 1.0 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float4 PSLaserScan(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    float3 laser_col = float3(
+        saturate(laser_color_r),
+        saturate(laser_color_g),
+        saturate(laser_color_b)
+    );
+
+    float lwidth = max(line_width, 0.001) * (1.0 + treble * 0.5);
+    float spd = max(scan_speed, 0.1) * (1.0 + bass * 2.0);
+    int lcount = clamp((int)line_count, 1, 10);
+    float glow = max(glow_size, 0.0);
+
+    /* Rotation angle for scan direction */
+    float angle = scan_angle * 3.14159;
+    float cs = cos(angle);
+    float sn = sin(angle);
+
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < 10; i++) {
+        if (i >= lcount) break;
+
+        float fi = (float)i;
+        float phase = fi / (float)lcount;
+        float line_speed = spd * (0.5 + hash11(fi * 13.7) * 0.5);
+
+        /* Line position (sweeping across rotated axis) */
+        float2 rotated_uv;
+        rotated_uv.x = (uv.x - 0.5) * cs + (uv.y - 0.5) * sn + 0.5;
+        rotated_uv.y = -(uv.x - 0.5) * sn + (uv.y - 0.5) * cs + 0.5;
+
+        float scan_pos = frac(time * line_speed * 0.3 + phase);
+        float dist_to_line = abs(rotated_uv.y - scan_pos);
+
+        /* Wrap distance (line wraps from bottom to top) */
+        dist_to_line = min(dist_to_line, 1.0 - dist_to_line);
+
+        /* Sharp line core */
+        float line_bright = smoothstep(lwidth, 0.0, dist_to_line);
+
+        /* Soft glow */
+        float line_glow = exp(-dist_to_line * (30.0 - glow * 15.0)) * glow * 0.3;
+
+        /* Line color with slight variation per line */
+        float hue_var = hash11(fi * 27.3) * 0.1;
+        float3 lcol = laser_col;
+        lcol.r = saturate(lcol.r + hue_var);
+        lcol.g = saturate(lcol.g - hue_var * 0.5);
+
+        /* Bass drives intensity */
+        float intensity = 0.5 + bass * 0.5 + beat * 0.3;
+
+        col += lcol * (line_bright + line_glow) * intensity;
+    }
+
+    /* Ambient laser scatter */
+    col += laser_col * 0.02 * bass;
+
+    col = saturate(col);
+    float out_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSLaserScan(vert_in);
+    }
+}

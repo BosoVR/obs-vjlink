@@ -1,0 +1,13 @@
+{
+    "effect_id": "mandelbrot_zoom",
+    "name": "Mandelbrot Zoom",
+    "category": "fractal",
+    "description": "Continuous zoom into the Mandelbrot set with audio-reactive palette cycling",
+    "author": "VJLink",
+    "params": [
+        { "id": "zoom_speed", "name": "Zoom Speed", "type": "float", "default": 0.5, "min": 0.05, "max": 2.0, "step": 0.05 },
+        { "id": "max_iterations", "name": "Iterations", "type": "float", "default": 128.0, "min": 32.0, "max": 256.0, "step": 8.0 },
+        { "id": "color_palette", "name": "Palette", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 0.1 },
+        { "id": "center_x", "name": "Target X", "type": "float", "default": -0.745, "min": -2.0, "max": 1.0, "step": 0.001 }
+    ]
+}

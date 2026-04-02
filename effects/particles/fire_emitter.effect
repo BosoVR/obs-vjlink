@@ -1,0 +1,146 @@
+/*
+ * VJLink Fire Emitter Effect
+ * Simulates fire using layered noise and heat-colormap.
+ * Bass drives flame height, treble drives spark density.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom params */
+uniform float flame_height;    /* fire height (default 1.5) */
+uniform float flame_detail;    /* noise octaves scale (default 3.0) */
+uniform float heat_intensity;  /* color intensity (default 1.2) */
+uniform float wind_strength;   /* horizontal wind (default 0.3) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash(i);
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float fbm(float2 p, int octaves)
+{
+    float val = 0.0;
+    float amp = 0.5;
+    float2 shift = float2(100.0, 100.0);
+
+    for (int i = 0; i < 6; i++) {
+        if (i >= octaves) break;
+        val += amp * noise(p);
+        p = p * 2.0 + shift;
+        amp *= 0.5;
+    }
+    return val;
+}
+
+/* Heat-based colormap (black -> red -> orange -> yellow -> white) */
+float3 heatColor(float t)
+{
+    float3 c;
+    c.r = saturate(t * 3.0);
+    c.g = saturate(t * 3.0 - 1.0);
+    c.b = saturate(t * 3.0 - 2.0);
+    return c;
+}
+
+float4 PSFire(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = uv;
+
+    /* Fire is bottom-up: invert y so bottom = source */
+    p.y = 1.0 - p.y;
+
+    /* Center horizontally */
+    p.x = (p.x - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float height = max(flame_height, 0.5) + bands.x * 1.0;
+    float detail = max(flame_detail, 1.0);
+    float heat = max(heat_intensity, 0.5);
+    float wind = wind_strength;
+
+    /* Scroll upward + wind */
+    float2 scroll = float2(wind * sin(time * 0.5) + bands.z * wind * 0.5,
+                           time * 1.5 + bands.x * 0.5);
+
+    /* Noise-based fire shape */
+    float n1 = fbm(p * detail + scroll, 5);
+    float n2 = fbm(p * detail * 2.0 + scroll * 1.3 + float2(50.0, 0.0), 4);
+    float n3 = fbm(p * detail * 0.5 + scroll * 0.7, 3);
+
+    /* Fire shape: narrow at top, wide at bottom */
+    float shape = 1.0 - p.y / height;
+    shape *= shape;
+
+    /* Narrow based on x distance from center */
+    float width = 0.5 + 0.3 * shape;
+    float x_falloff = 1.0 - saturate(abs(p.x) / width);
+    x_falloff *= x_falloff;
+
+    /* Combine noise and shape */
+    float fire = shape * x_falloff;
+    fire *= (n1 * 0.5 + n2 * 0.3 + n3 * 0.2);
+    fire = saturate(fire * 2.0);
+
+    /* Beat flash: brighter on beat */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    fire += beat * 0.3 * bands.x * shape * x_falloff;
+
+    /* Apply heat colormap */
+    float3 color = heatColor(fire * heat);
+
+    /* Sparks from treble */
+    float spark = noise(uv * 30.0 + float2(time * 5.0, time * -8.0));
+    spark = pow(spark, 8.0) * bands.w * 2.0 * shape;
+    color += float3(1.0, 0.9, 0.7) * spark;
+
+    return float4(color, saturate(fire * 3.0));
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSFire(vert_in);
+    }
+}

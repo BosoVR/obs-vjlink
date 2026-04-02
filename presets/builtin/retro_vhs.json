@@ -1,0 +1,32 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Retro VHS",
+    "category": "retro",
+    "description": "VHS tape look with CRT overlay and beat-triggered glitches",
+    "effect_chain": [
+        {
+            "effect_id": "vhs_glitch",
+            "blend_mode": "normal",
+            "params": {
+                "tracking_error": 0.015,
+                "noise_intensity": 0.25,
+                "color_bleed": 0.004,
+                "jitter": 0.001
+            },
+            "animations": [
+                { "param": "tracking_error", "source": "beat_env", "config": { "decay": 4.0, "scale": 0.05 } },
+                { "param": "noise_intensity", "source": "audio_band", "config": { "band": "treble", "scale": 0.5, "offset": 0.1 } }
+            ]
+        },
+        {
+            "effect_id": "crt_scanlines",
+            "blend_mode": "normal",
+            "params": {
+                "scanline_intensity": 0.25,
+                "curvature": 0.02,
+                "vignette_amount": 0.6,
+                "flicker": 0.03
+            }
+        }
+    ]
+}

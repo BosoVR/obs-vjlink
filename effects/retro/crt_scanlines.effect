@@ -1,0 +1,177 @@
+/*
+ * VJLink CRT Scanlines Effect
+ * CRT monitor simulation with scanlines, curvature, and chromatic fringing.
+ * Bass drives brightness flicker, beat drives interference.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float scanline_intensity; /* scanline darkness (default 0.3) */
+uniform float curvature;          /* screen curvature (default 0.03) */
+uniform float vignette_amount;    /* edge darkening (default 0.5) */
+uniform float flicker;            /* brightness flicker (default 0.05) */
+uniform float has_input_source;   /* 1.0 when used as filter */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+/* CRT screen curvature */
+float2 curveUV(float2 uv, float amount)
+{
+    float2 p = uv * 2.0 - 1.0;
+    float2 offset = abs(p.yx) * amount;
+    p = p + p * offset * offset;
+    return p * 0.5 + 0.5;
+}
+
+/* CRT test pattern for standalone mode */
+float3 crtTestPattern(float2 uv, float t, float bass)
+{
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    /* Horizontal color gradient bars */
+    float section = floor(uv.y * 4.0);
+    if (section < 1.0) {
+        /* Gradient ramp */
+        col = float3(uv.x, uv.x, uv.x);
+    } else if (section < 2.0) {
+        /* RGB bars */
+        float bx = floor(uv.x * 3.0);
+        if (bx < 1.0) col = float3(1.0, 0.0, 0.0);
+        else if (bx < 2.0) col = float3(0.0, 1.0, 0.0);
+        else col = float3(0.0, 0.0, 1.0);
+    } else if (section < 3.0) {
+        /* SMPTE-style color bars */
+        float cx = floor(uv.x * 7.0);
+        if (cx < 1.0) col = float3(0.75, 0.75, 0.75);
+        else if (cx < 2.0) col = float3(0.75, 0.75, 0.0);
+        else if (cx < 3.0) col = float3(0.0, 0.75, 0.75);
+        else if (cx < 4.0) col = float3(0.0, 0.75, 0.0);
+        else if (cx < 5.0) col = float3(0.75, 0.0, 0.75);
+        else if (cx < 6.0) col = float3(0.75, 0.0, 0.0);
+        else col = float3(0.0, 0.0, 0.75);
+    } else {
+        /* Checkerboard pattern */
+        float2 check = floor(uv * 16.0);
+        col = float3(fmod(check.x + check.y, 2.0)) * 0.7;
+    }
+
+    /* Pulse with bass */
+    col *= 0.7 + bass * 0.3;
+
+    /* Circle pattern in center */
+    float2 center = uv - 0.5;
+    float dist = length(center * float2(resolution.x / resolution.y, 1.0));
+    float circle = smoothstep(0.3, 0.29, dist) * smoothstep(0.25, 0.26, dist);
+    col = lerp(col, float3(1.0, 1.0, 1.0), circle * 0.5);
+
+    return col;
+}
+
+float4 PSCrt(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float scan_int = max(scanline_intensity, 0.0);
+    float curve = max(curvature, 0.0);
+    float vig = max(vignette_amount, 0.0);
+    float flick = max(flicker, 0.0);
+
+    bool has_input = (has_input_source > 0.5);
+
+    /* Apply curvature */
+    float2 curved_uv = curveUV(uv, curve);
+
+    /* Check if outside screen bounds */
+    if (curved_uv.x < 0.0 || curved_uv.x > 1.0 ||
+        curved_uv.y < 0.0 || curved_uv.y > 1.0) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float3 color;
+    float src_alpha;
+
+    if (!has_input) {
+        /* Standalone: CRT test pattern */
+        color = crtTestPattern(curved_uv, time, bands.x);
+        src_alpha = 1.0;
+    } else {
+        /* Filter: process input source */
+        float2 edge_dist = curved_uv - 0.5;
+        float edge_amount = length(edge_dist) * 0.002;
+
+        color.r = image.Sample(texSampler, curved_uv + float2(edge_amount, 0.0)).r;
+        color.g = image.Sample(texSampler, curved_uv).g;
+        color.b = image.Sample(texSampler, curved_uv - float2(edge_amount, 0.0)).b;
+        src_alpha = image.Sample(texSampler, uv).a;
+    }
+
+    /* Scanlines */
+    float scanline = sin(curved_uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    scanline = pow(scanline, 1.5);
+    color *= 1.0 - scan_int * (1.0 - scanline);
+
+    /* Horizontal sub-pixel pattern (RGB stripes) */
+    float sub_pixel = fmod(curved_uv.x * resolution.x, 3.0);
+    float3 mask = float3(
+        smoothstep(0.0, 1.0, sub_pixel) * smoothstep(3.0, 2.0, sub_pixel),
+        smoothstep(1.0, 2.0, sub_pixel) * smoothstep(4.0, 3.0, sub_pixel),
+        smoothstep(2.0, 3.0, sub_pixel)
+    );
+    color *= lerp(float3(1.0, 1.0, 1.0), mask * 1.5, 0.15);
+
+    /* Flicker */
+    float flicker_val = 1.0 - flick * sin(time * 60.0) * 0.5;
+    flicker_val -= bands.x * flick * 0.3;
+    color *= flicker_val;
+
+    /* Beat interference line */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+    float interference = smoothstep(0.49, 0.5, abs(curved_uv.y - frac(time * 0.1 + beat * 0.5)));
+    interference = 1.0 - interference * 0.15 * bands.x;
+    color *= interference;
+
+    /* Vignette */
+    float2 vig_uv = curved_uv * (1.0 - curved_uv);
+    float vig_val = vig_uv.x * vig_uv.y * 15.0;
+    vig_val = pow(saturate(vig_val), vig * 0.5);
+    color *= vig_val;
+
+    /* Slight green tint for old monitor feel */
+    color *= float3(0.95, 1.0, 0.95);
+
+    float out_alpha = has_input ? src_alpha : max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSCrt(vert_in);
+    }
+}

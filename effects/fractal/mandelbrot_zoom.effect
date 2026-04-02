@@ -1,0 +1,119 @@
+/*
+ * VJLink Mandelbrot Zoom Effect
+ * Continuous zoom into the Mandelbrot set with audio-reactive coloring.
+ * Bass drives zoom speed, beat triggers color palette shift.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float zoom_speed;      /* zoom rate (default 0.5) */
+uniform float max_iterations;  /* detail level (default 128) */
+uniform float color_palette;   /* palette rotation (default 1.0) */
+uniform float center_x;       /* target x (default -0.745) */
+uniform float center_y;       /* target y (default 0.186) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 palette(float t, float shift)
+{
+    float3 a = float3(0.5, 0.5, 0.5);
+    float3 b = float3(0.5, 0.5, 0.5);
+    float3 c = float3(1.0, 1.0, 1.0);
+    float3 d = float3(0.0 + shift, 0.33 + shift, 0.67 + shift);
+
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+float4 PSMandelbrot(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float speed = max(zoom_speed, 0.1) + bands.x * 0.2;
+    /* Cycle zoom to avoid precision issues */
+    float zoom_cycle = fmod(time * speed, 40.0);
+    float zoom = pow(2.0, -zoom_cycle);
+
+    float2 center = float2(center_x, center_y);
+
+    /* Map pixel to complex plane */
+    float2 c = center + p * zoom;
+
+    /* Mandelbrot iteration */
+    float2 z = float2(0.0, 0.0);
+    int max_iter = clamp(int(max_iterations), 32, 256);
+    int iter = 0;
+    float smooth_iter = 0.0;
+
+    for (int i = 0; i < 256; i++) {
+        if (i >= max_iter) break;
+
+        /* z = z^2 + c */
+        float2 z_new;
+        z_new.x = z.x * z.x - z.y * z.y + c.x;
+        z_new.y = 2.0 * z.x * z.y + c.y;
+        z = z_new;
+
+        if (dot(z, z) > 256.0) {
+            /* Smooth iteration count */
+            smooth_iter = float(i) + 1.0 - log2(log2(dot(z, z)));
+            break;
+        }
+        iter = i;
+    }
+
+    float3 color;
+
+    if (iter >= max_iter - 1) {
+        /* Inside the set */
+        color = float3(0.0, 0.0, 0.0);
+        /* Subtle inner glow from audio */
+        color += float3(0.05, 0.0, 0.1) * bands.x;
+    } else {
+        /* Outside: color based on iteration count */
+        float t = smooth_iter / float(max_iter);
+        t = sqrt(t); /* expand color range */
+
+        float pal = color_palette + bands.y * 0.2;
+        /* Beat shifts palette */
+        float beat = 1.0 - beat_phase;
+        pal += beat * beat * 0.3;
+
+        color = palette(t * 3.0 + time * 0.05, pal);
+        color *= (1.0 + bands.x * 0.5);
+    }
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSMandelbrot(vert_in);
+    }
+}

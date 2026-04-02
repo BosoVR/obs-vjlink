@@ -1,0 +1,77 @@
+/*
+ * VJLink Radial Flash
+ * Flash wave expanding from center outward. Epic drop effect.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     band_activation;
+
+uniform float intensity;
+uniform float wave_speed;
+uniform float wave_width;
+uniform float flash_color_r;
+uniform float flash_color_g;
+uniform float flash_color_b;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSFlashRadial(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 src = input_tex.Sample(texSampler, uv);
+
+    float3 flash_col = float3(flash_color_r, flash_color_g, flash_color_b);
+
+    /* Distance from center */
+    float2 center = uv - 0.5;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    center.x *= aspect;
+    float dist = length(center);
+
+    /* Expanding ring wave based on activation */
+    float spd = max(wave_speed, 0.5);
+    float ring_pos = band_activation * spd;
+    float wid = max(wave_width, 0.05);
+    float ring = 1.0 - smoothstep(0.0, wid, abs(dist - ring_pos));
+
+    /* Also add center glow */
+    float glow = band_activation * exp(-dist * 4.0);
+
+    float strength = (ring + glow) * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+
+    float3 color = saturate(src.rgb + flash_col * strength);
+    float out_alpha = max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSFlashRadial(vert_in);
+    }
+}

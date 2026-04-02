@@ -1,0 +1,121 @@
+/*
+ * VJLink Spectrum Radial Effect
+ * Circular frequency spectrum visualization.
+ * Each frequency bin maps to an angle around the circle.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float inner_radius;    /* inner circle size (default 0.2) */
+uniform float bar_height;      /* max bar extension (default 0.3) */
+uniform float bar_count;       /* number of bars (default 64.0) */
+uniform float mirror_mode;     /* 0=single, 1=mirrored (default 1.0) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSSpectrumRadial(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float r = length(p);
+    float a = atan2(p.y, p.x); /* -PI to PI */
+
+    float inner = max(inner_radius, 0.05);
+    float height = max(bar_height, 0.05);
+    float bars = max(bar_count, 8.0);
+    float mirror = saturate(mirror_mode);
+
+    /* Normalize angle to 0..1 */
+    float angle_norm = (a + 3.14159) / 6.28318;
+
+    /* Mirror mode: fold at 0.5 */
+    float spectrum_pos;
+    if (mirror > 0.5) {
+        spectrum_pos = abs(angle_norm - 0.5) * 2.0;
+    } else {
+        spectrum_pos = angle_norm;
+    }
+
+    /* Quantize to bars */
+    float bar_idx = floor(spectrum_pos * bars);
+    float bar_frac = frac(spectrum_pos * bars);
+
+    /* Sample FFT from audio texture (row 0) */
+    float fft_uv = (bar_idx + 0.5) / bars;
+    fft_uv = saturate(fft_uv);
+    float fft_val = audio_tex.Sample(texSampler, float2(fft_uv, 0.125)).r;
+
+    /* Scale FFT value */
+    float bar_len = fft_val * height;
+
+    /* Bar shape: check if pixel is within bar */
+    float dist_from_inner = r - inner;
+    float in_bar = 0.0;
+
+    /* Bar width with gap */
+    float bar_width_ratio = 0.7;
+    if (abs(bar_frac - 0.5) < bar_width_ratio * 0.5 && dist_from_inner > 0.0 && dist_from_inner < bar_len) {
+        in_bar = 1.0;
+    }
+
+    /* Color based on frequency position */
+    float hue = frac(bar_idx / bars + time * 0.05);
+    float3 bar_col;
+    bar_col.r = abs(hue * 6.0 - 3.0) - 1.0;
+    bar_col.g = 2.0 - abs(hue * 6.0 - 2.0);
+    bar_col.b = 2.0 - abs(hue * 6.0 - 4.0);
+    bar_col = saturate(bar_col);
+
+    /* Brightness gradient along bar height */
+    float height_ratio = dist_from_inner / max(bar_len, 0.001);
+    bar_col *= lerp(0.5, 1.5, height_ratio);
+
+    float3 color = bar_col * in_bar;
+
+    /* Inner circle glow */
+    float inner_glow = exp(-(r - inner) * 20.0) * 0.3;
+    if (r < inner) inner_glow = 0.5;
+    float3 glow_col = float3(0.3, 0.3, 0.5) * inner_glow * (1.0 + bands.x * 0.5);
+    color += glow_col;
+
+    /* Beat pulse on inner ring */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    float ring_pulse = exp(-abs(r - inner) * 40.0) * beat * bands.x;
+    color += float3(1.0, 1.0, 1.0) * ring_pulse * 0.5;
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSpectrumRadial(vert_in);
+    }
+}

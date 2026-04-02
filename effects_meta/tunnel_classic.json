@@ -1,0 +1,12 @@
+{
+    "id": "tunnel_classic",
+    "name": "Classic Tunnel",
+    "category": "tunnel",
+    "description": "Fly-through tunnel with audio-reactive speed and colors",
+    "params": [
+        { "name": "tunnel_speed", "label": "Speed", "type": "float", "default": 1.0, "min": 0.1, "max": 5.0, "step": 0.1 },
+        { "name": "rotation_speed", "label": "Rotation", "type": "float", "default": 0.3, "min": 0.0, "max": 3.0, "step": 0.05 },
+        { "name": "ring_count", "label": "Rings", "type": "float", "default": 8.0, "min": 2.0, "max": 20.0, "step": 1.0 },
+        { "name": "color_intensity", "label": "Color Intensity", "type": "float", "default": 1.5, "min": 0.5, "max": 3.0, "step": 0.1 }
+    ]
+}

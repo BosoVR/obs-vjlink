@@ -1,0 +1,224 @@
+/*
+ * VJLink - Datamosh / Compression Glitch
+ * Simulates video codec artifacts: block displacement, I-frame loss,
+ * color channel corruption. Standalone: generates abstract moshed visuals.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;       /* current frame */
+uniform texture2d prev_tex;    /* previous frame */
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float block_size;      /* glitch block size (default 16.0) */
+uniform float intensity;       /* effect strength (default 0.5) */
+uniform float displacement;    /* pixel shift amount (default 0.05) */
+uniform float noise_amount;    /* digital noise (default 0.3) */
+uniform float has_input_source; /* 1.0 when used as filter on a source */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float noise2d(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+/* Standalone moshed visual generation */
+float3 moshPattern(float2 uv, float bass, float treble, float beat)
+{
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    /* Macro blocks - large corrupted regions */
+    float macro_size = 0.08 + bass * 0.06;
+    float2 macro_id = floor(uv / macro_size);
+    float macro_hash = hash21(macro_id + floor(time * 2.0));
+    float macro_active = step(0.5 - bass * 0.3, macro_hash);
+
+    /* Block displacement simulation */
+    float2 disp_uv = uv;
+    if (macro_active > 0.5) {
+        float2 shift;
+        shift.x = (hash21(macro_id + float2(time * 0.5, 0.0)) - 0.5) * 0.15;
+        shift.y = (hash21(macro_id + float2(0.0, time * 0.5)) - 0.5) * 0.1;
+        disp_uv += shift * (1.0 + bass);
+    }
+
+    /* Color gradient base (simulating corrupted P-frame residual) */
+    float2 grad_p = disp_uv * 8.0 + time * 0.3;
+    float n1 = noise2d(grad_p);
+    float n2 = noise2d(grad_p * 1.5 + float2(5.0, 3.0) + time * 0.2);
+    float n3 = noise2d(grad_p * 0.7 + float2(8.0, 1.0) - time * 0.15);
+
+    /* RGB channels from different noise layers (channel corruption) */
+    col.r = n1 * (0.3 + bass * 0.7);
+    col.g = n2 * (0.2 + treble * 0.5);
+    col.b = n3 * (0.4 + bands.y * 0.6);
+
+    /* DCT block artifacts: 8x8 grid pattern */
+    float2 dct_uv = frac(uv * resolution / 8.0);
+    float dct_edge = step(0.95, max(dct_uv.x, dct_uv.y));
+    col += float3(0.1, 0.15, 0.12) * dct_edge * macro_active;
+
+    /* I-frame remnants: sharp color blocks */
+    float small_block = 0.03;
+    float2 small_id = floor(disp_uv / small_block);
+    float small_hash = hash21(small_id + floor(time * 5.0));
+    if (small_hash > 0.92) {
+        float hue = frac(small_hash * 7.0);
+        float3 block_col;
+        block_col.r = saturate(abs(hue * 6.0 - 3.0) - 1.0);
+        block_col.g = saturate(2.0 - abs(hue * 6.0 - 2.0));
+        block_col.b = saturate(2.0 - abs(hue * 6.0 - 4.0));
+        col = block_col * 0.7;
+    }
+
+    /* Motion vector arrows (visible corruption lines) */
+    float mv_y = floor(uv.y * 60.0);
+    float mv_hash = hash11(mv_y + floor(time * 4.0));
+    float mv_active = step(0.85 - bass * 0.15, mv_hash);
+    float mv_streak = smoothstep(0.0, 0.005, frac(uv.x + mv_hash * 2.0 + time * mv_hash * 3.0))
+                    * smoothstep(mv_hash * 0.5, mv_hash * 0.5 - 0.005,
+                                 frac(uv.x + mv_hash * 2.0 + time * mv_hash * 3.0));
+    col += float3(0.8, 0.9, 1.0) * mv_streak * mv_active * 0.5;
+
+    /* Beat: sudden block shift (I-frame drop simulation) */
+    if (beat > 0.5) {
+        float2 beat_id = floor(uv / 0.12);
+        float beat_hash = hash21(beat_id);
+        if (beat_hash > 0.6) {
+            col.rgb = col.gbr; /* channel swap */
+            col *= 1.5;
+        }
+    }
+
+    /* Compression noise */
+    float comp_noise = hash21(uv * resolution + time * 100.0);
+    col += (comp_noise - 0.5) * 0.05 * treble;
+
+    return saturate(col);
+}
+
+float4 PSDatamosh(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+
+    /* Check if we're in filter mode (explicitly set by C code) */
+    bool has_input = (has_input_source > 0.5);
+
+    if (!has_input) {
+        float3 mosh = moshPattern(uv, bass, treble, beat);
+        return float4(mosh, 1.0);
+    }
+
+    /* === Filter mode: frame-difference datamosh === */
+    float blk = max(block_size, 4.0);
+    float intens = saturate(intensity) + bass * 0.3;
+    float disp = displacement + bass * 0.03;
+    float noise_amt = noise_amount;
+
+    /* Block grid */
+    float2 block_uv = floor(uv * resolution / blk) * blk / resolution;
+    float block_hash = hash21(block_uv + floor(time * 3.0));
+
+    /* Frame difference for motion detection */
+    float4 curr = image.Sample(texSampler, uv);
+    float4 prev = prev_tex.Sample(texSampler, uv);
+    float diff = length(curr.rgb - prev.rgb);
+
+    /* Displacement on beat / high motion */
+    float2 displaced_uv = uv;
+
+    if (block_hash < intens && (diff > 0.1 || beat > 0.5)) {
+        float2 shift;
+        shift.x = (hash21(block_uv + float2(time, 0.0)) - 0.5) * disp;
+        shift.y = (hash21(block_uv + float2(0.0, time)) - 0.5) * disp;
+        shift.x += bands.y * 0.02 * sign(shift.x);
+        shift.y += bands.z * 0.01 * sign(shift.y);
+        displaced_uv += shift;
+    }
+
+    /* Sample with displacement */
+    float4 color;
+    if (block_hash < intens * 0.5 && beat > 0.3) {
+        color = prev_tex.Sample(texSampler, displaced_uv);
+    } else {
+        color = image.Sample(texSampler, displaced_uv);
+    }
+
+    /* Digital noise */
+    float noise = hash21(uv * resolution + float2(time * 1000.0, 0.0));
+    if (noise < noise_amt * treble * 0.3) {
+        color.rgb = float3(noise, noise, noise);
+    }
+
+    /* Channel swap in glitched blocks */
+    if (block_hash > 0.8 && block_hash < 0.8 + intens * 0.15) {
+        color.rgb = color.gbr;
+    }
+
+    /* Chromatic shift on displaced blocks */
+    if (block_hash < intens) {
+        float chroma = bass * 0.003;
+        color.r = image.Sample(texSampler, displaced_uv + float2(chroma, 0.0)).r;
+        color.b = image.Sample(texSampler, displaced_uv - float2(chroma, 0.0)).b;
+    }
+
+    return color;
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSDatamosh(vert_in);
+    }
+}

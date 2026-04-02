@@ -1,0 +1,25 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Fire Storm",
+    "category": "particle",
+    "description": "Intense fire with particle overlay and beat-driven flame bursts",
+    "effect_chain": [
+        {
+            "effect_id": "fire_emitter",
+            "blend_mode": "normal",
+            "params": {
+                "flame_height": 1.8,
+                "flame_detail": 3.5,
+                "heat_intensity": 1.5,
+                "wind_strength": 0.4
+            },
+            "animations": [
+                { "param": "flame_height", "source": "audio_band", "config": { "band": "bass", "scale": 2.0, "offset": 1.0 } },
+                { "param": "wind_strength", "source": "lfo", "config": { "waveform": "sine", "freq": 0.15, "min": -0.5, "max": 0.8 } }
+            ]
+        }
+    ],
+    "lfo_config": [
+        { "waveform": "sine", "freq": 0.15, "sync_to_beat": false }
+    ]
+}

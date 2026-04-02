@@ -1,0 +1,45 @@
+{
+    "effect_id": "particle_storm",
+    "name": "Particle Storm",
+    "category": "particle",
+    "description": "Multi-layer particle swarm with curl-noise flow and audio-reactive turbulence",
+    "author": "VJLink",
+    "params": [
+        {
+            "id": "storm_intensity",
+            "name": "Intensity",
+            "type": "float",
+            "default": 1.5,
+            "min": 0.5,
+            "max": 4.0,
+            "step": 0.1
+        },
+        {
+            "id": "turbulence",
+            "name": "Turbulence",
+            "type": "float",
+            "default": 3.0,
+            "min": 1.0,
+            "max": 8.0,
+            "step": 0.5
+        },
+        {
+            "id": "particle_speed",
+            "name": "Flow Speed",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 3.0,
+            "step": 0.1
+        },
+        {
+            "id": "color_shift",
+            "name": "Color Shift",
+            "type": "float",
+            "default": 0.2,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05
+        }
+    ]
+}

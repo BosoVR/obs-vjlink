@@ -1,0 +1,15 @@
+{
+  "id": "beat_rings",
+  "name": "Beat Rings",
+  "category": "geometric",
+  "params": [
+    { "name": "ring_width", "label": "Ring Width", "type": "float", "default": 0.02, "min": 0.005, "max": 0.1, "step": 0.005 },
+    { "name": "ring_count", "label": "Ring Count", "type": "float", "default": 4.0, "min": 1.0, "max": 8.0, "step": 1.0 },
+    { "name": "expand_speed", "label": "Expand Speed", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1 },
+    { "name": "color_mode", "label": "Color (0=Single 1=Rainbow 2=Band)", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 },
+    { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "glow_amount", "label": "Glow", "type": "float", "default": 0.5, "min": 0.0, "max": 2.0, "step": 0.1 }
+  ]
+}

@@ -1,0 +1,130 @@
+/*
+ * VJLink Julia Set Effect
+ * Julia set fractal with audio-driven c parameter.
+ * Bass drives the c value orbit, creating morphing fractal shapes.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float julia_zoom;      /* zoom level (default 1.5) */
+uniform float max_iterations;  /* detail (default 128) */
+uniform float orbit_radius;    /* c parameter orbit size (default 0.7885) */
+uniform float orbit_speed;     /* c parameter orbit speed (default 0.3) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float4 PSJulia(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float zoom = max(julia_zoom, 0.1);
+    p *= zoom;
+
+    /* Audio-driven c parameter */
+    float r = max(orbit_radius, 0.01);
+    float spd = orbit_speed;
+    float angle = time * spd + bands.x * 0.5;
+
+    float2 c;
+    c.x = r * cos(angle + bands.y * 1.0);
+    c.y = r * sin(angle + bands.z * 1.0);
+
+    /* Julia iteration */
+    float2 z = p;
+    int max_iter = clamp(int(max_iterations), 32, 256);
+    float smooth_iter = 0.0;
+    bool escaped = false;
+
+    /* Orbit trap for coloring */
+    float trap_dist = 1e10;
+
+    for (int i = 0; i < 256; i++) {
+        if (i >= max_iter) break;
+
+        float2 z_new;
+        z_new.x = z.x * z.x - z.y * z.y + c.x;
+        z_new.y = 2.0 * z.x * z.y + c.y;
+        z = z_new;
+
+        /* Orbit trap: distance to origin and axes */
+        trap_dist = min(trap_dist, length(z));
+        trap_dist = min(trap_dist, abs(z.x));
+        trap_dist = min(trap_dist, abs(z.y));
+
+        if (dot(z, z) > 256.0) {
+            smooth_iter = float(i) + 1.0 - log2(log2(dot(z, z)));
+            escaped = true;
+            break;
+        }
+    }
+
+    float3 color;
+
+    if (!escaped) {
+        /* Inside: use orbit trap for color */
+        float t = saturate(trap_dist * 2.0);
+        float hue = frac(t * 0.5 + time * 0.02 + bands.y * 0.1);
+        color = hsv2rgb(float3(hue, 0.8, t * 0.3 + bands.x * 0.2));
+    } else {
+        /* Outside: smooth coloring */
+        float t = smooth_iter / float(max_iter);
+        t = sqrt(t);
+
+        float hue = frac(t * 2.0 + time * 0.03);
+        float sat = 0.7 + bands.z * 0.3;
+        float val = 0.8 + bands.x * 0.2;
+
+        color = hsv2rgb(float3(hue, sat, val));
+
+        /* Orbit trap influence */
+        float trap_col = exp(-trap_dist * 3.0);
+        color += float3(0.3, 0.5, 1.0) * trap_col * 0.5;
+    }
+
+    /* Beat flash */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    color += float3(0.2, 0.1, 0.3) * beat * bands.x * 0.4;
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSJulia(vert_in);
+    }
+}

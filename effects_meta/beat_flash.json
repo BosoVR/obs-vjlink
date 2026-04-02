@@ -1,0 +1,15 @@
+{
+    "effect_id": "beat_flash",
+    "name": "Beat Flash",
+    "category": "audio_viz",
+    "description": "Beat-synchronized strobe with configurable flash color and decay",
+    "author": "VJLink",
+    "params": [
+        { "id": "flash_decay", "name": "Decay", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.5 },
+        { "id": "flash_color_r", "name": "Flash Red", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "flash_color_g", "name": "Flash Green", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "flash_color_b", "name": "Flash Blue", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "flash_intensity", "name": "Intensity", "type": "float", "default": 0.8, "min": 0.0, "max": 2.0, "step": 0.05 },
+        { "id": "invert_on_beat", "name": "Invert on Beat", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+    ]
+}

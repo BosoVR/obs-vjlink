@@ -1,0 +1,180 @@
+/*
+ * VJLink - Classic Tunnel (Raymarched)
+ * Volumetric raymarched tunnel with neon rings, glow accumulation,
+ * and audio-reactive warping. Modern 2026 rave quality.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom parameters */
+uniform float     tunnel_speed;    /* 0.1 - 5.0, default 1.0 */
+uniform float     rotation_speed;  /* 0.0 - 3.0, default 0.3 */
+uniform float     ring_count;      /* 2.0 - 20.0, default 8.0 */
+uniform float     color_intensity; /* 0.5 - 3.0, default 1.5 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+/* Tunnel SDF: cylinder with wavy walls */
+float tunnelSDF(float3 p, float bass, float treble)
+{
+    float wave = sin(p.z * 2.0 + time * 1.5) * 0.15 * (1.0 + bass * 0.8)
+               + sin(p.z * 4.7 - time * 2.3) * 0.08 * treble;
+    float radius = 1.2 + wave;
+    float d = length(p.xy) - radius;
+    return -d; /* inverted: inside tunnel is positive */
+}
+
+/* Ring pattern along tunnel depth */
+float ringPattern(float z, float ring_ct)
+{
+    float rings = frac(z * ring_ct * 0.5);
+    float ring = smoothstep(0.02, 0.0, abs(rings - 0.5) - 0.45);
+    return ring;
+}
+
+float4 PSTunnel(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float bass    = bands.x;
+    float lowmid  = bands.y;
+    float highmid = bands.z;
+    float treble  = bands.w;
+
+    /* Beat envelope */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    /* Camera setup: fly through tunnel */
+    float fly_speed = tunnel_speed * (1.0 + bass * 1.5);
+    float cam_z = time * fly_speed * 3.0;
+
+    /* Camera wobble from audio */
+    float2 cam_offset = float2(
+        sin(time * 0.7 + bass * 3.0) * 0.15 * lowmid,
+        cos(time * 0.9 + treble * 2.0) * 0.12 * highmid
+    );
+
+    /* Ray direction with rotation */
+    float rot_angle = time * rotation_speed + bass * 0.5;
+    float cs = cos(rot_angle);
+    float sn = sin(rot_angle);
+    float2 rotated_p = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+
+    float3 ro = float3(cam_offset, cam_z);
+    float3 rd = normalize(float3(rotated_p, 2.0));
+
+    /* Raymarch through tunnel */
+    float3 glow_accum = float3(0.0, 0.0, 0.0);
+    float t_ray = 0.0;
+    float total_glow = 0.0;
+
+    for (int i = 0; i < 64; i++) {
+        float3 pos = ro + rd * t_ray;
+
+        /* Distance to tunnel wall (inverted SDF) */
+        float wall_dist = length(pos.xy - cam_offset) - 1.2
+            - sin(pos.z * 2.0 + time * 1.5) * 0.15 * (1.0 + bass * 0.8)
+            - sin(pos.z * 4.7 - time * 2.3) * 0.08 * treble;
+
+        /* Ring glow: bright bands along tunnel depth */
+        float z_local = pos.z;
+        float ring = ringPattern(z_local, ring_count);
+
+        /* Hex pattern for wall texture */
+        float angle = atan2(pos.y - cam_offset.y, pos.x - cam_offset.x);
+        float hex = sin(angle * 6.0 + pos.z * 3.0 + time) * 0.5 + 0.5;
+
+        /* Proximity glow: brighter near walls */
+        float prox = exp(-abs(wall_dist) * 4.0);
+        float glow_strength = prox * (ring * 0.8 + hex * 0.15 + 0.05);
+
+        /* Color based on depth and angle */
+        float hue = frac(z_local * 0.03 + angle * 0.16 + time * 0.05);
+        float3 ring_color;
+        ring_color.r = abs(hue * 6.0 - 3.0) - 1.0;
+        ring_color.g = 2.0 - abs(hue * 6.0 - 2.0);
+        ring_color.b = 2.0 - abs(hue * 6.0 - 4.0);
+        ring_color = saturate(ring_color);
+
+        /* Audio-reactive color shift */
+        ring_color = lerp(ring_color, float3(1.0, 0.3, 0.1), bass * 0.3 * ring);
+        ring_color = lerp(ring_color, float3(0.2, 0.5, 1.0), treble * 0.2 * hex);
+
+        /* Accumulate glow */
+        float depth_fade = exp(-t_ray * 0.08);
+        glow_accum += ring_color * glow_strength * depth_fade * 0.15;
+        total_glow += glow_strength * depth_fade;
+
+        /* Step forward */
+        float step_size = max(0.1, abs(wall_dist) * 0.5);
+        t_ray += step_size;
+
+        if (t_ray > 40.0) break;
+    }
+
+    float3 color = glow_accum * color_intensity;
+
+    /* Add bright core ring glow */
+    float center_dist = length(p);
+    float core_ring = exp(-center_dist * 3.0) * 0.15;
+    float core_hue = frac(time * 0.1 + bass * 0.2);
+    float3 core_col;
+    core_col.r = abs(core_hue * 6.0 - 3.0) - 1.0;
+    core_col.g = 2.0 - abs(core_hue * 6.0 - 2.0);
+    core_col.b = 2.0 - abs(core_hue * 6.0 - 4.0);
+    core_col = saturate(core_col);
+    color += core_col * core_ring * (1.0 + bass * 2.0);
+
+    /* Beat flash: white pulse */
+    color += float3(1.0, 0.9, 0.8) * beat * bass * 0.5;
+
+    /* HDR tonemap (Reinhard) for bloom-like look */
+    color = color / (1.0 + color);
+
+    /* Slight vignette */
+    float vig = 1.0 - center_dist * 0.2;
+    color *= saturate(vig);
+
+    return float4(saturate(color), 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSTunnel(vert_in);
+    }
+}

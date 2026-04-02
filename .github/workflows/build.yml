@@ -1,0 +1,105 @@
+name: Build OBS-VJLink
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  OBS_VERSION: "32.1.0"
+  PLUGIN_NAME: "obs-vjlink"
+
+jobs:
+  build-windows:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download OBS Studio
+        run: |
+          $obsUrl = "https://github.com/obsproject/obs-studio/releases/download/${{ env.OBS_VERSION }}/OBS-Studio-${{ env.OBS_VERSION }}-Windows.zip"
+          Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
+          Expand-Archive -Path obs-studio.zip -DestinationPath obs-studio-install
+
+      - name: Download OBS SDK headers
+        run: |
+          $sdkUrl = "https://github.com/obsproject/obs-studio/archive/refs/tags/${{ env.OBS_VERSION }}.zip"
+          Invoke-WebRequest -Uri $sdkUrl -OutFile obs-sdk.zip
+          Expand-Archive -Path obs-sdk.zip -DestinationPath obs-sdk
+
+      - name: Setup OBS directories
+        run: |
+          # Create combined SDK directory with headers from source + libs from install
+          New-Item -ItemType Directory -Path obs-combined/include/obs -Force
+          New-Item -ItemType Directory -Path obs-combined/lib -Force
+          New-Item -ItemType Directory -Path obs-combined/bin/64bit -Force
+
+          # Copy headers from source
+          Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/*.h" -Destination obs-combined/include/obs/ -Force
+          Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/obs-module.h" -Destination obs-combined/include/obs/ -Force
+          if (Test-Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/graphics") {
+            Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/graphics" -Destination obs-combined/include/obs/ -Recurse -Force
+          }
+          if (Test-Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/util") {
+            Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/util" -Destination obs-combined/include/obs/ -Recurse -Force
+          }
+
+          # Copy lib/dll from install
+          $obsInstall = Get-ChildItem -Path obs-studio-install -Directory | Select-Object -First 1
+          if (Test-Path "$($obsInstall.FullName)/bin/64bit/obs.dll") {
+            Copy-Item -Path "$($obsInstall.FullName)/bin/64bit/obs.dll" -Destination obs-combined/bin/64bit/ -Force
+          }
+          if (Test-Path "$($obsInstall.FullName)/bin/64bit/obs.lib") {
+            Copy-Item -Path "$($obsInstall.FullName)/bin/64bit/obs.lib" -Destination obs-combined/lib/ -Force
+          }
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DOBS_DIR="${{ github.workspace }}/obs-combined" `
+            -DOBS_PLUGIN_DEST="${{ github.workspace }}/build/output/obs-plugins/64bit" `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build/install"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Path release/${{ env.PLUGIN_NAME }}/obs-plugins/64bit -Force
+          New-Item -ItemType Directory -Path release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }} -Force
+
+          # Copy DLL
+          $dll = Get-ChildItem -Path build -Recurse -Filter "${{ env.PLUGIN_NAME }}.dll" | Select-Object -First 1
+          if ($dll) {
+            Copy-Item $dll.FullName -Destination release/${{ env.PLUGIN_NAME }}/obs-plugins/64bit/
+          }
+
+          # Copy data files
+          Copy-Item -Path effects -Destination release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }}/effects -Recurse
+          Copy-Item -Path effects_meta -Destination release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }}/effects_meta -Recurse
+          Copy-Item -Path presets -Destination release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }}/presets -Recurse
+          Copy-Item -Path data/* -Destination release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }}/ -Recurse
+          if (Test-Path web-ui) {
+            Copy-Item -Path web-ui -Destination release/${{ env.PLUGIN_NAME }}/data/obs-plugins/${{ env.PLUGIN_NAME }}/web-ui -Recurse
+          }
+
+          # Create ZIP
+          Compress-Archive -Path release/${{ env.PLUGIN_NAME }}/* -DestinationPath "${{ env.PLUGIN_NAME }}-${{ github.sha }}-win64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PLUGIN_NAME }}-win64
+          path: release/${{ env.PLUGIN_NAME }}/
+
+      - name: Upload Release Asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PLUGIN_NAME }}-*-win64.zip

@@ -1,0 +1,13 @@
+{
+    "effect_id": "pixel_sort",
+    "name": "Pixel Sort",
+    "category": "glitch",
+    "description": "Luminance-based pixel sorting with audio-reactive threshold and beat bursts",
+    "author": "VJLink",
+    "params": [
+        { "id": "sort_threshold", "name": "Threshold", "type": "float", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "sort_direction", "name": "Direction (0=V 1=H)", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 },
+        { "id": "sort_length", "name": "Sort Length", "type": "float", "default": 0.3, "min": 0.01, "max": 1.0, "step": 0.05 },
+        { "id": "sort_intensity", "name": "Intensity", "type": "float", "default": 0.8, "min": 0.0, "max": 1.0, "step": 0.05 }
+    ]
+}

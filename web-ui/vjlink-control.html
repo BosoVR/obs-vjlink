@@ -1,0 +1,3270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>VJLink Control</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a28;
+    --border: #2a2a3a;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --accent-glow: rgba(124, 58, 237, 0.4);
+    --cyan: #06b6d4;
+    --pink: #ec4899;
+    --green: #10b981;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --bass-color: #ef4444;
+    --lowmid-color: #f59e0b;
+    --highmid-color: #10b981;
+    --treble-color: #06b6d4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* === HEADER === */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--pink));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .active-effect-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: rgba(124, 58, 237, 0.15);
+    border: 1px solid rgba(124, 58, 237, 0.4);
+    color: var(--accent2);
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.3s;
+  }
+
+  .active-effect-badge.has-effect {
+    background: rgba(124, 58, 237, 0.25);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.2);
+  }
+
+  .connection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+
+  .status-text.connected { color: var(--green); }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+  }
+
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+  .connect-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .connect-btn:hover { background: var(--accent2); transform: scale(1.05); }
+  .connect-btn.active { background: var(--green); }
+
+  .connect-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 200px;
+  }
+
+  /* === MAIN LAYOUT === */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 0;
+    min-height: calc(100vh - 57px);
+  }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+  }
+
+  /* === LEFT PANEL === */
+  .left-panel {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* === AUDIO VISUALIZER === */
+  .audio-viz {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .bands-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .band {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .band-bar-wrap {
+    width: 100%;
+    height: 220px;
+    background: var(--surface2);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .band-threshold-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255,255,255,0.7);
+    pointer-events: none;
+    z-index: 2;
+    transition: bottom 0.15s;
+    box-shadow: 0 0 4px rgba(255,255,255,0.4);
+  }
+
+  .band-threshold-line::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 0 4px rgba(255,255,255,0.6);
+  }
+
+  .band-bar {
+    width: 100%;
+    height: 0%;
+    border-radius: 6px 6px 0 0;
+    transition: height 0.06s ease-out;
+    position: relative;
+  }
+
+  .band-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: white;
+    opacity: 0.7;
+    border-radius: 3px;
+  }
+
+  .band-bar.bass { background: linear-gradient(to top, var(--bass-color), #ff7070); }
+  .band-bar.lowmid { background: linear-gradient(to top, var(--lowmid-color), #fbbf24); }
+  .band-bar.highmid { background: linear-gradient(to top, var(--highmid-color), #34d399); }
+  .band-bar.treble { background: linear-gradient(to top, var(--treble-color), #22d3ee); }
+
+  .band-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+  }
+
+  .band-value {
+    font-size: 16px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    min-width: 45px;
+    text-align: center;
+  }
+
+  /* === BPM / BEAT === */
+  .beat-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .bpm-display {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .bpm-value {
+    font-size: 42px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, var(--accent), var(--pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+  }
+
+  .bpm-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .beat-indicator {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .beat-ring {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.08s;
+  }
+
+  .beat-ring.active {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+    box-shadow: 0 0 25px var(--accent-glow);
+  }
+
+  .beat-ring-inner {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.08s;
+  }
+
+  .beat-ring.active .beat-ring-inner {
+    background: var(--accent);
+  }
+
+  .tap-btn {
+    background: var(--surface2);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tap-btn:hover { background: var(--accent); color: white; }
+  .tap-btn:active { transform: scale(0.95); }
+
+  /* === PRESETS === */
+  .presets-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .presets-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .preset-nav {
+    display: flex;
+    gap: 6px;
+  }
+
+  .preset-nav-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .preset-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .presets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .presets-grid::-webkit-scrollbar { width: 4px; }
+  .presets-grid::-webkit-scrollbar-track { background: transparent; }
+  .presets-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .preset-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .preset-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .preset-card.active {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(236, 72, 153, 0.1));
+  }
+
+  .preset-card.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .preset-name {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .preset-category {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* === EFFECTS GRID === */
+  .effects-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    flex: 1;
+  }
+
+  .effect-categories {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .cat-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .cat-btn:hover { border-color: var(--accent); color: var(--text); }
+  .cat-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .effects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .effects-grid::-webkit-scrollbar { width: 4px; }
+  .effects-grid::-webkit-scrollbar-track { background: transparent; }
+  .effects-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .effect-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: left;
+    transition: all 0.15s;
+  }
+
+  .effect-btn:hover { border-color: var(--accent); background: rgba(124, 58, 237, 0.1); }
+  .effect-btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+  /* === RIGHT PANEL (PARAMS) === */
+  .right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+  }
+
+  @media (max-width: 900px) {
+    .right-panel { border-left: none; border-top: 1px solid var(--border); }
+  }
+
+  /* === CONTROLS === */
+  .control-row {
+    margin-bottom: 16px;
+  }
+
+  .control-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .control-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .slider-wrap {
+    position: relative;
+    width: 100%;
+    height: 28px;
+    display: flex;
+    align-items: center;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    outline: none;
+    position: relative;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--accent-glow);
+    transition: transform 0.15s;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  /* === PARAM SLIDERS === */
+  .param-slider {
+    margin-bottom: 14px;
+  }
+
+  .param-slider .control-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  /* === BLACKOUT === */
+  .blackout-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--surface2);
+    border: 2px solid var(--red);
+    color: var(--red);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 8px;
+  }
+
+  .blackout-btn:hover { background: var(--red); color: white; }
+  .blackout-btn.active { background: var(--red); color: white; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+
+  /* === QUICK ACTIONS === */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .quick-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .quick-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .quick-btn:active { transform: scale(0.97); }
+
+  /* === SPECTRUM CANVAS === */
+  .spectrum-wrap {
+    width: 100%;
+    height: 70px;
+    background: var(--surface2);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 16px;
+  }
+
+  #spectrumCanvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* === BAND EFFECTS PANEL === */
+  .band-effects-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .band-effects-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .band-slot {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .band-slot-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .band-slot select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .band-slot select:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .band-slider-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .band-slider-label span:last-child {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .activation-bar-wrap {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .activation-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.06s;
+  }
+
+  /* === MEDIA / SOURCE TRIGGERS === */
+  .media-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .media-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .media-tab {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+
+  .media-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .media-tab:hover:not(.active) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .source-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: 6px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+
+  .source-row:hover {
+    border-color: var(--border);
+    background: rgba(26,26,40,0.8);
+  }
+
+  .source-row.selected {
+    border-color: var(--accent);
+    background: rgba(124,58,237,0.08);
+  }
+
+  .source-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .source-toggle.on {
+    border-color: var(--green);
+    background: var(--green);
+    color: white;
+    box-shadow: 0 0 8px rgba(16,185,129,0.4);
+  }
+
+  .source-toggle.off {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .source-toggle.off:hover {
+    background: rgba(239,68,68,0.15);
+  }
+
+  .source-toggle.on:hover {
+    background: var(--green);
+    box-shadow: 0 0 12px rgba(16,185,129,0.5);
+  }
+
+  .source-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .source-type-badge {
+    font-size: 9px;
+    color: var(--text-dim);
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* Source trigger detail panel (shown in right panel) */
+  .trigger-detail {
+    padding: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .trigger-detail select, .trigger-detail input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    width: 100%;
+  }
+
+  .trigger-detail select:focus, .trigger-detail input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .remove-row-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+
+  .remove-row-btn:hover {
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(239,68,68,0.1);
+  }
+
+  .add-row-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    padding: 8px;
+    border-radius: 6px;
+    width: 100%;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+
+  .add-row-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    .band-effects-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* === ANIMATIONS === */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .disconnected { animation: pulse 2s infinite; }
+
+  @keyframes beatGlow {
+    0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    100% { box-shadow: 0 0 30px 10px transparent; }
+  }
+
+  .beat-flash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 50;
+    transition: opacity 0.1s;
+  }
+
+  /* === METER BARS (bigger) === */
+  .meter-bar-wrap {
+    height: 10px;
+    background: var(--surface2);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .meter-bar {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.06s;
+  }
+
+  /* === CHRONO BARS === */
+  .chrono-bars {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .chrono-bars > div {
+    flex: 1;
+    height: 10px;
+    background: var(--surface2);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .chrono-bar {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.06s;
+  }
+</style>
+</head>
+<body>
+
+<!-- Beat Flash Overlay -->
+<div class="beat-flash-overlay" id="beatOverlay"></div>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">VJ</div>
+    <span>VJLINK</span>
+    <div class="active-effect-badge" id="activeEffectBadge" title="Active Effect">No Effect</div>
+  </div>
+  <div class="connection">
+    <input type="text" class="connect-input" id="wsUrl" value="ws://localhost:4455" placeholder="ws://host:port">
+    <input type="password" class="connect-input" id="wsPassword" placeholder="Password" style="width:140px">
+    <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">Disconnected</span>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main">
+  <!-- Left Panel -->
+  <div class="left-panel">
+
+    <!-- Audio Visualizer -->
+    <div class="audio-viz">
+      <div class="section-title">Audio Analysis</div>
+      <div class="bands-container">
+        <div class="band">
+          <div class="band-bar-wrap">
+            <div class="band-bar bass" id="bandBass"></div>
+            <div class="band-threshold-line" id="bandThreshLine_0" style="bottom:30%;display:none"></div>
+          </div>
+          <div class="band-value" id="bandBassVal" style="color:var(--bass-color)">0</div>
+          <div class="band-label" style="color:var(--bass-color)">Bass</div>
+        </div>
+        <div class="band">
+          <div class="band-bar-wrap">
+            <div class="band-bar lowmid" id="bandLowmid"></div>
+            <div class="band-threshold-line" id="bandThreshLine_1" style="bottom:30%;display:none"></div>
+          </div>
+          <div class="band-value" id="bandLowmidVal" style="color:var(--lowmid-color)">0</div>
+          <div class="band-label" style="color:var(--lowmid-color)">Low-Mid</div>
+        </div>
+        <div class="band">
+          <div class="band-bar-wrap">
+            <div class="band-bar highmid" id="bandHighmid"></div>
+            <div class="band-threshold-line" id="bandThreshLine_2" style="bottom:30%;display:none"></div>
+          </div>
+          <div class="band-value" id="bandHighmidVal" style="color:var(--highmid-color)">0</div>
+          <div class="band-label" style="color:var(--highmid-color)">High-Mid</div>
+        </div>
+        <div class="band">
+          <div class="band-bar-wrap">
+            <div class="band-bar treble" id="bandTreble"></div>
+            <div class="band-threshold-line" id="bandThreshLine_3" style="bottom:30%;display:none"></div>
+          </div>
+          <div class="band-value" id="bandTrebleVal" style="color:var(--treble-color)">0</div>
+          <div class="band-label" style="color:var(--treble-color)">Treble</div>
+        </div>
+      </div>
+
+      <!-- Sensitivity Sliders -->
+      <div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">Sensitivity</span>
+          <button onclick="resetSensitivity()" style="background:none;border:1px solid var(--border);color:var(--text-dim);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer" title="Reset all to 1.0x">Reset</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:10px;font-weight:600;color:var(--bass-color)">Bass</span>
+            <input type="range" min="0" max="300" value="100" step="5" id="sensBass"
+              oninput="setSensitivity(0, this.value/100)" title="Bass Sensitivity"
+              style="width:100%;accent-color:var(--bass-color);height:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--bass-color)" id="sensBassVal">1.0x</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:10px;font-weight:600;color:var(--lowmid-color)">Low-Mid</span>
+            <input type="range" min="0" max="300" value="100" step="5" id="sensLowmid"
+              oninput="setSensitivity(1, this.value/100)" title="Low-Mid Sensitivity"
+              style="width:100%;accent-color:var(--lowmid-color);height:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--lowmid-color)" id="sensLowmidVal">1.0x</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:10px;font-weight:600;color:var(--highmid-color)">High-Mid</span>
+            <input type="range" min="0" max="300" value="100" step="5" id="sensHighmid"
+              oninput="setSensitivity(2, this.value/100)" title="High-Mid Sensitivity"
+              style="width:100%;accent-color:var(--highmid-color);height:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--highmid-color)" id="sensHighmidVal">1.0x</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <span style="font-size:10px;font-weight:600;color:var(--treble-color)">Treble</span>
+            <input type="range" min="0" max="300" value="100" step="5" id="sensTreble"
+              oninput="setSensitivity(3, this.value/100)" title="Treble Sensitivity"
+              style="width:100%;accent-color:var(--treble-color);height:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--treble-color)" id="sensTrebleVal">1.0x</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BPM & Beat -->
+      <div class="beat-section">
+        <div class="bpm-display">
+          <div class="bpm-value" id="bpmValue">---</div>
+          <div class="bpm-label">BPM</div>
+        </div>
+        <div class="beat-indicator">
+          <div class="beat-ring" id="beatRing">
+            <div class="beat-ring-inner"></div>
+          </div>
+          <div class="bpm-label">Beat</div>
+        </div>
+        <button class="tap-btn" id="tapBtn" onclick="sendTapBPM()">TAP</button>
+      </div>
+
+      <!-- Mini Spectrum -->
+      <div class="spectrum-wrap">
+        <canvas id="spectrumCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Per-Band Effects -->
+    <div class="band-effects-panel">
+      <div class="section-title">Per-Band Effects</div>
+      <div class="band-effects-grid" id="bandEffectsGrid">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+
+    <!-- Media / Source Triggers -->
+    <div class="media-section">
+      <div class="section-title">Media & Source Triggers</div>
+      <div class="media-tabs">
+        <button class="media-tab active" onclick="switchMediaTab('sources')" id="tabSources">OBS Sources</button>
+        <button class="media-tab" onclick="switchMediaTab('media')" id="tabMedia">Media Layers</button>
+      </div>
+      <div id="mediaContent">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+
+    <!-- Presets -->
+    <div class="presets-section">
+      <div class="presets-header">
+        <div class="section-title" style="margin:0">Presets</div>
+        <div class="preset-nav">
+          <button class="preset-nav-btn" onclick="sendPrevPreset()" title="Previous">&#9664;</button>
+          <button class="preset-nav-btn" onclick="sendNextPreset()" title="Next">&#9654;</button>
+        </div>
+      </div>
+      <div class="presets-grid" id="presetsGrid">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+
+    <!-- Effects -->
+    <div class="effects-section">
+      <div class="section-title">Effects</div>
+      <div class="effect-categories" id="categoryBtns">
+        <!-- Filled by JS -->
+      </div>
+      <div class="effects-grid" id="effectsGrid">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <div class="section-title">Controls</div>
+
+    <div class="quick-actions">
+      <button class="quick-btn" onclick="sendPrevPreset()">&#9664; Prev Preset</button>
+      <button class="quick-btn" onclick="sendNextPreset()">Next Preset &#9654;</button>
+      <button class="quick-btn" onclick="selectEffect('')" style="color:var(--red);border-color:var(--red)">Clear Effect</button>
+      <button class="quick-btn" onclick="fetchSceneSources()">Refresh Sources</button>
+    </div>
+
+    <!-- === Settings Section === -->
+    <div class="section-title" style="margin-top:12px">Settings</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+
+      <!-- Transparent Background Toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--text)">Transparent Background</span>
+        <label style="position:relative;width:40px;height:22px;cursor:pointer">
+          <input type="checkbox" id="toggleTransparentBg" onchange="toggleTransparentBg(this.checked)" style="display:none">
+          <span style="position:absolute;inset:0;background:var(--surface);border:1px solid var(--border);border-radius:11px;transition:all 0.3s"></span>
+          <span id="toggleTransparentBgDot" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--text-dim);border-radius:50%;transition:all 0.3s"></span>
+        </label>
+      </div>
+
+      <!-- Debug Overlay Toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--text)">Debug Overlay</span>
+        <label style="position:relative;width:40px;height:22px;cursor:pointer">
+          <input type="checkbox" id="toggleDebugOverlay" onchange="toggleDebugOverlay(this.checked)" style="display:none">
+          <span style="position:absolute;inset:0;background:var(--surface);border:1px solid var(--border);border-radius:11px;transition:all 0.3s"></span>
+          <span id="toggleDebugOverlayDot" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--text-dim);border-radius:50%;transition:all 0.3s"></span>
+        </label>
+      </div>
+
+      <!-- Logo Path -->
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:12px;color:var(--text)">Logo Image</span>
+          <button onclick="openOBSProperties()" style="background:var(--surface);color:var(--cyan);border:1px solid var(--cyan);padding:3px 10px;border-radius:5px;font-size:10px;cursor:pointer;font-weight:600" title="Opens OBS source properties with native file picker">OBS File Picker</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input type="text" id="logoPathInput" placeholder="C:\path\to\logo.png" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')applyLogoPath()">
+          <button onclick="applyLogoPath()" style="background:var(--accent);color:white;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Apply</button>
+          <button onclick="clearLogoPath()" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Clear logo">X</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- === Unified Effect Parameters === -->
+    <div class="section-title" style="margin-top:8px">Parameters</div>
+    <div id="paramTabs" style="display:none;margin-bottom:8px"></div>
+    <div id="paramsContainer">
+      <div style="color:var(--text-dim);font-size:12px;padding:20px 0;text-align:center;">
+        Select an effect to see parameters
+      </div>
+    </div>
+
+    <div id="sourceTriggerDetail" style="display:none;margin-top:16px">
+      <div class="section-title">Source Trigger</div>
+      <div id="sourceTriggerDetailContent"></div>
+    </div>
+
+    <div style="margin-top:20px">
+      <div class="section-title">Master</div>
+
+      <div class="control-row" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+          <span style="font-size:11px;color:var(--text-dim)">Shader Time</span>
+          <span style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--cyan)" id="elapsedTime">0.00s</span>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span>RMS Level</span>
+          <span class="control-value" id="rmsValue">0.00</span>
+        </div>
+        <div class="meter-bar-wrap">
+          <div id="rmsBar" class="meter-bar" style="width:0%;background:linear-gradient(90deg,var(--green),var(--orange),var(--red))"></div>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span>Beat Confidence</span>
+          <span class="control-value" id="confValue">0.00</span>
+        </div>
+        <div class="meter-bar-wrap">
+          <div id="confBar" class="meter-bar" style="width:0%;background:var(--accent)"></div>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span>Onset Strength</span>
+          <span class="control-value" id="onsetValue">0.00</span>
+        </div>
+        <div class="meter-bar-wrap">
+          <div id="onsetBar" class="meter-bar" style="width:0%;background:var(--pink)"></div>
+        </div>
+      </div>
+
+      <div class="control-row" style="margin-top:8px">
+        <div class="control-label"><span>Chronotensity</span></div>
+        <div class="chrono-bars">
+          <div title="Bass"><div id="chronoBass" class="chrono-bar" style="width:0%;background:var(--bass-color)"></div></div>
+          <div title="Low-Mid"><div id="chronoLowmid" class="chrono-bar" style="width:0%;background:var(--lowmid-color)"></div></div>
+          <div title="High-Mid"><div id="chronoHighmid" class="chrono-bar" style="width:0%;background:var(--highmid-color)"></div></div>
+          <div title="Treble"><div id="chronoTreble" class="chrono-bar" style="width:0%;background:var(--treble-color)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="blackout-btn" id="blackoutBtn" onclick="sendBlackout()">Blackout</button>
+  </div>
+</div>
+
+<script>
+// === SHA-256 for file:// protocol (crypto.subtle needs HTTPS) ===
+// Minimal SHA-256 implementation for obs-websocket auth
+const SHA256_K = new Uint32Array([
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+]);
+
+function sha256(message) {
+  const msgBytes = new TextEncoder().encode(message);
+  const bitLen = msgBytes.length * 8;
+  const padLen = (((msgBytes.length + 8) >> 6) + 1) << 6;
+  const padded = new Uint8Array(padLen);
+  padded.set(msgBytes);
+  padded[msgBytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padLen - 4, bitLen, false);
+
+  let h0=0x6a09e667, h1=0xbb67ae85, h2=0x3c6ef372, h3=0xa54ff53a;
+  let h4=0x510e527f, h5=0x9b05688c, h6=0x1f83d9ab, h7=0x5be0cd19;
+  const w = new Uint32Array(64);
+
+  for (let offset = 0; offset < padLen; offset += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
+    for (let i = 16; i < 64; i++) {
+      const s0 = ((w[i-15]>>>7)|(w[i-15]<<25)) ^ ((w[i-15]>>>18)|(w[i-15]<<14)) ^ (w[i-15]>>>3);
+      const s1 = ((w[i-2]>>>17)|(w[i-2]<<15)) ^ ((w[i-2]>>>19)|(w[i-2]<<13)) ^ (w[i-2]>>>10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    let a=h0, b=h1, c=h2, d=h3, e=h4, f=h5, g=h6, h=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = ((e>>>6)|(e<<26)) ^ ((e>>>11)|(e<<21)) ^ ((e>>>25)|(e<<7));
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + SHA256_K[i] + w[i]) | 0;
+      const S0 = ((a>>>2)|(a<<30)) ^ ((a>>>13)|(a<<19)) ^ ((a>>>22)|(a<<10));
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0;
+    h4=(h4+e)|0; h5=(h5+f)|0; h6=(h6+g)|0; h7=(h7+h)|0;
+  }
+
+  const result = new Uint8Array(32);
+  const rv = new DataView(result.buffer);
+  rv.setUint32(0,h0,false); rv.setUint32(4,h1,false); rv.setUint32(8,h2,false); rv.setUint32(12,h3,false);
+  rv.setUint32(16,h4,false); rv.setUint32(20,h5,false); rv.setUint32(24,h6,false); rv.setUint32(28,h7,false);
+  return result;
+}
+
+function sha256base64(str) {
+  const hash = sha256(str);
+  return btoa(String.fromCharCode(...hash));
+}
+
+// === OBS WebSocket Connection ===
+let ws = null;
+let connected = false;
+let msgId = 0;
+let pendingRequests = {};
+let pollInterval = null;
+let lastBeatPhase = 0;
+
+// Built-in preset & effect lists
+const builtinPresets = [
+  { id: 'neon_tunnel', name: 'Neon Tunnel', category: 'tunnel' },
+  { id: 'cyber_plasma', name: 'Cyber Plasma', category: 'plasma' },
+  { id: 'galaxy_voyage', name: 'Galaxy Voyage', category: 'tunnel' },
+  { id: 'glitch_machine', name: 'Glitch Machine', category: 'glitch' },
+  { id: 'retro_vhs', name: 'Retro VHS', category: 'retro' },
+  { id: 'fractal_journey', name: 'Fractal Journey', category: 'fractal' },
+  { id: 'sacred_pulse', name: 'Sacred Pulse', category: 'geometric' },
+  { id: 'fire_storm', name: 'Fire Storm', category: 'particle' },
+  { id: 'deep_space', name: 'Deep Space', category: '3d' },
+  { id: 'matrix_hacker', name: 'Matrix Hacker', category: 'retro' },
+  { id: 'hex_rave', name: 'Hex Rave', category: 'tunnel' },
+  { id: 'liquid_chrome', name: 'Liquid Chrome', category: 'plasma' },
+];
+
+const effectCategories = {
+  tunnel: { label: 'Tunnels', effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel'] },
+  plasma: { label: 'Plasma', effects: ['plasma_classic','lava_lamp','liquid_metal'] },
+  particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm'] },
+  fractal: { label: 'Fractals', effects: ['mandelbrot_zoom','julia_set','ifs_fractal'] },
+  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse'] },
+  glitch: { label: 'Glitch', effects: ['rgb_split','datamosh','pixel_sort','ascii_art'] },
+  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch'] },
+  '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs'] },
+  audio_viz: { label: 'Audio Viz', effects: ['waveform_bars','spectrum_radial','beat_flash','laser_scan'] },
+  postprocess: { label: 'Post-FX', effects: ['color_grade','feedback','displacement'] },
+  flash: { label: 'Flash', effects: ['strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','strobe_grid'] },
+};
+
+const effectNames = {
+  tunnel_classic:'Classic Tunnel', hex_tunnel:'Hex Tunnel', galaxy_tunnel:'Galaxy Tunnel',
+  dna_helix:'DNA Helix', plasma_classic:'Plasma Classic', lava_lamp:'Lava Lamp',
+  liquid_metal:'Liquid Metal', fire_emitter:'Fire Emitter', galaxy_spiral:'Galaxy Spiral',
+  particle_storm:'Particle Storm', mandelbrot_zoom:'Mandelbrot Zoom', julia_set:'Julia Set',
+  ifs_fractal:'IFS Fractal', kaleidoscope:'Kaleidoscope', voronoi:'Voronoi',
+  sacred_geometry:'Sacred Geometry', rgb_split:'RGB Split', datamosh:'Datamosh',
+  pixel_sort:'Pixel Sort', ascii_art:'ASCII Art', matrix_rain:'Matrix Rain',
+  crt_scanlines:'CRT Scanlines', vhs_glitch:'VHS Glitch', sphere_field:'Sphere Field',
+  torus_knot:'Torus Knot', metaballs:'Metaballs', waveform_bars:'Waveform Bars',
+  spectrum_radial:'Spectrum Radial', beat_flash:'Beat Flash', color_grade:'Color Grade',
+  feedback:'Feedback', displacement:'Displacement',
+  strobe_hard:'Hard Strobe', strobe_color:'Color Strobe', flash_kick:'Kick Flash',
+  flash_snare:'Snare Flash', strobe_invert:'Invert Strobe', flash_radial:'Radial Flash',
+  strobe_gate:'Strobe Gate', flash_shake:'Flash Shake', strobe_grid:'Strobe Grid',
+  beat_blocks:'Beat Blocks', logo_runner:'Logo Runner', beat_rings:'Beat Rings',
+  logo_pulse:'Logo Pulse', laser_scan:'Laser Scan',
+};
+
+// Standard effect parameters (every effect supports these via SetParam)
+const effectParams = {
+  _default: [
+    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 3, step: 0.01, default: 1.0 },
+    { name: 'scale', label: 'Scale', min: 0.1, max: 5, step: 0.01, default: 1.0 },
+    { name: 'audio_reactivity', label: 'Audio React', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'color_shift', label: 'Color Shift', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'brightness', label: 'Brightness', min: 0, max: 2, step: 0.01, default: 1.0 },
+  ],
+  strobe_hard: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
+  ],
+  strobe_color: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
+    { name: 'color_shift', label: 'Color Hue', min: 0, max: 1, step: 0.01, default: 0.0 },
+  ],
+  flash_kick: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'decay', label: 'Decay', min: 0.01, max: 1, step: 0.01, default: 0.3 },
+  ],
+  flash_snare: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'decay', label: 'Decay', min: 0.01, max: 1, step: 0.01, default: 0.2 },
+  ],
+  flash_radial: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
+    { name: 'scale', label: 'Scale', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+  ],
+  feedback: [
+    { name: 'fb_decay', label: 'Decay', min: 0.01, max: 0.5, step: 0.01, default: 0.05 },
+    { name: 'fb_zoom', label: 'Zoom', min: 0.95, max: 1.05, step: 0.001, default: 0.99 },
+    { name: 'fb_rotation', label: 'Rotation', min: -0.1, max: 0.1, step: 0.001, default: 0.01 },
+    { name: 'fb_hue_shift', label: 'Hue Shift', min: 0, max: 0.1, step: 0.001, default: 0.01 },
+    { name: 'fb_mix', label: 'Mix', min: 0, max: 1, step: 0.01, default: 0.85 },
+  ],
+  // Tunnels
+  tunnel_classic: [
+    { name: 'tunnel_speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'rotation_speed', label: 'Rotation', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'ring_count', label: 'Rings', min: 1, max: 20, step: 1, default: 8 },
+    { name: 'color_intensity', label: 'Color', min: 0, max: 2, step: 0.01, default: 1.0 },
+  ],
+  hex_tunnel: [
+    { name: 'hex_scale', label: 'Hex Scale', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'tunnel_speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'glow_width', label: 'Glow', min: 0.01, max: 0.5, step: 0.01, default: 0.1 },
+    { name: 'color_cycle', label: 'Color Cycle', min: 0, max: 2, step: 0.01, default: 0.5 },
+  ],
+  galaxy_tunnel: [
+    { name: 'fly_speed', label: 'Fly Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'star_density', label: 'Stars', min: 0.1, max: 3, step: 0.1, default: 1.0 },
+    { name: 'nebula_density', label: 'Nebula', min: 0, max: 2, step: 0.1, default: 0.5 },
+    { name: 'color_speed', label: 'Color Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+  ],
+  dna_helix: [
+    { name: 'helix_speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'helix_radius', label: 'Radius', min: 0.1, max: 2, step: 0.1, default: 0.5 },
+    { name: 'strand_thickness', label: 'Thickness', min: 0.01, max: 0.3, step: 0.01, default: 0.08 },
+    { name: 'fly_speed', label: 'Fly Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+  ],
+  // Plasma
+  plasma_classic: [
+    { name: 'plasma_scale', label: 'Scale', min: 0.5, max: 10, step: 0.1, default: 3.0 },
+    { name: 'color_speed', label: 'Color Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'distortion', label: 'Distortion', min: 0, max: 3, step: 0.1, default: 1.0 },
+    { name: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, default: 1.0 },
+  ],
+  lava_lamp: [
+    { name: 'blob_scale', label: 'Blob Scale', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'flow_speed', label: 'Flow Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'warmth', label: 'Warmth', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'glow_amount', label: 'Glow', min: 0, max: 2, step: 0.1, default: 0.5 },
+  ],
+  liquid_metal: [
+    { name: 'cell_scale', label: 'Scale', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'distortion', label: 'Distortion', min: 0, max: 3, step: 0.1, default: 1.0 },
+    { name: 'reflectivity', label: 'Reflect', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'flow_speed', label: 'Flow Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+  ],
+  // Fractals
+  mandelbrot_zoom: [
+    { name: 'zoom_speed', label: 'Zoom Speed', min: 0.1, max: 3, step: 0.1, default: 0.5 },
+    { name: 'max_iterations', label: 'Iterations', min: 10, max: 200, step: 10, default: 80 },
+    { name: 'color_palette', label: 'Palette', min: 0, max: 3, step: 1, default: 0 },
+    { name: 'center_x', label: 'Center X', min: -2, max: 2, step: 0.01, default: -0.75 },
+    { name: 'center_y', label: 'Center Y', min: -2, max: 2, step: 0.01, default: 0.0 },
+  ],
+  julia_set: [
+    { name: 'julia_zoom', label: 'Zoom', min: 0.5, max: 5, step: 0.1, default: 1.5 },
+    { name: 'max_iterations', label: 'Iterations', min: 10, max: 200, step: 10, default: 80 },
+    { name: 'orbit_radius', label: 'Orbit Radius', min: 0.1, max: 2, step: 0.01, default: 0.7 },
+    { name: 'orbit_speed', label: 'Orbit Speed', min: 0, max: 3, step: 0.1, default: 0.3 },
+  ],
+  ifs_fractal: [
+    { name: 'ifs_iterations', label: 'Iterations', min: 1, max: 10, step: 1, default: 5 },
+    { name: 'ifs_scale', label: 'Scale', min: 0.5, max: 3, step: 0.1, default: 1.5 },
+    { name: 'ifs_rotation', label: 'Rotation', min: 0, max: 6.28, step: 0.1, default: 1.0 },
+    { name: 'ifs_fold', label: 'Fold', min: 0, max: 3, step: 0.1, default: 1.0 },
+  ],
+  // Geometric
+  kaleidoscope: [
+    { name: 'segments', label: 'Segments', min: 2, max: 16, step: 1, default: 6 },
+    { name: 'zoom', label: 'Zoom', min: 0.5, max: 5, step: 0.1, default: 1.0 },
+    { name: 'rotate_speed', label: 'Rotation', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'complexity', label: 'Complexity', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+  ],
+  voronoi: [
+    { name: 'cell_count', label: 'Cells', min: 3, max: 30, step: 1, default: 12 },
+    { name: 'edge_width', label: 'Edge Width', min: 0.01, max: 0.3, step: 0.01, default: 0.05 },
+    { name: 'animation_speed', label: 'Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'color_mode', label: 'Color Mode', min: 0, max: 3, step: 1, default: 0 },
+  ],
+  sacred_geometry: [
+    { name: 'pattern_scale', label: 'Scale', min: 0.5, max: 5, step: 0.1, default: 1.5 },
+    { name: 'line_width', label: 'Line Width', min: 0.005, max: 0.1, step: 0.005, default: 0.02 },
+    { name: 'rotation_speed', label: 'Rotation', min: 0, max: 3, step: 0.1, default: 0.3 },
+    { name: 'layers', label: 'Layers', min: 1, max: 5, step: 1, default: 3 },
+  ],
+  // Glitch
+  rgb_split: [
+    { name: 'split_amount', label: 'Split', min: 0, max: 0.1, step: 0.001, default: 0.01 },
+    { name: 'split_angle', label: 'Angle', min: 0, max: 6.28, step: 0.1, default: 0.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 5, step: 0.1, default: 2.0 },
+    { name: 'aberration_type', label: 'Type (0=Lin 1=Rad)', min: 0, max: 1, step: 1, default: 0 },
+  ],
+  datamosh: [
+    { name: 'block_size', label: 'Block Size', min: 4, max: 64, step: 4, default: 16 },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'displacement', label: 'Displacement', min: 0, max: 0.2, step: 0.01, default: 0.05 },
+    { name: 'noise_amount', label: 'Noise', min: 0, max: 1, step: 0.01, default: 0.3 },
+  ],
+  pixel_sort: [
+    { name: 'sort_threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'sort_direction', label: 'Direction', min: 0, max: 1, step: 1, default: 0 },
+    { name: 'sort_length', label: 'Length', min: 0.01, max: 1, step: 0.01, default: 0.3 },
+    { name: 'sort_intensity', label: 'Intensity', min: 0, max: 1, step: 0.01, default: 0.8 },
+  ],
+  ascii_art: [
+    { name: 'char_size', label: 'Char Size', min: 4, max: 32, step: 1, default: 8 },
+    { name: 'color_preserve', label: 'Color', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'contrast', label: 'Contrast', min: 0.5, max: 3, step: 0.1, default: 1.5 },
+    { name: 'bg_brightness', label: 'BG Brightness', min: 0, max: 0.5, step: 0.01, default: 0.05 },
+  ],
+  // Retro
+  matrix_rain: [
+    { name: 'column_count', label: 'Columns', min: 10, max: 100, step: 5, default: 40 },
+    { name: 'fall_speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, default: 1.5 },
+    { name: 'trail_length', label: 'Trail', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'brightness', label: 'Brightness', min: 0.2, max: 3, step: 0.1, default: 1.0 },
+  ],
+  vhs_glitch: [
+    { name: 'tracking_error', label: 'Tracking', min: 0, max: 0.1, step: 0.001, default: 0.02 },
+    { name: 'noise_intensity', label: 'Noise', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'color_bleed', label: 'Color Bleed', min: 0, max: 0.02, step: 0.001, default: 0.005 },
+    { name: 'jitter', label: 'Jitter', min: 0, max: 0.01, step: 0.001, default: 0.002 },
+  ],
+  crt_scanlines: [
+    { name: 'scanline_intensity', label: 'Scanlines', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'curvature', label: 'Curvature', min: 0, max: 0.1, step: 0.005, default: 0.03 },
+    { name: 'vignette_amount', label: 'Vignette', min: 0, max: 2, step: 0.1, default: 0.5 },
+    { name: 'flicker', label: 'Flicker', min: 0, max: 0.2, step: 0.01, default: 0.05 },
+  ],
+  // 3D
+  sphere_field: [
+    { name: 'sphere_count', label: 'Count', min: 2, max: 20, step: 1, default: 8 },
+    { name: 'sphere_spacing', label: 'Spacing', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'cam_distance', label: 'Distance', min: 1, max: 10, step: 0.5, default: 5.0 },
+    { name: 'glow_intensity', label: 'Glow', min: 0, max: 3, step: 0.1, default: 1.0 },
+  ],
+  torus_knot: [
+    { name: 'knot_p', label: 'Knot P', min: 1, max: 7, step: 1, default: 2 },
+    { name: 'knot_q', label: 'Knot Q', min: 1, max: 7, step: 1, default: 3 },
+    { name: 'knot_radius', label: 'Radius', min: 0.5, max: 3, step: 0.1, default: 1.0 },
+    { name: 'tube_radius', label: 'Tube', min: 0.05, max: 0.5, step: 0.01, default: 0.15 },
+  ],
+  metaballs: [
+    { name: 'ball_count', label: 'Count', min: 2, max: 10, step: 1, default: 5 },
+    { name: 'ball_size', label: 'Size', min: 0.1, max: 2, step: 0.1, default: 0.5 },
+    { name: 'smoothness', label: 'Smooth', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'motion_speed', label: 'Speed', min: 0, max: 3, step: 0.1, default: 1.0 },
+  ],
+  // Audio Viz
+  waveform_bars: [
+    { name: 'bar_count', label: 'Bars', min: 4, max: 64, step: 4, default: 32 },
+    { name: 'bar_width', label: 'Width', min: 0.3, max: 1, step: 0.05, default: 0.8 },
+    { name: 'sensitivity', label: 'Sensitivity', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'mirror', label: 'Mirror', min: 0, max: 1, step: 1, default: 1 },
+  ],
+  spectrum_radial: [
+    { name: 'inner_radius', label: 'Inner Radius', min: 0.05, max: 0.5, step: 0.01, default: 0.2 },
+    { name: 'bar_height', label: 'Bar Height', min: 0.05, max: 0.5, step: 0.01, default: 0.3 },
+    { name: 'bar_count', label: 'Bars', min: 8, max: 128, step: 8, default: 64 },
+    { name: 'mirror_mode', label: 'Mirror', min: 0, max: 1, step: 1, default: 0 },
+  ],
+  beat_flash: [
+    { name: 'flash_decay', label: 'Decay', min: 0.5, max: 10, step: 0.5, default: 3.0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, default: 0.8 },
+    { name: 'invert_on_beat', label: 'Invert', min: 0, max: 1, step: 1, default: 0 },
+  ],
+  // Post-process
+  color_grade: [
+    { name: 'pp_brightness', label: 'Brightness', min: -1, max: 1, step: 0.01, default: 0.0 },
+    { name: 'pp_contrast', label: 'Contrast', min: 0.5, max: 2, step: 0.01, default: 1.0 },
+    { name: 'pp_saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'pp_hue_shift', label: 'Hue Shift', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'pp_vignette', label: 'Vignette', min: 0, max: 2, step: 0.1, default: 0.0 },
+    { name: 'pp_gamma', label: 'Gamma', min: 0.5, max: 2.5, step: 0.05, default: 1.0 },
+  ],
+  displacement: [
+    { name: 'disp_amount', label: 'Amount', min: 0, max: 0.2, step: 0.005, default: 0.05 },
+    { name: 'disp_scale', label: 'Scale', min: 0.5, max: 10, step: 0.5, default: 3.0 },
+    { name: 'disp_speed', label: 'Speed', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'disp_detail', label: 'Detail', min: 1, max: 6, step: 1, default: 3 },
+  ],
+  // Particles
+  fire_emitter: [
+    { name: 'flame_height', label: 'Height', min: 0.5, max: 4, step: 0.1, default: 1.5 },
+    { name: 'flame_detail', label: 'Detail', min: 1, max: 8, step: 1, default: 4 },
+    { name: 'heat_intensity', label: 'Heat', min: 0.5, max: 3, step: 0.1, default: 1.5 },
+    { name: 'wind_strength', label: 'Wind', min: 0, max: 3, step: 0.1, default: 0.5 },
+  ],
+  galaxy_spiral: [
+    { name: 'arm_count', label: 'Arms', min: 1, max: 6, step: 1, default: 3 },
+    { name: 'arm_tightness', label: 'Tightness', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'rotation_speed', label: 'Rotation', min: 0, max: 3, step: 0.1, default: 0.5 },
+    { name: 'star_density', label: 'Stars', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+  ],
+  particle_storm: [
+    { name: 'storm_intensity', label: 'Intensity', min: 0, max: 3, step: 0.1, default: 1.0 },
+    { name: 'turbulence', label: 'Turbulence', min: 0, max: 5, step: 0.1, default: 2.0 },
+    { name: 'particle_speed', label: 'Speed', min: 0, max: 5, step: 0.1, default: 1.5 },
+    { name: 'color_shift', label: 'Color Shift', min: 0, max: 1, step: 0.01, default: 0.0 },
+  ],
+  // Flash (additional)
+  strobe_invert: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+  ],
+  strobe_gate: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'gate_speed', label: 'Gate Speed', min: 1, max: 8, step: 1, default: 2 },
+  ],
+  flash_shake: [
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'shake_amount', label: 'Shake', min: 0.001, max: 2, step: 0.1, default: 1.0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+  ],
+  beat_blocks: [
+    { name: 'block_size', label: 'Block Size', min: 0.02, max: 0.3, step: 0.01, default: 0.08 },
+    { name: 'density', label: 'Density', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'pattern_mode', label: 'Pattern', min: 0, max: 4, step: 1, default: 0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'logo_scale', label: 'Logo Scale', min: 0.01, max: 0.5, step: 0.01, default: 0.12 },
+    { name: 'color_variation', label: 'Color Variation', min: 0, max: 1, step: 0.01, default: 0.3 },
+  ],
+  logo_runner: [
+    { name: 'direction', label: 'Direction', min: 0, max: 4, step: 1, default: 0 },
+    { name: 'logo_scale', label: 'Logo Scale', min: 0.02, max: 0.5, step: 0.01, default: 0.15 },
+    { name: 'speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'count', label: 'Logo Count', min: 1, max: 10, step: 1, default: 3 },
+    { name: 'trail', label: 'Trail', min: 0, max: 1, step: 0.01, default: 0.3 },
+  ],
+  beat_rings: [
+    { name: 'ring_width', label: 'Ring Width', min: 0.005, max: 0.1, step: 0.005, default: 0.02 },
+    { name: 'ring_count', label: 'Ring Count', min: 1, max: 8, step: 1, default: 4 },
+    { name: 'expand_speed', label: 'Expand Speed', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'color_mode', label: 'Color Mode', min: 0, max: 2, step: 1, default: 0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'glow_amount', label: 'Glow', min: 0, max: 2, step: 0.1, default: 0.5 },
+  ],
+  logo_pulse: [
+    { name: 'logo_scale', label: 'Logo Scale', min: 0.05, max: 0.8, step: 0.01, default: 0.25 },
+    { name: 'pulse_strength', label: 'Pulse Strength', min: 0, max: 3, step: 0.1, default: 1.5 },
+    { name: 'decay_rate', label: 'Decay Rate', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'glow_amount', label: 'Glow', min: 0, max: 2, step: 0.1, default: 0.8 },
+    { name: 'rotation_speed', label: 'Rotation', min: 0, max: 2, step: 0.1, default: 0.0 },
+  ],
+  laser_scan: [
+    { name: 'line_count', label: 'Line Count', min: 1, max: 10, step: 1, default: 3 },
+    { name: 'line_width', label: 'Line Width', min: 0.001, max: 0.03, step: 0.001, default: 0.005 },
+    { name: 'scan_speed', label: 'Scan Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'laser_color_r', label: 'Laser R', min: 0, max: 1, step: 0.01, default: 0.2 },
+    { name: 'laser_color_g', label: 'Laser G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'laser_color_b', label: 'Laser B', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'scan_angle', label: 'Angle', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'glow_size', label: 'Glow Size', min: 0, max: 2, step: 0.1, default: 1.0 },
+  ],
+  strobe_grid: [
+    { name: 'grid_size', label: 'Grid Size', min: 2, max: 20, step: 1, default: 6 },
+    { name: 'wave_speed', label: 'Wave Speed', min: 0.5, max: 10, step: 0.1, default: 3.0 },
+    { name: 'pattern', label: 'Pattern', min: 0, max: 11, step: 1, default: 0 },
+    { name: 'logo_in_cells', label: 'Logo Mode', min: 0, max: 3, step: 1, default: 0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'cell_gap', label: 'Cell Gap', min: 0, max: 0.3, step: 0.01, default: 0.05 },
+  ],
+};
+
+let activePreset = -1;
+let activeEffect = '';
+let activeCategory = 'all';
+let isBlackout = false;
+
+// === Spectrum Canvas ===
+const specCanvas = document.getElementById('spectrumCanvas');
+const specCtx = specCanvas.getContext('2d');
+let spectrumData = new Array(64).fill(0);
+
+function resizeCanvas() {
+  specCanvas.width = specCanvas.parentElement.clientWidth;
+  specCanvas.height = specCanvas.parentElement.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function drawSpectrum() {
+  const w = specCanvas.width;
+  const h = specCanvas.height;
+  specCtx.clearRect(0, 0, w, h);
+
+  const barCount = spectrumData.length;
+  const barW = w / barCount;
+  const gradient = specCtx.createLinearGradient(0, h, 0, 0);
+  gradient.addColorStop(0, '#7c3aed');
+  gradient.addColorStop(0.5, '#a855f7');
+  gradient.addColorStop(1, '#ec4899');
+
+  for (let i = 0; i < barCount; i++) {
+    const barH = spectrumData[i] * h;
+    specCtx.fillStyle = gradient;
+    specCtx.fillRect(i * barW + 1, h - barH, barW - 2, barH);
+  }
+  requestAnimationFrame(drawSpectrum);
+}
+drawSpectrum();
+
+// === WebSocket ===
+function toggleConnection() {
+  if (connected) {
+    disconnect();
+  } else {
+    connect();
+  }
+}
+
+let connectTimeout = null;
+
+function connect() {
+  const url = document.getElementById('wsUrl').value;
+  const btn = document.getElementById('connectBtn');
+  btn.textContent = 'Connecting...';
+  btn.disabled = true;
+
+  try {
+    ws = new WebSocket(url);
+  } catch(e) {
+    console.error('[VJLink] WebSocket create error:', e);
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+    return;
+  }
+
+  // 8 second timeout - if not connected by then, abort
+  connectTimeout = setTimeout(() => {
+    if (!connected && ws) {
+      console.error('[VJLink] Connection timeout');
+      ws.close();
+      ws = null;
+      btn.textContent = 'Connect';
+      btn.disabled = false;
+    }
+  }, 8000);
+
+  ws.onopen = () => {
+    console.log('[VJLink] WebSocket connected, waiting for Hello...');
+  };
+
+  ws.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      handleMessage(msg);
+    } catch(e) {
+      console.error('[VJLink] Failed to parse message:', e);
+    }
+  };
+
+  ws.onerror = (e) => {
+    console.error('[VJLink] WebSocket error:', e);
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+  };
+
+  ws.onclose = (evt) => {
+    console.log('[VJLink] WebSocket closed, code:', evt.code, 'reason:', evt.reason);
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    setConnected(false);
+    btn.disabled = false;
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  };
+}
+
+function disconnect() {
+  if (ws) { ws.close(); ws = null; }
+  setConnected(false);
+}
+
+// Async SHA-256 using crypto.subtle (preferred on http/https)
+async function sha256subtleBase64(str) {
+  const data = new TextEncoder().encode(str);
+  const hashBuf = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(hashBuf)));
+}
+
+// Compute obs-websocket auth hash (tries crypto.subtle first, falls back to JS)
+async function computeAuthHash(password, salt, challenge) {
+  try {
+    if (window.crypto && crypto.subtle) {
+      const hash1 = await sha256subtleBase64(password + salt);
+      const hash2 = await sha256subtleBase64(hash1 + challenge);
+      console.log('[VJLink] Auth computed via crypto.subtle');
+      return hash2;
+    }
+  } catch(e) {
+    console.warn('[VJLink] crypto.subtle failed, using JS fallback:', e);
+  }
+  // Fallback: synchronous JS SHA-256 (works on file:// protocol)
+  const hash1 = sha256base64(password + salt);
+  const hash2 = sha256base64(hash1 + challenge);
+  console.log('[VJLink] Auth computed via JS SHA-256 fallback');
+  return hash2;
+}
+
+async function handleMessage(msg) {
+  const op = msg.op;
+
+  if (op === 0) {
+    // Hello - need to Identify
+    console.log('[VJLink] Got Hello from obs-websocket');
+    const identifyData = { rpcVersion: 1 };
+    const password = document.getElementById('wsPassword').value.trim();
+
+    if (msg.d && msg.d.authentication && password) {
+      try {
+        const salt = msg.d.authentication.salt;
+        const challenge = msg.d.authentication.challenge;
+        const authHash = await computeAuthHash(password, salt, challenge);
+        identifyData.authentication = authHash;
+        console.log('[VJLink] Sending Identify with auth');
+        ws.send(JSON.stringify({ op: 1, d: identifyData }));
+      } catch(e) {
+        console.error('[VJLink] Auth computation failed:', e);
+        document.getElementById('connectBtn').textContent = 'Auth Error';
+        document.getElementById('connectBtn').disabled = false;
+        ws.close();
+        return;
+      }
+    } else if (msg.d && msg.d.authentication && !password) {
+      console.warn('[VJLink] Server requires password but none provided!');
+      document.getElementById('connectBtn').textContent = 'Need Password';
+      document.getElementById('connectBtn').disabled = false;
+      ws.close();
+      return;
+    } else {
+      console.log('[VJLink] No auth required, sending Identify');
+      ws.send(JSON.stringify({ op: 1, d: identifyData }));
+    }
+  }
+  else if (op === 2) {
+    // Identified - success!
+    console.log('[VJLink] Identified! Connected successfully.');
+    if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
+    setConnected(true);
+    startPolling();
+    fetchSceneSources();
+    syncSensitivityFromServer();
+  }
+  else if (op === 5) {
+    // Event
+  }
+  else if (op === 7) {
+    // RequestResponse
+    const reqId = msg.d.requestId;
+    if (pendingRequests[reqId]) {
+      pendingRequests[reqId](msg.d);
+      delete pendingRequests[reqId];
+    }
+  }
+}
+
+function setConnected(state) {
+  connected = state;
+  document.getElementById('statusDot').classList.toggle('connected', state);
+  const btn = document.getElementById('connectBtn');
+  btn.textContent = state ? 'Disconnect' : 'Connect';
+  btn.classList.toggle('active', state);
+  btn.disabled = false;
+  const statusText = document.getElementById('statusText');
+  statusText.textContent = state ? 'Connected' : 'Disconnected';
+  statusText.classList.toggle('connected', state);
+}
+
+// Send a VJLink vendor request via obs-websocket
+function sendRequest(requestType, requestData) {
+  if (!ws || !connected) return Promise.resolve(null);
+  const id = 'req_' + (++msgId);
+  return new Promise((resolve) => {
+    pendingRequests[id] = resolve;
+    ws.send(JSON.stringify({
+      op: 6,
+      d: {
+        requestType: 'CallVendorRequest',
+        requestId: id,
+        requestData: {
+          vendorName: 'obs-vjlink',
+          requestType: requestType,
+          requestData: requestData || {}
+        }
+      }
+    }));
+    setTimeout(() => {
+      if (pendingRequests[id]) {
+        delete pendingRequests[id];
+        resolve(null);
+      }
+    }, 3000);
+  });
+}
+
+// Send a standard obs-websocket request (GetSceneList, GetSceneItemList, etc.)
+function sendOBSRequest(requestType, requestData) {
+  if (!ws || !connected) return Promise.resolve(null);
+  const id = 'req_' + (++msgId);
+  return new Promise((resolve) => {
+    pendingRequests[id] = resolve;
+    const msg = {
+      op: 6,
+      d: {
+        requestType: requestType,
+        requestId: id
+      }
+    };
+    if (requestData) msg.d.requestData = requestData;
+    ws.send(JSON.stringify(msg));
+    setTimeout(() => {
+      if (pendingRequests[id]) {
+        delete pendingRequests[id];
+        resolve(null);
+      }
+    }, 5000);
+  });
+}
+
+// === State Polling ===
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    const resp = await sendRequest('GetState');
+    if (resp && resp.responseData) {
+      const data = resp.responseData.responseData || resp.responseData;
+      updateState(data);
+    }
+  }, 50); // 20fps polling
+}
+
+function updateState(state) {
+  // Bands
+  const bass = state.band_bass || 0;
+  const lowmid = state.band_lowmid || 0;
+  const highmid = state.band_highmid || 0;
+  const treble = state.band_treble || 0;
+
+  document.getElementById('bandBass').style.height = (bass * 100) + '%';
+  document.getElementById('bandLowmid').style.height = (lowmid * 100) + '%';
+  document.getElementById('bandHighmid').style.height = (highmid * 100) + '%';
+  document.getElementById('bandTreble').style.height = (treble * 100) + '%';
+
+  // Band value readouts (percentage)
+  document.getElementById('bandBassVal').textContent = (bass * 100).toFixed(0) + '%';
+  document.getElementById('bandLowmidVal').textContent = (lowmid * 100).toFixed(0) + '%';
+  document.getElementById('bandHighmidVal').textContent = (highmid * 100).toFixed(0) + '%';
+  document.getElementById('bandTrebleVal').textContent = (treble * 100).toFixed(0) + '%';
+
+  // BPM
+  const bpm = state.bpm || 0;
+  document.getElementById('bpmValue').textContent = bpm > 1 ? bpm.toFixed(1) : '---';
+
+  // Beat phase - only pulse when BPM is active
+  const phase = state.beat_phase || 0;
+  const conf = state.beat_confidence || 0;
+  const beatRing = document.getElementById('beatRing');
+
+  if (bpm > 1 && conf > 0.05) {
+    const isBeat = phase < lastBeatPhase && phase < 0.2;
+    beatRing.classList.toggle('active', phase < 0.3);
+    if (isBeat) {
+      document.getElementById('beatOverlay').style.background =
+        'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)';
+      document.getElementById('beatOverlay').style.opacity = '1';
+      setTimeout(() => {
+        document.getElementById('beatOverlay').style.opacity = '0';
+      }, 100);
+    }
+  } else {
+    // No BPM detected - beat ring stays inactive
+    beatRing.classList.remove('active');
+  }
+  lastBeatPhase = phase;
+
+  // RMS
+  const rms = state.rms || 0;
+  document.getElementById('rmsBar').style.width = (rms * 100) + '%';
+  document.getElementById('rmsValue').textContent = rms.toFixed(2);
+
+  // Confidence
+  document.getElementById('confBar').style.width = (conf * 100) + '%';
+  document.getElementById('confValue').textContent = conf.toFixed(2);
+
+  // Onset strength
+  const onset = state.onset_strength || 0;
+  document.getElementById('onsetBar').style.width = (onset * 100) + '%';
+  document.getElementById('onsetValue').textContent = onset.toFixed(2);
+
+  // Chronotensity
+  document.getElementById('chronoBass').style.width = ((state.chrono_bass || 0) * 100) + '%';
+  document.getElementById('chronoLowmid').style.width = ((state.chrono_lowmid || 0) * 100) + '%';
+  document.getElementById('chronoHighmid').style.width = ((state.chrono_highmid || 0) * 100) + '%';
+  document.getElementById('chronoTreble').style.width = ((state.chrono_treble || 0) * 100) + '%';
+
+  // Preset index - only update if no recent user click (prevent polling override)
+  if (state.preset_index !== undefined && !presetClickLock) {
+    setActivePresetByIndex(state.preset_index);
+  }
+
+  // Effect ID - sync from server if no recent user click
+  if (state.effect_id !== undefined && !effectClickLock) {
+    const serverId = state.effect_id || '';
+    if (activeEffect !== serverId) {
+      activeEffect = serverId;
+      renderEffects();
+      renderParams();
+    }
+  }
+
+  // Elapsed time (verify timer fix)
+  const elapsed = state.elapsed_time || 0;
+  document.getElementById('elapsedTime').textContent = elapsed.toFixed(2) + 's';
+
+  // Update active effect badge in header
+  const badge = document.getElementById('activeEffectBadge');
+  if (activeEffect) {
+    badge.textContent = effectNames[activeEffect] || activeEffect;
+    badge.classList.add('has-effect');
+  } else {
+    badge.textContent = 'No Effect';
+    badge.classList.remove('has-effect');
+  }
+
+  // Blackout
+  isBlackout = state.blackout || false;
+  document.getElementById('blackoutBtn').classList.toggle('active', isBlackout);
+
+  // Update band effect activations
+  updateBandActivations(state);
+
+  // Send band-modulated param values
+  updateBandModulatedParams(state);
+
+  // Simulate spectrum from bands
+  for (let i = 0; i < 64; i++) {
+    const t = i / 64;
+    let val = 0;
+    if (t < 0.15) val = bass * (0.8 + Math.random() * 0.4);
+    else if (t < 0.35) val = lowmid * (0.7 + Math.random() * 0.3);
+    else if (t < 0.6) val = highmid * (0.6 + Math.random() * 0.3);
+    else val = treble * (0.5 + Math.random() * 0.3);
+    spectrumData[i] = spectrumData[i] * 0.7 + val * 0.3;
+  }
+}
+
+// === Demo Mode (no connection) ===
+function runDemo() {
+  if (connected) return;
+  const t = Date.now() / 1000;
+  const fakeBass = (Math.sin(t * 2.1) * 0.5 + 0.5) * 0.8;
+  const fakeLowmid = (Math.sin(t * 1.4 + 1) * 0.5 + 0.5) * 0.6;
+  const fakeHighmid = (Math.sin(t * 3.2 + 2) * 0.5 + 0.5) * 0.5;
+  const fakeTreble = (Math.sin(t * 5.0 + 3) * 0.5 + 0.5) * 0.4;
+
+  document.getElementById('bandBass').style.height = (fakeBass * 100) + '%';
+  document.getElementById('bandLowmid').style.height = (fakeLowmid * 100) + '%';
+  document.getElementById('bandHighmid').style.height = (fakeHighmid * 100) + '%';
+  document.getElementById('bandTreble').style.height = (fakeTreble * 100) + '%';
+
+  document.getElementById('bandBassVal').textContent = (fakeBass * 100).toFixed(0) + '%';
+  document.getElementById('bandLowmidVal').textContent = (fakeLowmid * 100).toFixed(0) + '%';
+  document.getElementById('bandHighmidVal').textContent = (fakeHighmid * 100).toFixed(0) + '%';
+  document.getElementById('bandTrebleVal').textContent = (fakeTreble * 100).toFixed(0) + '%';
+
+  const fakePhase = (t * 2.13) % 1;
+  document.getElementById('beatRing').classList.toggle('active', fakePhase < 0.3);
+  document.getElementById('bpmValue').textContent = '128.0';
+
+  const fakeRms = (fakeBass + fakeLowmid + fakeHighmid + fakeTreble) / 4;
+  document.getElementById('rmsBar').style.width = (fakeRms * 100) + '%';
+  document.getElementById('rmsValue').textContent = fakeRms.toFixed(2);
+  document.getElementById('confBar').style.width = '85%';
+  document.getElementById('confValue').textContent = '0.85';
+
+  for (let i = 0; i < 64; i++) {
+    const tt = i / 64;
+    let val = 0;
+    if (tt < 0.15) val = fakeBass * (0.6 + Math.random() * 0.4);
+    else if (tt < 0.35) val = fakeLowmid * (0.5 + Math.random() * 0.3);
+    else if (tt < 0.6) val = fakeHighmid * (0.4 + Math.random() * 0.3);
+    else val = fakeTreble * (0.3 + Math.random() * 0.3);
+    spectrumData[i] = spectrumData[i] * 0.75 + val * 0.25;
+  }
+
+  requestAnimationFrame(runDemo);
+}
+
+// === Actions ===
+async function sendTapBPM() {
+  const btn = document.getElementById('tapBtn');
+  btn.style.background = 'var(--accent)';
+  btn.style.color = 'white';
+  setTimeout(() => { btn.style.background = ''; btn.style.color = ''; }, 150);
+  await sendRequest('TapBPM');
+}
+
+async function sendNextPreset() { await sendRequest('NextPreset'); }
+async function sendPrevPreset() { await sendRequest('PrevPreset'); }
+
+async function setSensitivity(band, value) {
+  value = Math.max(0, Math.min(3.0, value));
+  const labels = ['sensBassVal', 'sensLowmidVal', 'sensHighmidVal', 'sensTrebleVal'];
+  document.getElementById(labels[band]).textContent = value.toFixed(1) + 'x';
+  await sendRequest('SetSensitivity', { band: band, value: value });
+}
+
+async function resetSensitivity() {
+  const ids = ['sensBass', 'sensLowmid', 'sensHighmid', 'sensTreble'];
+  const labels = ['sensBassVal', 'sensLowmidVal', 'sensHighmidVal', 'sensTrebleVal'];
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(ids[i]).value = 100;
+    document.getElementById(labels[i]).textContent = '1.0x';
+    await sendRequest('SetSensitivity', { band: i, value: 1.0 });
+  }
+}
+
+let sensitivitySynced = false;
+async function syncSensitivityFromServer() {
+  // One-time sync of sensitivity sliders from server state
+  const resp = await sendRequest('GetState');
+  if (resp && resp.responseData) {
+    const d = resp.responseData.responseData || resp.responseData;
+    const ids = ['sensBass', 'sensLowmid', 'sensHighmid', 'sensTreble'];
+    const valIds = ['sensBassVal', 'sensLowmidVal', 'sensHighmidVal', 'sensTrebleVal'];
+    const keys = ['sens_bass', 'sens_lowmid', 'sens_highmid', 'sens_treble'];
+    for (let i = 0; i < 4; i++) {
+      const v = d[keys[i]];
+      if (v !== undefined && v > 0) {
+        document.getElementById(ids[i]).value = Math.round(v * 100);
+        document.getElementById(valIds[i]).textContent = v.toFixed(1) + 'x';
+      }
+    }
+    sensitivitySynced = true;
+  }
+}
+
+async function sendBlackout() {
+  await sendRequest('Blackout');
+  isBlackout = !isBlackout;
+  document.getElementById('blackoutBtn').classList.toggle('active', isBlackout);
+}
+
+// === Settings Controls ===
+async function toggleTransparentBg(enabled) {
+  await sendRequest('SetTransparentBg', { enabled: enabled });
+  const dot = document.getElementById('toggleTransparentBgDot');
+  if (dot) {
+    dot.style.left = enabled ? '21px' : '3px';
+    dot.style.background = enabled ? 'var(--green)' : 'var(--text-dim)';
+    dot.parentElement.querySelector('span:first-of-type').style.background = enabled ? 'rgba(16,185,129,0.2)' : 'var(--surface)';
+  }
+}
+
+async function toggleDebugOverlay(enabled) {
+  // Debug overlay is set via OBS source settings
+  // Try multiple common source names
+  const names = ['VJLink Compositor', 'VJLink', 'vjlink'];
+  for (const name of names) {
+    await sendOBSRequest('SetInputSettings', {
+      inputName: name,
+      inputSettings: { debug_overlay: enabled },
+      overlay: true
+    }).catch(() => {});
+  }
+  const dot = document.getElementById('toggleDebugOverlayDot');
+  if (dot) {
+    dot.style.left = enabled ? '21px' : '3px';
+    dot.style.background = enabled ? 'var(--cyan)' : 'var(--text-dim)';
+    dot.parentElement.querySelector('span:first-of-type').style.background = enabled ? 'rgba(6,182,212,0.2)' : 'var(--surface)';
+  }
+}
+
+async function applyLogoPath() {
+  const input = document.getElementById('logoPathInput');
+  const path = input.value.trim();
+  if (path) {
+    const resp = await sendRequest('SetLogo', { path: path });
+    input.style.borderColor = resp ? 'var(--green)' : 'var(--red)';
+    setTimeout(() => { input.style.borderColor = 'var(--border)'; }, 1500);
+  }
+}
+
+async function clearLogoPath() {
+  document.getElementById('logoPathInput').value = '';
+  await sendRequest('SetLogo', { path: '' });
+}
+
+async function openOBSProperties() {
+  /* Try to open OBS properties dialog for the VJLink Compositor source.
+   * This has a native Windows file picker for the logo. */
+  const resp = await sendOBSRequest('GetInputList');
+  if (!resp || !resp.responseData) return;
+
+  const inputs = resp.responseData.inputs || [];
+  const vjlink = inputs.find(i =>
+    i.inputKind === 'vjlink_compositor_source'
+  );
+
+  if (vjlink) {
+    await sendOBSRequest('OpenInputPropertiesDialog', {
+      inputName: vjlink.inputName
+    });
+  } else {
+    alert('VJLink Compositor source not found in OBS. Add one first.');
+  }
+}
+
+let presetClickLock = false;
+let presetClickTimer = null;
+
+async function selectPreset(name, idx) {
+  // Lock polling updates for 500ms so user click isn't overridden
+  presetClickLock = true;
+  if (presetClickTimer) clearTimeout(presetClickTimer);
+  presetClickTimer = setTimeout(() => { presetClickLock = false; }, 3000);
+
+  if (activePreset === idx) {
+    activePreset = -1;
+    document.querySelectorAll('.preset-card').forEach(el => el.classList.remove('active'));
+    await sendRequest('SetPreset', { preset_name: '' });
+  } else {
+    setActivePresetByIndex(idx);
+    await sendRequest('SetPreset', { preset_name: name });
+  }
+}
+
+let effectClickLock = false;
+let effectClickTimer = null;
+
+async function selectEffect(effectId) {
+  // Lock polling updates
+  effectClickLock = true;
+  if (effectClickTimer) clearTimeout(effectClickTimer);
+  effectClickTimer = setTimeout(() => { effectClickLock = false; }, 3000);
+
+  if (activeEffect === effectId) {
+    activeEffect = '';
+    await sendRequest('SetEffect', { effect_id: '' });
+    renderParams();
+  } else {
+    activeEffect = effectId;
+    await sendRequest('SetEffect', { effect_id: effectId });
+    renderParams();
+  }
+  renderEffects();
+}
+
+async function setBandParam(bandIndex, name, value) {
+  if (!ws || !connected) {
+    const el = document.getElementById('paramVal_' + name);
+    if (el) { el.style.color = 'var(--red)'; setTimeout(() => { el.style.color = ''; }, 300); }
+    return;
+  }
+  const resp = await sendRequest('SetBandParam', { band: bandIndex, param: name, value: parseFloat(value) });
+  const el = document.getElementById('paramVal_' + name);
+  if (el) {
+    el.style.color = resp ? 'var(--green)' : 'var(--red)';
+    setTimeout(() => { el.style.color = ''; }, 200);
+  }
+}
+
+async function setParam(name, value) {
+  if (!ws || !connected) {
+    /* Flash warning if not connected */
+    const el = document.getElementById('paramVal_' + name);
+    if (el) { el.style.color = 'var(--red)'; setTimeout(() => { el.style.color = ''; }, 300); }
+    return;
+  }
+  const resp = await sendRequest('SetParam', { param: name, value: parseFloat(value) });
+  /* Flash green on success */
+  const el = document.getElementById('paramVal_' + name);
+  if (el) {
+    el.style.color = resp ? 'var(--green)' : 'var(--red)';
+    setTimeout(() => { el.style.color = ''; }, 200);
+  }
+}
+
+// === Audio Band -> Param Mapping (Web UI driven modulation) ===
+let paramBandMappings = {};  // { paramName: { band: 0-3|-1, min: float, max: float, amount: float } }
+
+function setParamBandMapping(paramName, band) {
+  if (band < 0) {
+    delete paramBandMappings[paramName];
+  } else {
+    if (!paramBandMappings[paramName]) {
+      const params = effectParams[activeEffect] || effectParams._default;
+      const p = params.find(pp => pp.name === paramName);
+      paramBandMappings[paramName] = {
+        band: band,
+        min: p ? p.min : 0,
+        max: p ? p.max : 1,
+        amount: 1.0,
+        baseValue: p ? p.default : 0
+      };
+    } else {
+      paramBandMappings[paramName].band = band;
+    }
+  }
+}
+
+function setParamBandAmount(paramName, amount) {
+  if (paramBandMappings[paramName]) {
+    paramBandMappings[paramName].amount = amount;
+  }
+}
+
+// Called each poll cycle to send band-modulated params
+function updateBandModulatedParams(state) {
+  const bands = [
+    state.bass || 0, state.lowmid || 0,
+    state.highmid || 0, state.treble || 0
+  ];
+
+  /* Main effect param modulation */
+  for (const [paramName, mapping] of Object.entries(paramBandMappings)) {
+    const bandVal = bands[mapping.band] || 0;
+    const range = mapping.max - mapping.min;
+    const modulated = mapping.baseValue + bandVal * range * mapping.amount;
+    const clamped = Math.max(mapping.min, Math.min(mapping.max, modulated));
+    sendRequest('SetParam', { param: paramName, value: clamped });
+  }
+
+  /* Band effect param modulation */
+  if (Object.keys(bandParamMappings).length > 0) {
+    updateBandParamMappings(bands);
+  }
+}
+
+// === Parameters Panel ===
+/* Dropdown options for mode/direction params */
+const paramDropdowns = {
+  pattern_mode: ['Random','Grid','Checker','Diagonal','Spiral'],
+  direction: ['Left→Right','Right→Left','BL→TR','TR→BL','Random'],
+  color_mode: ['Single Color','Rainbow','Band-Mapped'],
+  pattern: ['Wave L→R','Wave R→L','Wave Top→Bottom','Wave Bottom→Top','Sequential','Random','Spiral','Radial','Cross','Diamond','Checker','Diagonal'],
+  logo_in_cells: ['Off','Nur Logo leuchtet','Logo Silhouette','Logo Farben'],
+  aberration_type: ['Linear','Radial'],
+  sort_direction: ['Vertical','Horizontal'],
+  mirror_mode: ['Off','On'],
+  mirror: ['Off','On'],
+  invert_on_beat: ['Off','On'],
+  color_palette: ['Default','Fire','Ice','Neon'],
+};
+
+/* Params that support randomization */
+const randomizableParams = [
+  'pattern_mode','direction','color_mode','pattern','color_shift',
+  'flash_color_r','flash_color_g','flash_color_b',
+  'laser_color_r','laser_color_g','laser_color_b',
+  'scan_angle','sort_direction','aberration_type',
+];
+
+let randomIntervals = {}; /* paramName -> intervalId */
+let activeBandIndex = -1; /* -1 = main effect, 0-3 = band slot */
+
+function startRandomParam(paramName, min, max, step) {
+  if (randomIntervals[paramName]) return;
+  const bandIdx = activeBandIndex; /* capture current context */
+  randomIntervals[paramName] = setInterval(() => {
+    const range = max - min;
+    const isInt = step >= 1;
+    let val = isInt
+      ? Math.floor(Math.random() * (range / step + 1)) * step + min
+      : Math.random() * range + min;
+    val = Math.round(val / step) * step;
+    if (bandIdx >= 0) {
+      setBandParam(bandIdx, paramName, val);
+    } else {
+      setParam(paramName, val);
+    }
+    const valEl = document.getElementById('paramVal_' + paramName);
+    if (valEl) valEl.textContent = val.toFixed(isInt ? 0 : 2);
+    const slider = document.getElementById('paramSlider_' + paramName);
+    if (slider) slider.value = val;
+    const sel = document.getElementById('paramSelect_' + paramName);
+    if (sel) sel.value = val;
+  }, 500 + Math.random() * 1500);
+}
+
+function stopRandomParam(paramName) {
+  if (randomIntervals[paramName]) {
+    clearInterval(randomIntervals[paramName]);
+    delete randomIntervals[paramName];
+  }
+}
+
+function toggleRandomParam(paramName, min, max, step, checkbox) {
+  if (checkbox.checked) {
+    startRandomParam(paramName, min, max, step);
+  } else {
+    stopRandomParam(paramName);
+  }
+}
+
+function renderParams() {
+  const container = document.getElementById('paramsContainer');
+  paramBandMappings = {};
+  activeBandIndex = -1; /* main effect mode */
+  /* Stop all random intervals */
+  Object.keys(randomIntervals).forEach(k => stopRandomParam(k));
+
+  if (!activeEffect) {
+    container.innerHTML = `<div style="color:var(--text-dim);font-size:12px;padding:20px 0;text-align:center;">
+      Select an effect to see parameters</div>`;
+    return;
+  }
+
+  const params = effectParams[activeEffect] || effectParams._default;
+  const name = effectNames[activeEffect] || activeEffect;
+
+  let html = '';
+
+  /* Connection warning */
+  if (!connected) {
+    html += `<div style="font-size:11px;color:var(--red);padding:6px 10px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);margin-bottom:8px">
+      Not connected to OBS — sliders won't work. Click Connect first.</div>`;
+  }
+
+  html += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;padding:6px 10px;background:rgba(124,58,237,0.1);border-radius:6px;border:1px solid rgba(124,58,237,0.3)">
+    ${name}</div>`;
+
+  params.forEach(p => {
+    const isDropdown = paramDropdowns[p.name] && p.step >= 1;
+    const isRandomizable = randomizableParams.includes(p.name);
+
+    html += `<div class="param-slider">
+      <div class="control-label" style="display:flex;align-items:center;gap:4px">
+        <span style="flex:1">${p.label}</span>`;
+
+    /* Random toggle */
+    if (isRandomizable) {
+      html += `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;color:var(--orange)" title="Randomize">
+        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)"
+          onchange="toggleRandomParam('${p.name}',${p.min},${p.max},${p.step},this)">
+        RND</label>`;
+    }
+
+    html += `<span class="control-value" id="paramVal_${p.name}">${p.default.toFixed(p.step >= 1 ? 0 : 2)}</span>
+      </div>`;
+
+    if (isDropdown) {
+      /* Dropdown select */
+      const options = paramDropdowns[p.name];
+      html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
+        onchange="document.getElementById('paramVal_${p.name}').textContent=this.value;setParam('${p.name}',this.selectedIndex)">`;
+      options.forEach((opt, idx) => {
+        html += `<option value="${idx}" ${idx === p.default ? 'selected' : ''}>${opt}</option>`;
+      });
+      html += `</select>`;
+    } else {
+      /* Regular slider */
+      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"
+        oninput="document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setParam('${p.name}',this.value);if(paramBandMappings['${p.name}'])paramBandMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
+    }
+
+    /* Audio band mapping */
+    if (!isDropdown) {
+      html += `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
+        <select style="flex:1;font-size:11px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
+          onchange="setParamBandMapping('${p.name}',parseInt(this.value));renderParamBandAmount('${p.name}',this.parentElement)">
+          <option value="-1">None</option>
+          <option value="0">Bass</option>
+          <option value="1">Low-Mid</option>
+          <option value="2">High-Mid</option>
+          <option value="3">Treble</option>
+        </select>
+        <span id="paramBandAmountWrap_${p.name}"></span>
+      </div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+  renderParamTabs();
+}
+
+function renderParamBandAmount(paramName, parentEl) {
+  const wrap = document.getElementById('paramBandAmountWrap_' + paramName);
+  if (!wrap) return;
+  if (paramBandMappings[paramName]) {
+    wrap.innerHTML = `<input type="range" min="0" max="100" value="100" step="1"
+      style="width:60px;height:4px"
+      title="Modulation amount"
+      oninput="setParamBandAmount('${paramName}',this.value/100)">`;
+  } else {
+    wrap.innerHTML = '';
+  }
+}
+
+// === UI Rendering ===
+function setActivePresetByIndex(idx) {
+  activePreset = idx;
+  document.querySelectorAll('.preset-card').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+function renderPresets() {
+  const grid = document.getElementById('presetsGrid');
+  grid.innerHTML = '';
+  builtinPresets.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'preset-card' + (i === activePreset ? ' active' : '');
+    card.innerHTML = `<div class="preset-name">${p.name}</div>
+      <div class="preset-category">${p.category}</div>`;
+    card.onclick = () => { selectPreset(p.name, i); };
+    grid.appendChild(card);
+  });
+}
+
+function renderCategories() {
+  const container = document.getElementById('categoryBtns');
+  container.innerHTML = '';
+
+  const allBtn = document.createElement('button');
+  allBtn.className = 'cat-btn' + (activeCategory === 'all' ? ' active' : '');
+  allBtn.textContent = 'All';
+  allBtn.onclick = () => { activeCategory = 'all'; renderCategories(); renderEffects(); };
+  container.appendChild(allBtn);
+
+  Object.entries(effectCategories).forEach(([key, cat]) => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (activeCategory === key ? ' active' : '');
+    btn.textContent = cat.label;
+    btn.onclick = () => { activeCategory = key; renderCategories(); renderEffects(); };
+    container.appendChild(btn);
+  });
+}
+
+function renderEffects() {
+  const grid = document.getElementById('effectsGrid');
+  grid.innerHTML = '';
+
+  const categories = activeCategory === 'all'
+    ? Object.entries(effectCategories)
+    : [[activeCategory, effectCategories[activeCategory]]];
+
+  categories.forEach(([key, cat]) => {
+    if (!cat) return;
+    cat.effects.forEach(id => {
+      const btn = document.createElement('button');
+      btn.className = 'effect-btn' + (activeEffect === id ? ' active' : '');
+      btn.textContent = effectNames[id] || id;
+      btn.onclick = () => selectEffect(id);
+      grid.appendChild(btn);
+    });
+  });
+}
+
+// === Per-Band Effects ===
+const bandInfo = [
+  { key: 'bass', name: 'BASS', color: 'var(--bass-color)', bg: 'rgba(239,68,68,0.15)' },
+  { key: 'lowmid', name: 'LOW-MID', color: 'var(--lowmid-color)', bg: 'rgba(245,158,11,0.15)' },
+  { key: 'highmid', name: 'HIGH-MID', color: 'var(--highmid-color)', bg: 'rgba(16,185,129,0.15)' },
+  { key: 'treble', name: 'TREBLE', color: 'var(--treble-color)', bg: 'rgba(6,182,212,0.15)' },
+];
+
+let bandSlots = [
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
+];
+
+function renderBandEffects() {
+  const grid = document.getElementById('bandEffectsGrid');
+  grid.innerHTML = '';
+
+  let optionsHtml = '<option value="">None</option>';
+  Object.entries(effectCategories).forEach(([catKey, cat]) => {
+    optionsHtml += `<optgroup label="${cat.label}">`;
+    cat.effects.forEach(id => {
+      optionsHtml += `<option value="${id}">${effectNames[id] || id}</option>`;
+    });
+    optionsHtml += '</optgroup>';
+  });
+
+  bandInfo.forEach((band, i) => {
+    const slot = bandSlots[i];
+    const div = document.createElement('div');
+    div.className = 'band-slot';
+    div.innerHTML = `
+      <div class="band-slot-header" style="color:${band.color};background:${band.bg}">${band.name}</div>
+      <select id="bandEffect_${i}" onchange="setBandEffect(${i})">
+        ${optionsHtml}
+      </select>
+      <div>
+        <div class="band-slider-label"><span>Threshold</span><span id="bandThreshVal_${i}">${(slot.threshold*100).toFixed(0)}%</span></div>
+        <input type="range" min="0" max="100" value="${slot.threshold*100}" step="1"
+          oninput="bandSlots[${i}].threshold=this.value/100;document.getElementById('bandThreshVal_${i}').textContent=this.value+'%';updateThresholdLines();updateBandSlot(${i})">
+      </div>
+      <div>
+        <div class="band-slider-label"><span>Intensity</span><span id="bandIntensVal_${i}">${(slot.intensity*100).toFixed(0)}%</span></div>
+        <input type="range" min="0" max="200" value="${slot.intensity*100}" step="1"
+          oninput="bandSlots[${i}].intensity=this.value/100;document.getElementById('bandIntensVal_${i}').textContent=this.value+'%';updateBandSlot(${i})">
+      </div>
+      <div>
+        <div class="band-slider-label"><span>Active</span><span id="bandActVal_${i}">0%</span></div>
+        <div class="activation-bar-wrap">
+          <div class="activation-bar" id="bandActBar_${i}" style="background:${band.color}"></div>
+        </div>
+      </div>`;
+    grid.appendChild(div);
+
+    setTimeout(() => {
+      const sel = document.getElementById('bandEffect_' + i);
+      if (sel && slot.effect) sel.value = slot.effect;
+    }, 0);
+  });
+
+  setTimeout(updateThresholdLines, 0);
+}
+
+function updateThresholdLines() {
+  for (let i = 0; i < 4; i++) {
+    const line = document.getElementById('bandThreshLine_' + i);
+    if (line) {
+      const hasEffect = bandSlots[i].effect && bandSlots[i].effect !== '';
+      line.style.display = hasEffect ? 'block' : 'none';
+      line.style.bottom = (bandSlots[i].threshold * 100) + '%';
+    }
+  }
+}
+
+async function setBandEffect(bandIndex) {
+  const slot = bandSlots[bandIndex];
+  const sel = document.getElementById('bandEffect_' + bandIndex);
+  slot.effect = sel ? sel.value : '';
+  updateThresholdLines();
+  await sendRequest('SetBandEffect', {
+    band: bandIndex,
+    effect_id: slot.effect,
+    threshold: slot.threshold,
+    intensity: slot.intensity
+  });
+  renderBandParams(bandIndex);
+}
+
+const bandNames = ['Bass', 'Low-Mid', 'High-Mid', 'Treble'];
+const bandColorVars = ['var(--bass-color)', 'var(--lowmid-color)', 'var(--highmid-color)', 'var(--treble-color)'];
+
+function renderParamTabs() {
+  const tabsEl = document.getElementById('paramTabs');
+  const hasMain = !!activeEffect;
+  const activeBands = bandSlots.map((s, i) => s.effect ? i : -1).filter(i => i >= 0);
+
+  if (!hasMain && activeBands.length <= 1) {
+    tabsEl.style.display = 'none';
+    return;
+  }
+
+  tabsEl.style.display = 'flex';
+  let html = '';
+  const tabStyle = 'padding:4px 10px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);';
+
+  if (hasMain) {
+    const isActive = activeBandIndex === -1;
+    html += `<button style="${tabStyle}${isActive ? 'background:var(--accent);color:white;border-color:var(--accent)' : 'background:var(--surface2);color:var(--text-dim)'}"
+      onclick="activeBandIndex=-1;renderParams();renderParamTabs()">Main</button>`;
+  }
+
+  activeBands.forEach(i => {
+    const isActive = activeBandIndex === i;
+    const colors = ['var(--bass-color)','var(--lowmid-color)','var(--highmid-color)','var(--treble-color)'];
+    const names = ['Bass','LowMid','HiMid','Treble'];
+    html += `<button style="${tabStyle}${isActive ? 'background:' + colors[i] + ';color:white;border-color:' + colors[i] : 'background:var(--surface2);color:var(--text-dim)'}"
+      onclick="renderBandParams(${i});renderParamTabs();">${names[i]}</button>`;
+  });
+
+  tabsEl.innerHTML = `<div style="display:flex;gap:4px;flex-wrap:wrap">${html}</div>`;
+}
+
+function renderBandParams(bandIndex) {
+  const container = document.getElementById('paramsContainer');
+  const slot = bandSlots[bandIndex];
+
+  if (!slot || !slot.effect) {
+    container.innerHTML = `<div style="color:var(--text-dim);font-size:12px;padding:20px 0;text-align:center;">
+      Select an effect to see parameters</div>`;
+    activeBandIndex = -1;
+    return;
+  }
+
+  activeBandIndex = bandIndex; /* band effect mode */
+  /* Stop random intervals from main params */
+  Object.keys(randomIntervals).forEach(k => stopRandomParam(k));
+
+  const params = effectParams[slot.effect] || effectParams._default;
+  const name = effectNames[slot.effect] || slot.effect;
+
+  let html = `<div style="font-size:13px;font-weight:700;color:${bandColorVars[bandIndex]};margin-bottom:10px;padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid ${bandColorVars[bandIndex]}30">
+    ${bandNames[bandIndex]}: ${name}</div>`;
+
+  /* Threshold slider */
+  html += `<div class="param-slider">
+    <div class="control-label"><span>Threshold</span>
+      <span class="control-value" id="bp_thresh_${bandIndex}">${(slot.threshold*100).toFixed(0)}%</span></div>
+    <input type="range" min="0" max="100" step="1" value="${slot.threshold*100}"
+      oninput="bandSlots[${bandIndex}].threshold=this.value/100;document.getElementById('bp_thresh_${bandIndex}').textContent=this.value+'%';updateBandSlot(${bandIndex})">
+  </div>`;
+
+  /* Intensity slider */
+  html += `<div class="param-slider">
+    <div class="control-label"><span>Intensity</span>
+      <span class="control-value" id="bp_intens_${bandIndex}">${(slot.intensity*100).toFixed(0)}%</span></div>
+    <input type="range" min="0" max="200" step="1" value="${slot.intensity*100}"
+      oninput="bandSlots[${bandIndex}].intensity=this.value/100;document.getElementById('bp_intens_${bandIndex}').textContent=this.value+'%';updateBandSlot(${bandIndex})">
+  </div>`;
+
+  /* Effect-specific params (with dropdowns + RND) */
+  params.forEach(p => {
+    const isDropdown = paramDropdowns[p.name] && p.step >= 1;
+    const isRandomizable = randomizableParams.includes(p.name);
+
+    html += `<div class="param-slider">
+      <div class="control-label" style="display:flex;align-items:center;gap:4px">
+        <span style="flex:1">${p.label}</span>`;
+
+    if (isRandomizable) {
+      html += `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;color:var(--orange)" title="Randomize">
+        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)"
+          onchange="toggleRandomParam('${p.name}',${p.min},${p.max},${p.step},this)">
+        RND</label>`;
+    }
+
+    html += `<span class="control-value" id="paramVal_${p.name}">${p.default.toFixed(p.step >= 1 ? 0 : 2)}</span></div>`;
+
+    if (isDropdown) {
+      const options = paramDropdowns[p.name];
+      html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
+        onchange="document.getElementById('paramVal_${p.name}').textContent=this.value;setBandParam(${bandIndex},'${p.name}',this.selectedIndex)">`;
+      options.forEach((opt, idx) => {
+        html += `<option value="${idx}" ${idx === p.default ? 'selected' : ''}>${opt}</option>`;
+      });
+      html += `</select>`;
+    } else {
+      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"
+        oninput="document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setBandParam(${bandIndex},'${p.name}',this.value);if(bandParamMappings['${p.name}'])bandParamMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
+
+      /* Audio band mapping for this param */
+      html += `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
+        <select style="flex:1;font-size:11px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
+          onchange="setBandParamAudioMapping(${bandIndex},'${p.name}',parseInt(this.value),${p.min},${p.max})">
+          <option value="-1">None</option>
+          <option value="0">Bass</option>
+          <option value="1">Low-Mid</option>
+          <option value="2">High-Mid</option>
+          <option value="3">Treble</option>
+        </select>
+      </div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+  renderParamTabs();
+}
+
+/* Audio band mapping for band effect params */
+let bandParamMappings = {}; /* { paramName: { bandIndex, audioBand, min, max, baseValue } } */
+
+function setBandParamAudioMapping(bandIdx, paramName, audioBand, min, max) {
+  if (audioBand < 0) {
+    delete bandParamMappings[paramName];
+  } else {
+    const slider = document.getElementById('paramSlider_' + paramName);
+    bandParamMappings[paramName] = {
+      bandIndex: bandIdx,
+      audioBand: audioBand,
+      min: min,
+      max: max,
+      baseValue: slider ? parseFloat(slider.value) : (min + max) / 2
+    };
+  }
+}
+
+/* Called from the polling loop to apply audio modulation to band params */
+function updateBandParamMappings(bandLevels) {
+  Object.entries(bandParamMappings).forEach(([paramName, m]) => {
+    const level = bandLevels[m.audioBand] || 0;
+    const modulated = m.baseValue + (m.max - m.baseValue) * level;
+    const val = Math.min(m.max, Math.max(m.min, modulated));
+    setBandParam(m.bandIndex, paramName, val);
+    const valEl = document.getElementById('paramVal_' + paramName);
+    if (valEl) valEl.textContent = val.toFixed(2);
+  });
+}
+
+async function updateBandSlot(bandIndex) {
+  const slot = bandSlots[bandIndex];
+  updateThresholdLines();
+  await sendRequest('SetBandEffect', {
+    band: bandIndex,
+    effect_id: slot.effect,
+    threshold: slot.threshold,
+    intensity: slot.intensity
+  });
+}
+
+function updateBandActivations(state) {
+  if (state.band_effects) {
+    for (let i = 0; i < 4; i++) {
+      const act = state.band_effects['band_' + i + '_activation'] || 0;
+      bandSlots[i].activation = act;
+      const bar = document.getElementById('bandActBar_' + i);
+      const val = document.getElementById('bandActVal_' + i);
+      if (bar) bar.style.width = (act * 100) + '%';
+      if (val) val.textContent = (act * 100).toFixed(0) + '%';
+    }
+  }
+}
+
+// === Scene/Source Discovery ===
+let availableSources = [];
+let availableScenes = [];
+
+// Track collapsed scenes/groups
+let collapsedScenes = {};
+
+async function fetchSceneSources() {
+  console.log('[VJLink] Fetching OBS scenes and sources...');
+  availableSources = [];
+  availableScenes = [];
+
+  // Method 1: Standard obs-websocket GetSceneList
+  const sceneResp = await sendOBSRequest('GetSceneList');
+  if (sceneResp && sceneResp.responseData) {
+    const data = sceneResp.responseData;
+    const scenes = data.scenes || [];
+    console.log('[VJLink] GetSceneList: found', scenes.length, 'scenes');
+
+    for (const scene of scenes) {
+      const sceneName = scene.sceneName;
+      availableScenes.push(sceneName);
+
+      // Get items in each scene
+      const itemResp = await sendOBSRequest('GetSceneItemList', { sceneName: sceneName });
+      if (itemResp && itemResp.responseData) {
+        const items = itemResp.responseData.sceneItems || [];
+        for (const item of items) {
+          const isGroup = item.isGroup === true;
+          availableSources.push({
+            scene: sceneName,
+            name: item.sourceName,
+            type: item.inputKind || item.sourceType || '',
+            visible: item.sceneItemEnabled,
+            isGroup: isGroup,
+            children: []
+          });
+
+          // Fetch group children
+          if (isGroup) {
+            try {
+              const groupResp = await sendOBSRequest('GetGroupSceneItemList', { sceneName: item.sourceName });
+              if (groupResp && groupResp.responseData) {
+                const children = groupResp.responseData.sceneItems || [];
+                const parentIdx = availableSources.length - 1;
+                children.forEach(child => {
+                  availableSources[parentIdx].children.push({
+                    scene: sceneName,
+                    group: item.sourceName,
+                    name: child.sourceName,
+                    type: child.inputKind || child.sourceType || '',
+                    visible: child.sceneItemEnabled,
+                    isGroup: false,
+                    children: []
+                  });
+                });
+              }
+            } catch(e) {
+              console.log('[VJLink] Could not fetch group children for', item.sourceName);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Method 2: Fallback to VJLink vendor request
+  if (availableSources.length === 0) {
+    console.log('[VJLink] Standard API returned no sources, trying vendor request...');
+    const resp = await sendRequest('GetSceneSources');
+    if (resp && resp.responseData) {
+      const data = resp.responseData.responseData || resp.responseData;
+      const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+      scenes.forEach(scene => {
+        availableScenes.push(scene.name);
+        const sources = Array.isArray(scene.sources) ? scene.sources : [];
+        sources.forEach(src => {
+          availableSources.push({
+            scene: scene.name,
+            name: src.name,
+            type: src.type,
+            visible: src.visible,
+            isGroup: false,
+            children: []
+          });
+        });
+      });
+    }
+  }
+
+  // Deduplicate top-level by name
+  const seen = new Set();
+  availableSources = availableSources.filter(s => {
+    if (seen.has(s.name)) return false;
+    seen.add(s.name);
+    return true;
+  });
+
+  console.log('[VJLink] Found', availableSources.length, 'sources:', availableSources.map(s => s.name));
+  renderMediaContent();
+}
+
+function toggleSceneCollapse(key) {
+  collapsedScenes[key] = !collapsedScenes[key];
+  renderMediaContent();
+}
+
+// === Media / Source Triggers ===
+let activeMediaTab = 'sources';
+let sourceTriggers = [];
+let mediaLayers = [];
+
+function switchMediaTab(tab) {
+  activeMediaTab = tab;
+  document.getElementById('tabSources').classList.toggle('active', tab === 'sources');
+  document.getElementById('tabMedia').classList.toggle('active', tab === 'media');
+  renderMediaContent();
+}
+
+function renderMediaContent() {
+  const container = document.getElementById('mediaContent');
+  if (activeMediaTab === 'sources') {
+    renderSourceTriggers(container);
+  } else {
+    renderMediaLayers(container);
+  }
+}
+
+let selectedSourceName = '';
+
+function renderSourceRow(src, indent) {
+  const esc = src.name.replace(/'/g, "\\'");
+  const trigIdx = sourceTriggers.findIndex(t => t.source_name === src.name);
+  const trig = trigIdx >= 0 ? sourceTriggers[trigIdx] : null;
+  const isActive = trig && trig.trigger_mode_ui > 0;
+  const isSelected = selectedSourceName === src.name;
+  const ml = indent * 16;
+
+  const toggleClass = isActive ? 'on' : 'off';
+  const toggleIcon = isActive ? '\u2713' : '\u2715';
+
+  return `<div class="source-row${isSelected ? ' selected' : ''}" style="margin-left:${ml}px" onclick="selectSource('${esc}')">
+    <button class="source-toggle ${toggleClass}" onclick="event.stopPropagation();toggleSource('${esc}')" title="${isActive ? 'Disable' : 'Enable'}">
+      ${toggleIcon}
+    </button>
+    <div class="source-name">
+      <span style="font-weight:600;color:${isActive ? 'var(--green)' : 'var(--text)'}">${src.isGroup ? '[G] ' : ''}${src.name}</span>
+    </div>
+    <span class="source-type-badge">${src.type ? src.type.replace(/^.*_/, '') : 'src'}</span>
+  </div>`;
+}
+
+function selectSource(name) {
+  selectedSourceName = (selectedSourceName === name) ? '' : name;
+  renderMediaContent();
+  renderSourceTriggerDetail();
+}
+
+function toggleSource(name) {
+  const trigIdx = sourceTriggers.findIndex(t => t.source_name === name);
+  const trig = trigIdx >= 0 ? sourceTriggers[trigIdx] : null;
+  const isActive = trig && trig.trigger_mode_ui > 0;
+
+  if (isActive) {
+    setSourceMode(name, 0); // Off
+  } else {
+    setSourceMode(name, 1); // Default to Band Trigger
+  }
+}
+
+function renderSourceTriggerDetail() {
+  const panel = document.getElementById('sourceTriggerDetail');
+  const container = document.getElementById('sourceTriggerDetailContent');
+
+  if (!selectedSourceName) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const trigIdx = sourceTriggers.findIndex(t => t.source_name === selectedSourceName);
+  const trig = trigIdx >= 0 ? sourceTriggers[trigIdx] : null;
+  const isActive = trig && trig.trigger_mode_ui > 0;
+  const currentMode = trig ? trig.trigger_mode_ui : 0;
+  const currentBand = trig ? trig.trigger_band : 0;
+  const currentThresh = trig ? trig.threshold : 0.3;
+  const esc = selectedSourceName.replace(/'/g, "\\'");
+
+  const bandNames = ['Bass', 'Low-Mid', 'High-Mid', 'Treble'];
+  const trigModes = ['Off', 'Band Trigger', 'Beat Trigger', 'Gate', 'Always On'];
+
+  container.innerHTML = `<div class="trigger-detail">
+    <div style="font-size:13px;font-weight:700;color:${isActive ? 'var(--green)' : 'var(--text)'};margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${isActive ? 'var(--green)' : 'var(--red)'};flex-shrink:0"></span>
+      ${selectedSourceName}
+    </div>
+    <div class="control-row">
+      <div class="control-label"><span>Trigger Mode</span></div>
+      <select onchange="setSourceMode('${esc}', this.value);renderSourceTriggerDetail()">
+        ${trigModes.map((m, mi) => `<option value="${mi}" ${mi === currentMode ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+    </div>
+    <div class="control-row" style="margin-top:10px;${currentMode === 0 ? 'opacity:0.4;pointer-events:none' : ''}">
+      <div class="control-label"><span>Band</span></div>
+      <select onchange="setSourceBand('${esc}', this.value)">
+        ${bandNames.map((b, bi) => `<option value="${bi}" ${bi === currentBand ? 'selected' : ''}>${b}</option>`).join('')}
+      </select>
+    </div>
+    <div class="control-row" style="margin-top:10px;${currentMode === 0 ? 'opacity:0.4;pointer-events:none' : ''}">
+      <div class="control-label">
+        <span>Threshold</span>
+        <span class="control-value">${(currentThresh*100).toFixed(0)}%</span>
+      </div>
+      <input type="range" min="0" max="100" value="${(currentThresh*100).toFixed(0)}" step="5"
+        oninput="this.parentElement.querySelector('.control-value').textContent=this.value+'%'"
+        onchange="setSourceThreshold('${esc}', this.value/100)">
+    </div>
+  </div>`;
+}
+
+function renderSourceTriggers(container) {
+  let html = '';
+
+  // Header with refresh
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
+  if (!connected) {
+    html += `<span style="color:var(--red);font-size:12px">Not connected</span>`;
+  } else if (availableSources.length === 0) {
+    html += `<span style="color:var(--orange);font-size:12px">No sources found</span>`;
+  } else {
+    // Count total including group children
+    let totalSources = 0;
+    availableSources.forEach(s => { totalSources++; totalSources += s.children ? s.children.length : 0; });
+    html += `<span style="color:var(--green);font-size:11px">${totalSources} sources from ${availableScenes.length} scenes</span>`;
+  }
+  html += `<button class="add-row-btn" onclick="fetchSceneSources()" style="width:auto;padding:3px 10px;font-size:12px">&#x21bb; Refresh</button>`;
+  html += `</div>`;
+
+  if (availableSources.length > 0) {
+    // Group by scene
+    const byScene = {};
+    availableSources.forEach(s => {
+      if (!byScene[s.scene]) byScene[s.scene] = [];
+      byScene[s.scene].push(s);
+    });
+
+    Object.entries(byScene).forEach(([sceneName, sources]) => {
+      const sceneKey = 'scene_' + sceneName;
+      const collapsed = collapsedScenes[sceneKey];
+      const arrow = collapsed ? '\u25B6' : '\u25BC';
+      const activeCount = sources.reduce((n, s) => {
+        let c = 0;
+        const tr = sourceTriggers.find(st => st.source_name === s.name);
+        if (tr && tr.trigger_mode_ui > 0) c++;
+        if (s.children) s.children.forEach(ch => { const ct = sourceTriggers.find(st => st.source_name === ch.name); if (ct && ct.trigger_mode_ui > 0) c++; });
+        return n + c;
+      }, 0);
+
+      html += `<div onclick="toggleSceneCollapse('${sceneKey}')" style="font-size:11px;font-weight:700;color:var(--accent);padding:6px 8px 2px;margin-top:4px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px">
+        <span style="font-size:9px">${arrow}</span>
+        <span>${sceneName}</span>
+        <span style="font-size:10px;color:var(--text-dim);font-weight:400">(${sources.length})</span>
+        ${activeCount > 0 ? `<span style="font-size:9px;background:var(--accent);color:white;padding:1px 5px;border-radius:8px">${activeCount} active</span>` : ''}
+      </div>`;
+
+      if (!collapsed) {
+        sources.forEach(src => {
+          html += renderSourceRow(src, 0);
+
+          // Render group children
+          if (src.isGroup && src.children && src.children.length > 0) {
+            const groupKey = 'group_' + src.name;
+            const groupCollapsed = collapsedScenes[groupKey];
+            const gArrow = groupCollapsed ? '\u25B6' : '\u25BC';
+
+            html += `<div onclick="event.stopPropagation();toggleSceneCollapse('${groupKey}')" style="font-size:10px;color:var(--cyan);padding:3px 8px 1px;margin-left:16px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px">
+              <span style="font-size:8px">${gArrow}</span>
+              <span>${src.children.length} items in group</span>
+            </div>`;
+
+            if (!groupCollapsed) {
+              src.children.forEach(child => {
+                html += renderSourceRow(child, 2);
+              });
+            }
+          }
+        });
+      }
+    });
+  } else if (connected) {
+    html += `<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px">
+      Click Refresh to load OBS sources</div>`;
+  } else {
+    html += `<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px">
+      Connect to OBS to see sources</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderMediaLayers(container) {
+  const bandNames = ['Bass', 'Low-Mid', 'High-Mid', 'Treble'];
+  const trigModes = ['Always On', 'Band Trigger', 'Beat Trigger', 'Gate'];
+
+  let html = '';
+  mediaLayers.forEach((layer, i) => {
+    html += `<div class="source-row">
+      <input type="text" value="${layer.path || ''}" placeholder="Image/GIF path"
+        onchange="updateMediaLayer(${i}, 'path', this.value)" style="width:100%">
+      <select onchange="updateMediaLayer(${i}, 'trigger_mode', this.value)">
+        ${trigModes.map((m, mi) => `<option value="${mi}" ${mi == layer.trigger_mode ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="updateMediaLayer(${i}, 'trigger_band', this.value)">
+        ${bandNames.map((b, bi) => `<option value="${bi}" ${bi == layer.trigger_band ? 'selected' : ''}>${b}</option>`).join('')}
+      </select>
+      <input type="number" value="${(layer.threshold*100).toFixed(0)}" min="0" max="100" step="5"
+        onchange="updateMediaLayer(${i}, 'threshold', this.value/100)" style="width:55px" title="Threshold %">
+      <button class="remove-row-btn" onclick="removeMediaLayer(${i})" title="Remove">&#x2715;</button>
+    </div>`;
+  });
+
+  html += `<button class="add-row-btn" onclick="addMediaLayer()">+ Add Media Layer</button>`;
+  container.innerHTML = html;
+}
+
+const VJLINK_MAX_SOURCE_TRIGGERS = 8;
+const VJLINK_MAX_MEDIA_LAYERS = 4;
+
+// Map UI mode index to API trigger_mode values
+// UI: 0=Off, 1=BandTrigger, 2=BeatTrigger, 3=Gate, 4=AlwaysOn
+// API: 0=AlwaysOn, 1=BandTrigger, 2=BeatTrigger, 3=Gate
+const uiModeToApi = [-1, 1, 2, 3, 0];
+const apiModeToUi = { '-1': 0, '0': 4, '1': 1, '2': 2, '3': 3 };
+
+function findOrCreateTrigger(sourceName) {
+  let idx = sourceTriggers.findIndex(t => t.source_name === sourceName);
+  if (idx < 0) {
+    idx = sourceTriggers.length;
+    sourceTriggers.push({
+      source_name: sourceName, effect_id: '', trigger_mode: 0,
+      trigger_mode_ui: 0, trigger_band: 0, threshold: 0.3, intensity: 1.0
+    });
+  }
+  return idx;
+}
+
+async function setSourceMode(sourceName, uiMode) {
+  uiMode = parseInt(uiMode);
+  const idx = findOrCreateTrigger(sourceName);
+  sourceTriggers[idx].trigger_mode_ui = uiMode;
+
+  if (uiMode === 0) {
+    // Off - disable trigger
+    sourceTriggers[idx].trigger_mode = -1;
+    await sendRequest('SetSourceTrigger', {
+      slot: idx, source_name: '', effect_id: '', trigger_mode: 0,
+      trigger_band: 0, threshold: 0.3, intensity: 1.0
+    });
+  } else {
+    const apiMode = uiModeToApi[uiMode];
+    sourceTriggers[idx].trigger_mode = apiMode;
+    await syncSourceTrigger(idx);
+  }
+  renderMediaContent();
+}
+
+async function setSourceBand(sourceName, band) {
+  const idx = findOrCreateTrigger(sourceName);
+  sourceTriggers[idx].trigger_band = parseInt(band);
+  await syncSourceTrigger(idx);
+}
+
+async function setSourceThreshold(sourceName, threshold) {
+  const idx = findOrCreateTrigger(sourceName);
+  sourceTriggers[idx].threshold = parseFloat(threshold);
+  await syncSourceTrigger(idx);
+  renderMediaContent();
+}
+
+async function syncSourceTrigger(idx) {
+  const t = sourceTriggers[idx];
+  if (t.trigger_mode_ui === 0) return; // Off
+  await sendRequest('SetSourceTrigger', {
+    slot: idx, source_name: t.source_name, effect_id: t.effect_id || '',
+    trigger_mode: parseInt(t.trigger_mode), trigger_band: parseInt(t.trigger_band),
+    threshold: parseFloat(t.threshold), intensity: parseFloat(t.intensity)
+  });
+}
+
+function addMediaLayer() {
+  mediaLayers.push({ path: '', trigger_mode: 1, trigger_band: 0, threshold: 0.3, intensity: 1.0 });
+  renderMediaContent();
+}
+
+async function removeMediaLayer(idx) {
+  await sendRequest('SetMediaLayer', {
+    layer: idx, path: '', trigger_mode: 0, trigger_band: 0, threshold: 0.3, intensity: 1.0
+  });
+  mediaLayers.splice(idx, 1);
+  for (let i = idx; i < mediaLayers.length; i++) {
+    const l = mediaLayers[i];
+    await sendRequest('SetMediaLayer', {
+      layer: i, path: l.path, trigger_mode: parseInt(l.trigger_mode),
+      trigger_band: parseInt(l.trigger_band), threshold: parseFloat(l.threshold), intensity: parseFloat(l.intensity)
+    });
+  }
+  if (mediaLayers.length < VJLINK_MAX_MEDIA_LAYERS) {
+    await sendRequest('SetMediaLayer', {
+      layer: mediaLayers.length, path: '', trigger_mode: 0, trigger_band: 0, threshold: 0.3, intensity: 1.0
+    });
+  }
+  renderMediaContent();
+}
+
+async function updateMediaLayer(idx, field, value) {
+  mediaLayers[idx][field] = value;
+  const l = mediaLayers[idx];
+  await sendRequest('SetMediaLayer', {
+    layer: idx, path: l.path, trigger_mode: parseInt(l.trigger_mode),
+    trigger_band: parseInt(l.trigger_band), threshold: parseFloat(l.threshold), intensity: parseFloat(l.intensity)
+  });
+}
+
+// === Init ===
+renderPresets();
+renderCategories();
+renderEffects();
+renderBandEffects();
+renderMediaContent();
+runDemo();
+</script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+/*
+ * VJLink - Logo Runner
+ * Logo slides across screen in configurable direction.
+ * Multiple instances with trail effect, beat-synced speed.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d logo_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float direction;    /* 0=L>R, 1=R>L, 2=BL>TR, 3=TR>BL, 4=random */
+uniform float logo_scale;   /* 0.02-0.5, default 0.15 */
+uniform float speed;        /* 0.1-5.0, default 1.0 */
+uniform float count;        /* 1-10, default 3 */
+uniform float trail;        /* 0.0-1.0, default 0.3 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float2 get_direction(float mode, float instance_id)
+{
+    if (mode < 0.5) return float2(1.0, 0.0);       /* L > R */
+    if (mode < 1.5) return float2(-1.0, 0.0);      /* R > L */
+    if (mode < 2.5) return float2(0.707, -0.707);   /* BL > TR */
+    if (mode < 3.5) return float2(-0.707, 0.707);   /* TR > BL */
+
+    /* Random per instance */
+    float angle = hash11(instance_id * 73.1) * 6.28318;
+    return float2(cos(angle), sin(angle));
+}
+
+float4 PSLogoRunner(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    float num_logos = max(count, 1.0);
+    float lscale = max(logo_scale, 0.02);
+    float spd = max(speed, 0.1) * (1.0 + bass * 1.5);
+
+    float3 col = float3(0.0, 0.0, 0.0);
+    float max_alpha = 0.0;
+
+    /* Scale pulse on beat */
+    float scale_mult = 1.0 + beat * bass * 0.4;
+
+    for (int i = 0; i < 10; i++) {
+        if ((float)i >= num_logos) break;
+
+        float fi = (float)i;
+        float phase_offset = fi / num_logos;
+
+        float2 dir = get_direction(direction, fi);
+
+        /* Position along travel path */
+        float t = frac(time * spd * 0.2 + phase_offset);
+
+        /* Starting position (perpendicular offset for each instance) */
+        float2 perp = float2(-dir.y, dir.x);
+        float perp_offset = (hash11(fi * 37.7) - 0.5) * 0.6;
+
+        /* Current center position */
+        float2 center = float2(0.5, 0.5)
+                       + dir * (t * 2.0 - 1.0) * 1.2
+                       + perp * perp_offset;
+
+        /* Effective scale */
+        float eff_scale = lscale * scale_mult;
+
+        /* Sample logo at current position */
+        float2 logo_uv = (uv - center) / eff_scale + 0.5;
+        /* Correct for aspect ratio */
+        logo_uv.x = (logo_uv.x - 0.5) * aspect + 0.5;
+
+        if (logo_uv.x >= -0.1 && logo_uv.x <= 1.1 &&
+            logo_uv.y >= -0.1 && logo_uv.y <= 1.1) {
+            float2 clamped = saturate(logo_uv);
+            float4 lsample = logo_tex.Sample(texSampler, clamped);
+
+            /* Fade edges outside 0-1 range */
+            float edge_fade = smoothstep(-0.1, 0.0, logo_uv.x) *
+                              smoothstep(1.1, 1.0, logo_uv.x) *
+                              smoothstep(-0.1, 0.0, logo_uv.y) *
+                              smoothstep(1.1, 1.0, logo_uv.y);
+
+            float lvis = max(max(lsample.r, lsample.g), lsample.b);
+            float a = (lvis > 0.01) ? lsample.a * edge_fade : 0.0;
+            col = lerp(col, lsample.rgb, a);
+            max_alpha = max(max_alpha, a);
+        }
+
+        /* Trail: faded copies behind */
+        float trail_amount = saturate(trail);
+        if (trail_amount > 0.01) {
+            for (int tr = 1; tr <= 4; tr++) {
+                float trail_t = (float)tr * 0.03 * trail_amount;
+                float2 trail_center = center - dir * trail_t;
+                float trail_fade = exp(-(float)tr * 1.5) * trail_amount;
+
+                float2 tr_uv = (uv - trail_center) / eff_scale + 0.5;
+                tr_uv.x = (tr_uv.x - 0.5) * aspect + 0.5;
+
+                if (tr_uv.x >= 0.0 && tr_uv.x <= 1.0 &&
+                    tr_uv.y >= 0.0 && tr_uv.y <= 1.0) {
+                    float4 tr_sample = logo_tex.Sample(texSampler, tr_uv);
+                    float tr_a = tr_sample.a * trail_fade;
+                    col += tr_sample.rgb * tr_a * 0.3;
+                    max_alpha = max(max_alpha, tr_a * 0.5);
+                }
+            }
+        }
+    }
+
+    return float4(col, max_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSLogoRunner(vert_in);
+    }
+}

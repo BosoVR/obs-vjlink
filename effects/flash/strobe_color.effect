@@ -1,0 +1,74 @@
+/*
+ * VJLink Color Strobe
+ * Colorful strobe with user-defined color and smooth activation.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     band_activation;
+
+uniform float intensity;
+uniform float flash_color_r;
+uniform float flash_color_g;
+uniform float flash_color_b;
+uniform float color_cycle;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float4 PSStrobeColor(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 src = input_tex.Sample(texSampler, uv);
+
+    float3 base_col = float3(flash_color_r, flash_color_g, flash_color_b);
+
+    /* Optional color cycling */
+    float cycle = saturate(color_cycle);
+    if (cycle > 0.01) {
+        float hue = frac(time * cycle * 0.5);
+        base_col = hsv2rgb(float3(hue, 1.0, 1.0));
+    }
+
+    float strength = band_activation * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float3 color = lerp(src.rgb, base_col, strength);
+    float out_alpha = max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSStrobeColor(vert_in);
+    }
+}

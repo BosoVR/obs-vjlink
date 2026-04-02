@@ -1,0 +1,45 @@
+/*
+ * VJLink Video Wall Blit Shader
+ * Remaps UV coordinates to display a sub-region of the compositor output.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float4    region; /* x=start_x, y=start_y, z=width, w=height */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSBlit(VertInOut vert_in) : TARGET
+{
+    /* Remap UV from full [0,1] to region sub-rect */
+    float2 uv = vert_in.uv;
+    uv = region.xy + uv * region.zw;
+
+    return image.Sample(texSampler, uv);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSBlit(vert_in);
+    }
+}

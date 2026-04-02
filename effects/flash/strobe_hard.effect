@@ -1,0 +1,67 @@
+/*
+ * VJLink Hard Strobe
+ * Binary white flash - full on/off, no fade. Hardtechno style.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     band_activation;
+
+uniform float intensity;
+uniform float flash_color_r;
+uniform float flash_color_g;
+uniform float flash_color_b;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSStrobeHard(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 src = input_tex.Sample(texSampler, uv);
+
+    float3 flash_col = float3(
+        saturate(flash_color_r),
+        saturate(flash_color_g),
+        saturate(flash_color_b)
+    );
+
+    /* Binary trigger: on when activation > 0.2 (sensitive to audio) */
+    float flash = step(0.2, band_activation);
+    float intens = intensity > 0.01 ? saturate(intensity) : 1.0;
+    float strength = flash * intens;
+
+    float3 color = lerp(src.rgb, flash_col, strength);
+    float out_alpha = max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSStrobeHard(vert_in);
+    }
+}

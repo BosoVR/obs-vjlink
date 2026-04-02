@@ -1,0 +1,147 @@
+/*
+ * VJLink Sacred Geometry Effect
+ * Flower of Life / Metatron's Cube pattern with audio-reactive glow.
+ * Bass drives circle pulse, beat drives rotation.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float pattern_scale;   /* pattern size (default 3.0) */
+uniform float line_width;      /* line thickness (default 0.02) */
+uniform float rotation_speed;  /* rotation (default 0.1) */
+uniform float layers;          /* number of ring layers (default 3.0) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float circleSDF(float2 p, float2 center, float radius)
+{
+    return abs(length(p - center) - radius);
+}
+
+float2 rotate2d(float2 p, float a)
+{
+    float c = cos(a);
+    float s = sin(a);
+    return float2(p.x * c - p.y * s, p.x * s + p.y * c);
+}
+
+float4 PSSacredGeometry(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float scale = max(pattern_scale, 1.0);
+    float line_w = max(line_width, 0.005);
+    float rot_spd = rotation_speed;
+    int num_layers = clamp(int(layers), 1, 6);
+
+    /* Apply rotation */
+    float rot = time * rot_spd;
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+    rot += beat * 0.1 * bands.x;
+    p = rotate2d(p, rot);
+
+    p *= scale;
+
+    float d = 1e10;
+    float glow_accum = 0.0;
+
+    /* Flower of Life: center circle + 6 surrounding + more layers */
+    float radius = 1.0 + bands.x * 0.1;
+
+    /* Center circle */
+    float dc = circleSDF(p, float2(0.0, 0.0), radius);
+    d = min(d, dc);
+    glow_accum += 0.003 / (dc + 0.01);
+
+    /* Surrounding rings */
+    for (int layer = 1; layer <= 6; layer++) {
+        if (layer > num_layers) break;
+
+        int ring_count = layer * 6;
+        float ring_dist = float(layer) * radius;
+
+        for (int i = 0; i < 36; i++) {
+            if (i >= ring_count) break;
+
+            float angle = float(i) / float(ring_count) * 6.28318;
+            float2 center = float2(cos(angle), sin(angle)) * ring_dist;
+
+            float dd = circleSDF(p, center, radius);
+            d = min(d, dd);
+            glow_accum += 0.002 / (dd + 0.01);
+        }
+    }
+
+    /* Lines from center to outer circles (Metatron's Cube hint) */
+    for (int i = 0; i < 6; i++) {
+        float angle = float(i) / 6.0 * 6.28318;
+        float2 dir = float2(cos(angle), sin(angle));
+
+        /* Line distance */
+        float t = dot(p, dir);
+        float2 proj = dir * t;
+        float line_d = length(p - proj);
+
+        /* Only within bounds */
+        if (t > 0.0 && t < float(num_layers) * radius) {
+            d = min(d, line_d);
+        }
+    }
+
+    /* Render lines */
+    float line = 1.0 - smoothstep(0.0, line_w, d);
+
+    /* Color based on distance from center */
+    float dist_center = length(p) / (float(num_layers) * radius + 0.01);
+
+    float hue = frac(dist_center * 0.3 + time * 0.02 + bands.y * 0.1);
+    float3 line_col;
+    line_col.r = abs(hue * 6.0 - 3.0) - 1.0;
+    line_col.g = 2.0 - abs(hue * 6.0 - 2.0);
+    line_col.b = 2.0 - abs(hue * 6.0 - 4.0);
+    line_col = saturate(line_col);
+
+    /* Glow */
+    float3 glow_col = line_col * glow_accum * 0.1 * (1.0 + bands.z);
+
+    float3 color = line_col * line * (0.8 + bands.x * 0.5) + glow_col;
+
+    /* Background subtle gradient */
+    color += float3(0.02, 0.01, 0.03) * (1.0 - dist_center * 0.5);
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSacredGeometry(vert_in);
+    }
+}

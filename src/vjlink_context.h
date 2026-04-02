@@ -1,0 +1,155 @@
+#pragma once
+
+#include <obs-module.h>
+#include <graphics/graphics.h>
+#include <util/threading.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Forward declarations for subsystem pointers */
+struct vjlink_band_effects;
+struct vjlink_source_triggers;
+struct vjlink_media_layers;
+
+/* Audio texture dimensions */
+#define VJLINK_AUDIO_TEX_WIDTH  512
+#define VJLINK_AUDIO_TEX_HEIGHT 4
+#define VJLINK_AUDIO_TEX_PIXELS (VJLINK_AUDIO_TEX_WIDTH * VJLINK_AUDIO_TEX_HEIGHT)
+
+/* FFT configuration */
+#define VJLINK_FFT_SIZE     2048
+#define VJLINK_FFT_HOP      512
+#define VJLINK_SAMPLE_RATE  48000
+
+/* Frequency band count */
+#define VJLINK_NUM_BANDS    4
+
+/* Band indices */
+#define VJLINK_BAND_BASS     0
+#define VJLINK_BAND_LOWMID   1
+#define VJLINK_BAND_HIGHMID  2
+#define VJLINK_BAND_TREBLE   3
+
+/* Maximum effect chain length */
+#define VJLINK_MAX_EFFECTS  16
+
+/* Maximum layers in compositor chain */
+#define VJLINK_MAX_CHAIN    8
+
+/* LFO count */
+#define VJLINK_NUM_LFOS     4
+
+/*
+ * VJLinkContext - Global singleton shared by all modules.
+ *
+ * The audio thread writes to audio_cpu_buffer[write_idx].
+ * The graphics thread reads from audio_cpu_buffer[1 - write_idx]
+ * and uploads to audio_texture each frame.
+ */
+struct vjlink_context {
+    /* GPU audio data texture (512x4 RGBA32F) */
+    gs_texture_t    *audio_texture;
+    bool             audio_texture_created;
+
+    /* Compositor render target */
+    gs_texrender_t  *compositor_output;
+    uint32_t         compositor_width;
+    uint32_t         compositor_height;
+
+    /* CPU-side audio double buffer (RGBA float per pixel) */
+    float            audio_cpu_buffer[2][VJLINK_AUDIO_TEX_PIXELS * 4];
+    volatile long    audio_write_idx; /* 0 or 1, swapped atomically */
+
+    /* Extracted audio features (written by audio thread, read by render) */
+    volatile float   bands[VJLINK_NUM_BANDS];
+    volatile float   bands_peak[VJLINK_NUM_BANDS];
+    volatile float   bands_raw[VJLINK_NUM_BANDS];       /* unsmoothed raw */
+    volatile float   chronotensity[VJLINK_NUM_BANDS];    /* cumulative energy (AudioLink-style) */
+    volatile float   onset_strength;                      /* current onset detection value 0-1 */
+    volatile float   beat_phase;
+    volatile float   bpm;
+    volatile float   beat_confidence;
+    volatile float   rms;
+
+    /* LFO values (updated on render thread) */
+    float            lfo_values[VJLINK_NUM_LFOS];
+
+    /* Elapsed time for shaders (tick-based accumulation, no wrapping) */
+    float            elapsed_time;
+
+    /* GPU capability info */
+    int              gpu_quality;      /* 0=low, 1=medium, 2=high */
+    bool             gpu_supports_float_tex;
+    bool             gpu_checked;
+
+    /* Logo texture (set by compositor source each frame) */
+    gs_texture_t    *logo_texture;
+
+    /* WebSocket -> logo path override */
+    char             pending_logo_path[512];
+    volatile bool    logo_pending;
+
+    /* WebSocket -> transparent bg override */
+    bool             pending_transparent_bg;
+    volatile bool    transparent_bg_pending;
+
+    /* Pointers to active subsystems (set by compositor source) */
+    struct vjlink_band_effects    *active_band_fx;
+    struct vjlink_source_triggers *active_source_triggers;
+    struct vjlink_media_layers    *active_media_layers;
+
+    /* WebSocket -> Compositor effect override */
+    char             pending_effect[64];
+    volatile bool    effect_pending;
+    int              active_preset_index;
+    char             active_effect_id[64]; /* current effect for UI sync */
+    float            band_sensitivity[4]; /* user gain per band, default 1.0 */
+
+    /* WebSocket -> Compositor param override (applied on render thread) */
+#define VJLINK_MAX_PENDING_PARAMS 32
+    struct {
+        char  name[64];
+        float value;
+    } pending_params[VJLINK_MAX_PENDING_PARAMS];
+    volatile int     pending_param_count;
+
+    /* Last shader compile error (for UI display) */
+    char             last_error[512];
+    volatile bool    has_error;
+
+    /* Thread synchronization */
+    pthread_mutex_t  mutex;
+    bool             initialized;
+};
+
+/* GPU quality levels */
+#define VJLINK_GPU_LOW    0
+#define VJLINK_GPU_MEDIUM 1
+#define VJLINK_GPU_HIGH   2
+
+/* Get global context (creates on first call) */
+struct vjlink_context *vjlink_get_context(void);
+
+/* Initialize / shutdown */
+bool vjlink_context_init(void);
+void vjlink_context_shutdown(void);
+
+/* Check GPU capabilities (call once from graphics thread) */
+void vjlink_check_gpu_caps(void);
+
+/* Swap audio buffer (called by audio thread after writing) */
+void vjlink_audio_buffer_swap(void);
+
+/* Get the read-side audio buffer (for GPU upload) */
+float *vjlink_audio_buffer_read(void);
+
+/* Accumulate elapsed time (call from video_tick with delta seconds) */
+void vjlink_tick_time(float seconds);
+
+#ifdef __cplusplus
+}
+#endif

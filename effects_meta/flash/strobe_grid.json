@@ -1,0 +1,15 @@
+{
+  "id": "strobe_grid",
+  "name": "Strobe Grid",
+  "category": "flash",
+  "params": [
+    { "name": "grid_size", "label": "Grid Size", "type": "float", "default": 6.0, "min": 2.0, "max": 20.0, "step": 1.0 },
+    { "name": "wave_speed", "label": "Wave Speed", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.1 },
+    { "name": "pattern", "label": "Pattern", "type": "float", "default": 0.0, "min": 0.0, "max": 11.0, "step": 1.0 },
+    { "name": "logo_in_cells", "label": "Logo Mode", "type": "float", "default": 0.0, "min": 0.0, "max": 3.0, "step": 1.0 },
+    { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "cell_gap", "label": "Cell Gap", "type": "float", "default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01 }
+  ]
+}

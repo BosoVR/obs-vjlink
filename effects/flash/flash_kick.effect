@@ -1,0 +1,66 @@
+/*
+ * VJLink Kick Flash
+ * Bass-triggered flash with exponential decay. Punchy kick response.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     band_activation;
+
+uniform float intensity;
+uniform float decay_speed;
+uniform float flash_color_r;
+uniform float flash_color_g;
+uniform float flash_color_b;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSFlashKick(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 src = input_tex.Sample(texSampler, uv);
+
+    float3 flash_col = float3(flash_color_r, flash_color_g, flash_color_b);
+
+    /* Exponential decay envelope */
+    float dec = max(decay_speed, 1.0);
+    float envelope = pow(band_activation, dec);
+
+    float strength = envelope * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+
+    /* Additive flash */
+    float3 color = saturate(src.rgb + flash_col * strength);
+    float out_alpha = max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSFlashKick(vert_in);
+    }
+}

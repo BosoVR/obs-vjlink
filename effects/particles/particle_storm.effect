@@ -1,0 +1,145 @@
+/*
+ * VJLink Particle Storm Effect
+ * Screen-space particle swarm driven by layered noise and audio.
+ * Bass drives intensity, treble drives turbulence.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom params */
+uniform float storm_intensity; /* overall brightness (default 1.5) */
+uniform float turbulence;      /* noise complexity (default 3.0) */
+uniform float particle_speed;  /* flow speed (default 1.0) */
+uniform float color_shift;     /* hue rotation speed (default 0.2) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float fbm(float2 p, int octaves)
+{
+    float val = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 6; i++) {
+        if (i >= octaves) break;
+        val += amp * noise(p);
+        p *= 2.0;
+        amp *= 0.5;
+    }
+    return val;
+}
+
+/* Curl-noise inspired 2D flow */
+float2 flowField(float2 p, float t)
+{
+    float turb = max(turbulence, 1.0);
+    float n1 = fbm(p * turb + float2(t * 0.3, 0.0), 4);
+    float n2 = fbm(p * turb + float2(0.0, t * 0.3) + float2(50.0, 50.0), 4);
+    return float2(n1 - 0.5, n2 - 0.5) * 2.0;
+}
+
+float4 PSStorm(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float intensity = max(storm_intensity, 0.5);
+    float speed = max(particle_speed, 0.1);
+    float hue_speed = color_shift;
+
+    float3 color = float3(0.0, 0.0, 0.0);
+
+    /* Multiple particle layers */
+    for (int layer = 0; layer < 4; layer++) {
+        float fl = float(layer);
+        float layer_scale = 1.0 + fl * 0.5;
+        float layer_speed = speed * (1.0 + fl * 0.3);
+
+        /* Advect position through flow field */
+        float2 pos = p * layer_scale;
+        float2 flow = flowField(pos * 0.5, time * layer_speed);
+
+        /* Audio modulation */
+        flow += float2(bands.x * 0.5, bands.y * 0.3) * sin(time * 2.0 + fl);
+
+        pos += flow * 0.5;
+
+        /* Point-like particles from high-freq noise */
+        float n = noise(pos * 8.0 + float2(time * layer_speed * 2.0, fl * 100.0));
+        n = pow(n, 4.0 + bands.w * 4.0) * intensity;
+
+        /* Flow lines: directional streaks */
+        float2 streak_uv = pos * 3.0 + flow * time * 0.5;
+        float streak = noise(streak_uv);
+        streak = pow(streak, 3.0) * 0.5;
+
+        /* Layer color with hue shift */
+        float hue = frac(fl * 0.25 + time * hue_speed + bands.y * 0.2);
+        float3 layer_col;
+        layer_col.r = abs(hue * 6.0 - 3.0) - 1.0;
+        layer_col.g = 2.0 - abs(hue * 6.0 - 2.0);
+        layer_col.b = 2.0 - abs(hue * 6.0 - 4.0);
+        layer_col = saturate(layer_col);
+
+        color += layer_col * (n + streak * 0.3) * (1.0 + bands.x * 0.5);
+    }
+
+    /* Beat flash */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    color += float3(0.3, 0.3, 0.5) * beat * bands.x * 0.5;
+
+    /* Central glow */
+    float center = exp(-length(p) * 1.5) * 0.2 * (1.0 + bands.x);
+    color += float3(0.4, 0.3, 0.6) * center;
+
+    color = color / (1.0 + color * 0.5);
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSStorm(vert_in);
+    }
+}

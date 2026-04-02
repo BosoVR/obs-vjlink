@@ -1,0 +1,13 @@
+{
+    "effect_id": "hex_tunnel",
+    "name": "Hex Tunnel",
+    "category": "tunnel",
+    "description": "Hexagonal grid tunnel with glowing edges and audio-reactive color cycling",
+    "author": "VJLink",
+    "params": [
+        { "id": "hex_scale", "name": "Hex Scale", "type": "float", "default": 8.0, "min": 2.0, "max": 20.0, "step": 0.5 },
+        { "id": "tunnel_speed", "name": "Speed", "type": "float", "default": 1.0, "min": 0.1, "max": 5.0, "step": 0.1 },
+        { "id": "glow_width", "name": "Glow Width", "type": "float", "default": 0.08, "min": 0.01, "max": 0.3, "step": 0.01 },
+        { "id": "color_cycle", "name": "Color Cycle", "type": "float", "default": 0.3, "min": 0.0, "max": 2.0, "step": 0.05 }
+    ]
+}

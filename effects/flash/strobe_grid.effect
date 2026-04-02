@@ -1,0 +1,197 @@
+/*
+ * VJLink - Strobe Grid
+ * Grid cells flash in wave/sequential/random/spiral patterns.
+ * Works with per-band assignment via band_activation.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform texture2d audio_tex;
+uniform texture2d logo_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     band_activation;
+
+uniform float grid_size;       /* 2-20, default 6 */
+uniform float wave_speed;      /* 0.5-10.0, default 3.0 */
+uniform float pattern;         /* 0-7: wave,seq,random,spiral,radial,cross,diamond,checker */
+uniform float logo_in_cells;   /* 0=off, 1=logo shape lights up, 2=logo dark silhouette */
+uniform float flash_color_r;   /* default 1.0 */
+uniform float flash_color_g;   /* default 1.0 */
+uniform float flash_color_b;   /* default 1.0 */
+uniform float cell_gap;        /* 0.0-0.3, default 0.05 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float4 PSStrobeGrid(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    float3 flash_col = float3(
+        saturate(flash_color_r),
+        saturate(flash_color_g),
+        saturate(flash_color_b)
+    );
+
+    float gsize = max(grid_size, 2.0);
+    float wspd = max(wave_speed, 0.5);
+    float gap = saturate(cell_gap);
+
+    /* Grid cell coordinates — aspect-corrected grid */
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float gsize_x = floor(gsize * aspect);  /* more columns for wide screens */
+    float gsize_y = gsize;
+
+    float2 cell_id = floor(uv * float2(gsize_x, gsize_y));
+    float2 cell_frac = frac(uv * float2(gsize_x, gsize_y));
+
+    /* Cell shape with gap */
+    float2 edge = smoothstep(0.0, gap + 0.01, cell_frac) *
+                  smoothstep(0.0, gap + 0.01, 1.0 - cell_frac);
+    float cell_shape = edge.x * edge.y;
+
+    /* Pattern-based cell activation timing */
+    float cell_phase = 0.0;
+    float pmode = pattern;
+
+    /* True center of the grid (index 0 to N-1 → center at (N-1)/2) */
+    float2 grid_center = float2((gsize_x - 1.0) * 0.5, (gsize_y - 1.0) * 0.5);
+    float2 delta = cell_id - grid_center;
+    /* Normalize delta so patterns are circular, not stretched */
+    float2 delta_norm = delta / max(max(gsize_x, gsize_y) * 0.5, 1.0);
+
+    if (pmode < 0.5) {
+        /* 0: Wave L→R */
+        cell_phase = cell_id.x / gsize_x;
+    } else if (pmode < 1.5) {
+        /* 1: Wave R→L */
+        cell_phase = 1.0 - cell_id.x / gsize_x;
+    } else if (pmode < 2.5) {
+        /* 2: Wave Top→Bottom */
+        cell_phase = cell_id.y / gsize_y;
+    } else if (pmode < 3.5) {
+        /* 3: Wave Bottom→Top */
+        cell_phase = 1.0 - cell_id.y / gsize_y;
+    } else if (pmode < 4.5) {
+        /* 4: Sequential L→R, Top→Bottom */
+        cell_phase = (cell_id.y * gsize_x + cell_id.x) / (gsize_x * gsize_y);
+    } else if (pmode < 5.5) {
+        /* 5: Random */
+        cell_phase = hash21(cell_id);
+    } else if (pmode < 6.5) {
+        /* 6: Spiral — uses normalized delta for circular shape */
+        float angle = atan2(delta_norm.y, delta_norm.x);
+        float dist = length(delta_norm);
+        cell_phase = frac(dist * 2.0 + angle / 6.28318);
+    } else if (pmode < 7.5) {
+        /* 7: Radial — circular rings from true center */
+        cell_phase = length(delta_norm);
+    } else if (pmode < 8.5) {
+        /* 8: Cross */
+        cell_phase = min(abs(delta_norm.x), abs(delta_norm.y));
+    } else if (pmode < 9.5) {
+        /* 9: Diamond */
+        cell_phase = (abs(delta_norm.x) + abs(delta_norm.y)) * 0.5;
+    } else if (pmode < 10.5) {
+        /* 10: Checkerboard */
+        int ix = (int)cell_id.x;
+        int iy = (int)cell_id.y;
+        cell_phase = ((ix + iy) % 2 == 0) ? 0.0 : 0.5;
+    } else {
+        /* 11: Diagonal BL→TR */
+        cell_phase = (cell_id.x / gsize_x + cell_id.y / gsize_y) * 0.5;
+    }
+
+    /* Strobe timing: cell flashes at its phase position */
+    float strobe_t = frac(time * wspd * 0.5 + cell_phase);
+    /* Wider, punchier pulse */
+    float strobe = smoothstep(0.0, 0.03, strobe_t) *
+                   smoothstep(0.45, 0.2, strobe_t);
+
+    /* Activation gate: only flash when band is active */
+    float activation = band_activation;
+    if (activation < 0.01) {
+        activation = max(max(bass, bands.y), max(bands.z, treble));
+    }
+
+    /* Sharpen activation curve for punchier response */
+    activation = saturate(activation * 1.8);
+    activation = activation * activation; /* quadratic = more on/off feel */
+
+    float strength = strobe * activation * cell_shape * 1.5;
+
+    /* Color with slight per-cell variation */
+    float cell_hue = hash21(cell_id * 7.3) * 0.15;
+    float3 col = flash_col;
+    col.r = saturate(col.r + cell_hue);
+    col.b = saturate(col.b - cell_hue);
+
+    col *= strength;
+
+    /* Logo inside cells */
+    if (logo_in_cells > 0.5) {
+        float4 logo_sample = logo_tex.Sample(texSampler, cell_frac);
+        float logo_vis = max(max(logo_sample.r, logo_sample.g), logo_sample.b);
+
+        /* Skip fallback texture (1x1 black with alpha=1) */
+        bool has_logo = (logo_sample.a > 0.01 && logo_vis > 0.01);
+
+        if (logo_in_cells < 1.5) {
+            /* Mode 1: Only logo shape lights up — cell is dark except where logo is */
+            if (has_logo)
+                col = flash_col * strength * logo_sample.a;
+            else
+                col = float3(0.0, 0.0, 0.0);
+        } else if (logo_in_cells < 2.5) {
+            /* Mode 2: Dark logo silhouette on lit cells */
+            if (has_logo)
+                col = lerp(col, float3(0.0, 0.0, 0.0), logo_sample.a * 0.85);
+        } else {
+            /* Mode 3: Logo in original colors on lit cells */
+            if (has_logo)
+                col = lerp(col, logo_sample.rgb * strength, logo_sample.a);
+        }
+    }
+
+    float out_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSStrobeGrid(vert_in);
+    }
+}

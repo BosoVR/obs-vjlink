@@ -1,0 +1,136 @@
+/*
+ * VJLink Matrix Rain Effect
+ * Falling character columns with green terminal aesthetic.
+ * Bass drives fall speed, treble drives character change rate.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float column_count;    /* number of columns (default 40.0) */
+uniform float fall_speed;      /* drop speed (default 2.0) */
+uniform float trail_length;    /* glow trail (default 0.5) */
+uniform float brightness;      /* overall brightness (default 1.0) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+/* Pseudo-character pattern within a cell */
+float charGlyph(float2 local_uv, float seed)
+{
+    /* Generate a simple glyph from hash-based pattern */
+    int gx = int(local_uv.x * 3.0);
+    int gy = int(local_uv.y * 5.0);
+
+    if (gx < 0 || gx >= 3 || gy < 0 || gy >= 5)
+        return 0.0;
+
+    float h = hash(float2(float(gx + gy * 3), seed));
+    return step(0.45, h);
+}
+
+float4 PSMatrixRain(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float cols = max(column_count, 10.0);
+    float speed = fall_speed + bands.x * 1.0;
+    float trail = max(trail_length, 0.1);
+    float bright = max(brightness, 0.1);
+
+    /* Column grid */
+    float col_width = 1.0 / cols;
+    float char_height = col_width * 1.6 * (resolution.x / resolution.y);
+
+    float col_idx = floor(uv.x / col_width);
+    float row_idx = floor(uv.y / char_height);
+
+    float2 cell_uv = float2(
+        frac(uv.x / col_width),
+        frac(uv.y / char_height)
+    );
+
+    /* Each column has different speed and offset */
+    float col_hash = hash(float2(col_idx, 0.0));
+    float col_speed = speed * (0.5 + col_hash);
+    float col_offset = col_hash * 50.0;
+
+    /* Falling head position */
+    float head_row = fmod(time * col_speed * 10.0 + col_offset, 100.0);
+
+    /* Current row's distance from head */
+    float row_count = 1.0 / char_height;
+    float current_row = uv.y / char_height;
+    float dist_from_head = fmod(head_row - current_row + 100.0, 100.0);
+
+    /* Trail fade */
+    float fade = 1.0 - saturate(dist_from_head / (trail * row_count));
+    fade = pow(fade, 2.0);
+
+    /* Character change based on time and treble */
+    float char_seed = floor(time * (2.0 + bands.w * 5.0) + col_hash * 100.0);
+    char_seed = hash(float2(col_idx, row_idx + char_seed));
+
+    /* Render character */
+    float glyph = charGlyph(cell_uv, char_seed);
+
+    /* Color: classic green with brighter head */
+    float is_head = (dist_from_head < 1.0) ? 1.0 : 0.0;
+
+    float3 green = float3(0.0, 0.8, 0.2);
+    float3 white = float3(0.8, 1.0, 0.8);
+
+    float3 color = lerp(green, white, is_head * 0.8);
+    color *= glyph * fade * bright;
+
+    /* Audio glow on specific columns */
+    float audio_col = frac(col_hash * 7.0);
+    if (audio_col < 0.3) {
+        color *= (1.0 + bands.x * 1.5);
+    }
+
+    /* Beat flash: briefly brighten all */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    color += green * beat * 0.1 * bands.x * glyph;
+
+    /* Subtle scanline */
+    float scanline = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    color *= 0.9 + 0.1 * scanline;
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSMatrixRain(vert_in);
+    }
+}

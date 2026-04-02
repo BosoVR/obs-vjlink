@@ -1,0 +1,13 @@
+{
+    "effect_id": "vhs_glitch",
+    "name": "VHS Glitch",
+    "category": "retro",
+    "description": "VHS tape tracking errors, snow noise, color bleeding, and head switching artifacts",
+    "author": "VJLink",
+    "params": [
+        { "id": "tracking_error", "name": "Tracking Error", "type": "float", "default": 0.02, "min": 0.0, "max": 0.1, "step": 0.005 },
+        { "id": "noise_intensity", "name": "Noise", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "id": "color_bleed", "name": "Color Bleed", "type": "float", "default": 0.005, "min": 0.0, "max": 0.02, "step": 0.001 },
+        { "id": "jitter", "name": "Jitter", "type": "float", "default": 0.002, "min": 0.0, "max": 0.01, "step": 0.001 }
+    ]
+}

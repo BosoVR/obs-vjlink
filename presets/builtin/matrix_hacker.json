@@ -1,0 +1,32 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Matrix Hacker",
+    "category": "retro",
+    "description": "Matrix rain with CRT and beat-flash overlay",
+    "effect_chain": [
+        {
+            "effect_id": "matrix_rain",
+            "blend_mode": "normal",
+            "params": {
+                "column_count": 50.0,
+                "fall_speed": 2.5,
+                "trail_length": 0.6,
+                "brightness": 1.2
+            },
+            "animations": [
+                { "param": "fall_speed", "source": "audio_band", "config": { "band": "bass", "scale": 3.0, "offset": 1.0 } }
+            ]
+        },
+        {
+            "effect_id": "beat_flash",
+            "blend_mode": "add",
+            "params": {
+                "flash_decay": 4.0,
+                "flash_color_r": 0.0,
+                "flash_color_g": 1.0,
+                "flash_color_b": 0.3,
+                "flash_intensity": 0.3
+            }
+        }
+    ]
+}

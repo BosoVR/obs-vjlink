@@ -1,0 +1,15 @@
+{
+  "id": "beat_blocks",
+  "name": "Beat Blocks",
+  "category": "geometric",
+  "params": [
+    { "name": "block_size", "label": "Block Size", "type": "float", "default": 0.08, "min": 0.02, "max": 0.3, "step": 0.01 },
+    { "name": "density", "label": "Density", "type": "float", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "pattern_mode", "label": "Pattern (0=Rand 1=Grid 2=Check 3=Diag 4=Spiral)", "type": "float", "default": 0.0, "min": 0.0, "max": 4.0, "step": 1.0 },
+    { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "logo_scale", "label": "Logo Scale", "type": "float", "default": 0.12, "min": 0.01, "max": 0.5, "step": 0.01 },
+    { "name": "color_variation", "label": "Color Variation", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01 }
+  ]
+}

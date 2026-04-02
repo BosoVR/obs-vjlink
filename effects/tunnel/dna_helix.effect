@@ -1,0 +1,167 @@
+/*
+ * VJLink DNA Helix Effect
+ * Raymarched double helix structure flying through a tunnel.
+ * Bass pulses the helix radius, beat drives rotation speed.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float helix_speed;     /* rotation speed (default 1.0) */
+uniform float helix_radius;    /* helix size (default 0.6) */
+uniform float strand_thickness;/* strand width (default 0.08) */
+uniform float fly_speed;       /* forward speed (default 1.5) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float sdCapsule(float3 p, float3 a, float3 b, float r)
+{
+    float3 ab = b - a;
+    float3 ap = p - a;
+    float t = saturate(dot(ap, ab) / dot(ab, ab));
+    float3 c = a + ab * t;
+    return length(p - c) - r;
+}
+
+float sceneSDF(float3 p)
+{
+    float rad = max(helix_radius, 0.1) + bands.x * 0.2;
+    float thick = max(strand_thickness, 0.02);
+    float rot = time * max(helix_speed, 0.1);
+
+    /* Beat pulse */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+    rot += beat * 0.5;
+
+    float d = 1e10;
+
+    /* Two helical strands */
+    for (int i = 0; i < 32; i++) {
+        float fi = float(i);
+        float t0 = fi / 32.0 * 6.28318;
+        float t1 = (fi + 1.0) / 32.0 * 6.28318;
+
+        /* Strand 1 */
+        float3 a1 = float3(rad * cos(t0 * 2.0 + rot), t0 - 3.14159, rad * sin(t0 * 2.0 + rot));
+        float3 b1 = float3(rad * cos(t1 * 2.0 + rot), t1 - 3.14159, rad * sin(t1 * 2.0 + rot));
+        d = min(d, sdCapsule(p, a1, b1, thick));
+
+        /* Strand 2 (180 degrees offset) */
+        float3 a2 = float3(rad * cos(t0 * 2.0 + rot + 3.14159), t0 - 3.14159, rad * sin(t0 * 2.0 + rot + 3.14159));
+        float3 b2 = float3(rad * cos(t1 * 2.0 + rot + 3.14159), t1 - 3.14159, rad * sin(t1 * 2.0 + rot + 3.14159));
+        d = min(d, sdCapsule(p, a2, b2, thick));
+
+        /* Cross-links every 4 segments */
+        if (i % 4 == 0) {
+            d = min(d, sdCapsule(p, a1, a2, thick * 0.5));
+        }
+    }
+
+    return d;
+}
+
+float3 calcNormal(float3 p)
+{
+    float2 e = float2(0.005, 0.0);
+    return normalize(float3(
+        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+    ));
+}
+
+float4 PSDnaHelix(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float speed = max(fly_speed, 0.1);
+    float z_offset = time * speed;
+
+    /* Camera looking along Y axis (helix axis) */
+    float3 ro = float3(0.0, -3.5, 0.0);
+    ro.x += sin(time * 0.3) * 0.5;
+    ro.z += cos(time * 0.3) * 0.5;
+
+    float3 ta = float3(0.0, 0.0, 0.0);
+    float3 ww = normalize(ta - ro);
+    float3 uu = normalize(cross(ww, float3(0.0, 0.0, 1.0)));
+    float3 vv = cross(uu, ww);
+    float3 rd = normalize(p.x * uu + p.y * vv + 1.5 * ww);
+
+    /* Raymarch */
+    float t = 0.0;
+    float3 color = float3(0.01, 0.01, 0.03);
+    float glow = 0.0;
+
+    for (int i = 0; i < 60; i++) {
+        float3 pos = ro + rd * t;
+        float d = sceneSDF(pos);
+
+        glow += 0.01 / (0.05 + d * d);
+
+        if (d < 0.005) {
+            float3 n = calcNormal(pos);
+            float3 light = normalize(float3(0.5, -0.5, 0.8));
+            float diff = max(dot(n, light), 0.0);
+            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 24.0);
+
+            /* Color based on strand position */
+            float hue = frac(pos.y * 0.1 + time * 0.05);
+            float3 base;
+            base.r = abs(hue * 6.0 - 3.0) - 1.0;
+            base.g = 2.0 - abs(hue * 6.0 - 2.0);
+            base.b = 2.0 - abs(hue * 6.0 - 4.0);
+            base = saturate(base);
+
+            /* Cyan/magenta dual coloring */
+            base = lerp(float3(0.0, 0.8, 1.0), float3(1.0, 0.2, 0.8),
+                       saturate(sin(pos.y * 2.0 + time) * 0.5 + 0.5));
+
+            color = base * (diff * 0.7 + 0.3) + float3(1.0, 1.0, 1.0) * spec * 0.5;
+            break;
+        }
+
+        t += d;
+        if (t > 20.0) break;
+    }
+
+    /* Glow */
+    float3 glow_col = float3(0.0, 0.5, 0.8) + float3(0.8, 0.0, 0.5) * bands.x;
+    color += glow_col * glow * 0.015;
+
+    color = color / (1.0 + color);
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSDnaHelix(vert_in);
+    }
+}

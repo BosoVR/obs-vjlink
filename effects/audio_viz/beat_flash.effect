@@ -1,0 +1,93 @@
+/*
+ * VJLink Beat Flash Effect
+ * Strobe/flash effect synchronized to detected beats.
+ * Full-screen flash with configurable color and decay.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float flash_decay;     /* how quickly flash fades (default 3.0) */
+uniform float flash_color_r;   /* flash color R (default 1.0) */
+uniform float flash_color_g;   /* flash color G (default 1.0) */
+uniform float flash_color_b;   /* flash color B (default 1.0) */
+uniform float flash_intensity; /* overall strength (default 0.8) */
+uniform float invert_on_beat;  /* invert colors on beat (default 0.0) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSBeatFlash(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float decay = max(flash_decay, 0.5);
+    float intens = max(flash_intensity, 0.0);
+    float invert = saturate(invert_on_beat);
+
+    float3 flash_col = float3(
+        saturate(flash_color_r),
+        saturate(flash_color_g),
+        saturate(flash_color_b)
+    );
+
+    /* Beat envelope: exponential decay from beat onset */
+    float beat = 1.0 - beat_phase;
+    float envelope = pow(beat, decay);
+
+    /* Scale by bass energy for natural feel */
+    envelope *= bands.x;
+
+    /* Sample source if available */
+    float4 src = image.Sample(texSampler, uv);
+
+    float3 color = src.rgb;
+
+    /* Apply flash as additive overlay */
+    color += flash_col * envelope * intens;
+
+    /* Optional color inversion on beat */
+    if (invert > 0.5) {
+        float inv_amount = envelope * 0.8;
+        color = lerp(color, 1.0 - color, inv_amount);
+    }
+
+    /* Strobe: full white flash on strong beats */
+    if (envelope > 0.9 && bands.x > 0.7) {
+        color = lerp(color, flash_col, envelope * intens * 0.5);
+    }
+
+    color = saturate(color);
+    float out_alpha = max(max(color.r, color.g), color.b);
+    return float4(color, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSBeatFlash(vert_in);
+    }
+}

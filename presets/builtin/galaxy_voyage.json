@@ -1,0 +1,22 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Galaxy Voyage",
+    "category": "3d",
+    "description": "Flying through a star-field tunnel with nebula clouds",
+    "effect_chain": [
+        {
+            "effect_id": "galaxy_tunnel",
+            "blend_mode": "normal",
+            "params": {
+                "fly_speed": 1.5,
+                "star_density": 1.2,
+                "nebula_density": 1.0,
+                "color_speed": 0.15
+            },
+            "animations": [
+                { "param": "fly_speed", "source": "audio_band", "config": { "band": "bass", "scale": 2.0, "offset": 0.5 } },
+                { "param": "nebula_density", "source": "audio_band", "config": { "band": "lowmid", "scale": 1.5, "offset": 0.3 } }
+            ]
+        }
+    ]
+}

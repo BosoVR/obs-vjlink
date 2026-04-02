@@ -1,0 +1,143 @@
+/*
+ * VJLink - Beat Rings
+ * Concentric rings expanding from center on each beat.
+ * Multiple ring layers with color cycling and audio reactivity.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float ring_width;     /* 0.005-0.1, default 0.02 */
+uniform float ring_count;     /* 1-8, default 4 */
+uniform float expand_speed;   /* 0.5-5.0, default 2.0 */
+uniform float color_mode;     /* 0=single, 1=rainbow, 2=band-mapped */
+uniform float flash_color_r;  /* default 1.0 */
+uniform float flash_color_g;  /* default 1.0 */
+uniform float flash_color_b;  /* default 1.0 */
+uniform float glow_amount;    /* 0.0-2.0, default 0.5 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float4 PSBeatRings(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    /* Centered coords with aspect correction */
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float dist = length(p);
+
+    float bass = bands.x;
+    float lowmid = bands.y;
+    float highmid = bands.z;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+
+    float3 base_col = float3(
+        saturate(flash_color_r),
+        saturate(flash_color_g),
+        saturate(flash_color_b)
+    );
+
+    float rwidth = max(ring_width, 0.005);
+    float espd = max(expand_speed, 0.5);
+    int rcount = clamp((int)ring_count, 1, 8);
+    float glow = max(glow_amount, 0.0);
+
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    /* Each ring spawns at a different time, expands outward */
+    for (int i = 0; i < 8; i++) {
+        if (i >= rcount) break;
+
+        float fi = (float)i;
+        float phase = fi / (float)rcount;
+
+        /* Ring expands over time from center */
+        float ring_radius = frac(time * espd * 0.3 + phase) * 1.8;
+
+        /* Fade as ring expands */
+        float ring_fade = 1.0 - ring_radius / 1.8;
+        ring_fade = ring_fade * ring_fade;
+
+        /* Ring shape: distance from ring radius */
+        float ring_dist = abs(dist - ring_radius);
+        float ring_bright = smoothstep(rwidth * (1.0 + bass * 0.5),
+                                        0.0, ring_dist);
+
+        /* Soft glow around ring */
+        float ring_glow = exp(-ring_dist * (10.0 - glow * 4.0)) * glow * 0.3;
+
+        /* Color per ring */
+        float3 ring_col = base_col;
+        float cmode = color_mode;
+
+        if (cmode > 0.5 && cmode < 1.5) {
+            /* Rainbow: hue from ring index + time */
+            float hue = frac(fi * 0.15 + time * 0.1);
+            ring_col = hsv2rgb(float3(hue, 0.9, 1.0));
+        } else if (cmode > 1.5) {
+            /* Band-mapped: each ring gets a different band color */
+            int band_idx = i % 4;
+            float band_val = 0.0;
+            if (band_idx == 0) { ring_col = float3(1.0, 0.2, 0.1); band_val = bass; }
+            else if (band_idx == 1) { ring_col = float3(1.0, 0.6, 0.1); band_val = lowmid; }
+            else if (band_idx == 2) { ring_col = float3(0.2, 1.0, 0.3); band_val = highmid; }
+            else { ring_col = float3(0.3, 0.4, 1.0); band_val = treble; }
+            ring_bright *= (0.3 + band_val * 0.7);
+        }
+
+        /* Beat intensity boost */
+        ring_bright *= (0.5 + beat * bass * 0.5 + bass * 0.3);
+
+        col += ring_col * (ring_bright + ring_glow) * ring_fade;
+    }
+
+    /* Center dot pulse */
+    float center_glow = exp(-dist * 8.0) * beat * bass * 0.5;
+    col += base_col * center_glow;
+
+    col = saturate(col);
+    float out_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSBeatRings(vert_in);
+    }
+}

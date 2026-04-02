@@ -1,0 +1,13 @@
+{
+    "effect_id": "crt_scanlines",
+    "name": "CRT Scanlines",
+    "category": "retro",
+    "description": "CRT monitor simulation with scanlines, screen curvature, and RGB phosphor mask",
+    "author": "VJLink",
+    "params": [
+        { "id": "scanline_intensity", "name": "Scanline Intensity", "type": "float", "default": 0.3, "min": 0.0, "max": 0.8, "step": 0.05 },
+        { "id": "curvature", "name": "Curvature", "type": "float", "default": 0.03, "min": 0.0, "max": 0.1, "step": 0.005 },
+        { "id": "vignette_amount", "name": "Vignette", "type": "float", "default": 0.5, "min": 0.0, "max": 2.0, "step": 0.1 },
+        { "id": "flicker", "name": "Flicker", "type": "float", "default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01 }
+    ]
+}

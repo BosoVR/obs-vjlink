@@ -1,0 +1,194 @@
+/*
+ * VJLink - Displacement / Warp Field
+ * UV distortion via animated noise field with audio reactivity.
+ * Standalone: generates flowing abstract warp patterns.
+ * Filter: warps input source with organic distortion.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float disp_amount;     /* displacement strength (default 0.05) */
+uniform float disp_scale;      /* noise scale (default 3.0) */
+uniform float disp_speed;      /* animation speed (default 0.5) */
+uniform float disp_detail;     /* noise octaves (default 3.0) */
+uniform float has_input_source; /* 1.0 when used as filter on a source */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float noise2d(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float fbm(float2 p, int octaves)
+{
+    float v = 0.0;
+    float a = 0.5;
+    float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
+    for (int i = 0; i < 6; i++) {
+        if (i >= octaves) break;
+        v += a * noise2d(p);
+        p = mul(p, rot) * 2.01;
+        a *= 0.5;
+    }
+    return v;
+}
+
+/* Cosine palette */
+float3 palette(float t)
+{
+    float3 a = float3(0.5, 0.5, 0.5);
+    float3 b = float3(0.5, 0.5, 0.5);
+    float3 c = float3(1.0, 1.0, 1.0);
+    float3 d = float3(0.0, 0.1, 0.2);
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+/* Standalone warp field visualization */
+float3 warpPattern(float2 uv, float2 disp_vec, float bass, float treble, float beat)
+{
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    /* Warp magnitude as brightness */
+    float warp_mag = length(disp_vec) * 20.0;
+
+    /* Flow lines from displacement field */
+    float2 flow_p = p * 4.0 + time * 0.2;
+    float flow = fbm(flow_p + disp_vec * 10.0, 4);
+
+    /* Color from warp direction */
+    float angle = atan2(disp_vec.y, disp_vec.x);
+    float hue = frac(angle / 6.28318 + time * 0.05);
+
+    float3 col = palette(hue + flow * 0.3);
+
+    /* Brightness from warp magnitude */
+    float brightness = 0.1 + warp_mag * 0.5;
+
+    /* Add flow detail */
+    float detail = fbm(flow_p * 3.0 - disp_vec * 5.0, 3);
+    float edge = abs(detail - 0.5) * 2.0;
+    edge = 1.0 - smoothstep(0.0, 0.3, edge);
+
+    col *= brightness;
+    col += col * edge * 0.5 * treble;
+
+    /* Bright spots at high warp regions */
+    float spots = pow(saturate(warp_mag * 0.3), 3.0);
+    col += float3(1.0, 0.8, 0.6) * spots * (1.0 + bass);
+
+    /* Vortex center glow */
+    float r = length(p);
+    float vortex = exp(-r * 2.0) * 0.2 * (1.0 + bass * 2.0);
+    col += palette(frac(time * 0.1)) * vortex;
+
+    /* Beat pulse */
+    col += float3(0.5, 0.3, 1.0) * beat * bass * 0.3;
+
+    /* Tonemap */
+    col = col / (1.0 + col * 0.4);
+
+    return saturate(col);
+}
+
+float4 PSDisplacement(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float bass = bands.x;
+    float treble = bands.w;
+
+    float amount = disp_amount + bass * disp_amount * 2.0;
+    float scale = max(disp_scale, 0.5);
+    float speed = disp_speed;
+    int detail = clamp(int(disp_detail), 1, 6);
+
+    /* Beat burst */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    amount += beat * disp_amount * 3.0 * bass;
+
+    /* Noise-based displacement field */
+    float2 np = uv * scale + float2(time * speed, time * speed * 0.7);
+
+    float dx = fbm(np, detail) * 2.0 - 1.0;
+    float dy = fbm(np + float2(50.0, 50.0), detail) * 2.0 - 1.0;
+
+    /* Audio-reactive swirl */
+    float2 center = uv - 0.5;
+    float r = length(center);
+    float swirl = bands.z * 0.5 * sin(r * 10.0 - time * 2.0);
+    dx += swirl * center.y;
+    dy -= swirl * center.x;
+
+    float2 disp_vec = float2(dx, dy) * amount;
+    float2 displaced_uv = uv + disp_vec;
+    displaced_uv = saturate(displaced_uv);
+
+    /* Check if we're in filter mode (explicitly set by C code) */
+    bool has_input = (has_input_source > 0.5);
+
+    if (!has_input) {
+        float3 pattern = warpPattern(uv, disp_vec, bass, treble, beat);
+        return float4(pattern, 1.0);
+    }
+
+    /* Filter mode: warp input with chromatic separation */
+    float chroma = length(disp_vec) * 3.0;
+    float2 chroma_offset = normalize(disp_vec + float2(0.001, 0.001)) * chroma * 0.003;
+
+    float4 color;
+    color.r = image.Sample(texSampler, displaced_uv + chroma_offset).r;
+    color.g = image.Sample(texSampler, displaced_uv).g;
+    color.b = image.Sample(texSampler, displaced_uv - chroma_offset).b;
+    color.a = image.Sample(texSampler, displaced_uv).a;
+
+    return color;
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSDisplacement(vert_in);
+    }
+}

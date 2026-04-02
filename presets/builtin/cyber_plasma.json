@@ -1,0 +1,33 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Cyber Plasma",
+    "category": "plasma",
+    "description": "Intense plasma with feedback trail and beat-synced color shifts",
+    "effect_chain": [
+        {
+            "effect_id": "plasma_classic",
+            "blend_mode": "normal",
+            "params": {
+                "plasma_scale": 4.0,
+                "color_speed": 0.5,
+                "distortion": 1.2,
+                "saturation": 1.5
+            },
+            "animations": [
+                { "param": "distortion", "source": "audio_band", "config": { "band": "bass", "scale": 3.0, "offset": 0.5 } },
+                { "param": "color_speed", "source": "beat_env", "config": { "decay": 2.0, "scale": 3.0 } }
+            ]
+        },
+        {
+            "effect_id": "feedback",
+            "blend_mode": "add",
+            "params": {
+                "fb_decay": 0.85,
+                "fb_zoom": 1.01,
+                "fb_rotation": 0.005,
+                "fb_hue_shift": 0.02,
+                "fb_mix": 0.4
+            }
+        }
+    ]
+}

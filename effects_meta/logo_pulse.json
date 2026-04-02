@@ -1,0 +1,12 @@
+{
+  "id": "logo_pulse",
+  "name": "Logo Pulse",
+  "category": "geometric",
+  "params": [
+    { "name": "logo_scale", "label": "Logo Scale", "type": "float", "default": 0.25, "min": 0.05, "max": 0.8, "step": 0.01 },
+    { "name": "pulse_strength", "label": "Pulse Strength", "type": "float", "default": 1.5, "min": 0.0, "max": 3.0, "step": 0.1 },
+    { "name": "decay_rate", "label": "Decay Rate", "type": "float", "default": 2.0, "min": 0.5, "max": 5.0, "step": 0.1 },
+    { "name": "glow_amount", "label": "Glow", "type": "float", "default": 0.8, "min": 0.0, "max": 2.0, "step": 0.1 },
+    { "name": "rotation_speed", "label": "Rotation Speed", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 0.1 }
+  ]
+}

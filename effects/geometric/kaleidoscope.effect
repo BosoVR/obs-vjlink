@@ -1,0 +1,147 @@
+/*
+ * VJLink - Kaleidoscope
+ * Radial mirror symmetry with audio-reactive segment count and rotation.
+ * Creates mandala-like patterns from generated noise.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom parameters */
+uniform float     segments;       /* 3.0 - 16.0, default 6.0 */
+uniform float     zoom;           /* 0.5 - 5.0, default 2.0 */
+uniform float     rotate_speed;   /* 0.0 - 2.0, default 0.5 */
+uniform float     complexity;     /* 1.0 - 5.0, default 3.0 */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+/* Simple hash-based noise */
+float hash(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float noise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f); /* smoothstep */
+
+    float a = hash(i);
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float fbm(float2 p, int octaves)
+{
+    float value = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 5; i++) {
+        if (i >= octaves) break;
+        value += amp * noise(p);
+        p *= 2.0;
+        amp *= 0.5;
+    }
+    return value;
+}
+
+float4 PSKaleidoscope(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float bass    = bands.x;
+    float lowmid  = bands.y;
+    float highmid = bands.z;
+    float treble  = bands.w;
+
+    /* Polar coordinates */
+    float r = length(p);
+    float a = atan2(p.y, p.x);
+
+    /* Audio-reactive rotation */
+    float rot = time * rotate_speed + bass * 0.5;
+    a += rot;
+
+    /* Kaleidoscope mirror: fold angle into segment */
+    float seg = max(3.0, floor(segments + highmid * 2.0));
+    float segment_angle = 6.28318 / seg;
+    a = abs(fmod(a, segment_angle) - segment_angle * 0.5);
+
+    /* Back to cartesian for noise sampling */
+    float2 kp;
+    kp.x = r * cos(a) * zoom;
+    kp.y = r * sin(a) * zoom;
+
+    /* Animated noise pattern */
+    float t = time * 0.3;
+    float n1 = fbm(kp * complexity + float2(t, t * 0.7), 4);
+    float n2 = fbm(kp * complexity * 1.5 + float2(-t * 0.5, t * 0.3), 3);
+
+    /* Color layers */
+    float3 c1 = float3(
+        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 0.0),
+        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 2.094),
+        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 4.189)
+    );
+
+    float3 c2 = float3(
+        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 1.0),
+        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 3.0),
+        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 5.0)
+    );
+
+    /* Blend with audio */
+    float3 color = lerp(c1, c2, lowmid);
+
+    /* Edge glow on segment boundaries */
+    float edge = 1.0 - smoothstep(0.0, 0.02, abs(fmod(atan2(p.y, p.x) + rot, segment_angle) - segment_angle * 0.5) - segment_angle * 0.48);
+    color += edge * treble * 0.5 * float3(0.5, 0.8, 1.0);
+
+    /* Radial brightness */
+    float radial = 1.0 - r * 0.4;
+    color *= clamp(radial, 0.2, 1.0);
+
+    /* Beat pulse */
+    float beat = (1.0 - beat_phase);
+    beat = beat * beat;
+    color *= 1.0 + beat * bass * 0.5;
+
+    return float4(clamp(color, 0.0, 1.0), 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSKaleidoscope(vert_in);
+    }
+}

@@ -1,0 +1,161 @@
+/*
+ * VJLink Particle Simulation Shader
+ * GPU-based particle physics: position + velocity ping-pong update.
+ * Each texel = one particle. RGBA32F state/velocity textures.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d state_tex;   /* pos.xyz + lifetime */
+uniform texture2d vel_tex;     /* vel.xyz + age */
+uniform texture2d audio_tex;
+
+uniform float  dt;
+uniform float  gravity;
+uniform float  lifetime;
+uniform float  emit_speed;
+uniform float  time;
+uniform float4 bands;          /* bass, lowmid, highmid, treble */
+uniform float  audio_force;
+
+sampler_state pointSampler {
+    Filter   = Point;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+/* Simple hash for pseudo-random */
+float hash(float2 p)
+{
+    float h = dot(p, float2(127.1, 311.7));
+    return frac(sin(h) * 43758.5453);
+}
+
+float3 hash3(float2 p)
+{
+    return float3(
+        hash(p),
+        hash(p + float2(37.0, 17.0)),
+        hash(p + float2(59.0, 83.0))
+    );
+}
+
+/* State update: position integration + respawn */
+float4 PSSimState(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 state = state_tex.Sample(pointSampler, uv);
+    float4 vel   = vel_tex.Sample(pointSampler, uv);
+
+    float3 pos = state.xyz;
+    float  life = state.w;
+    float  age  = vel.w;
+
+    /* Advance age */
+    age += dt;
+
+    /* Respawn if particle is dead */
+    if (age >= lifetime) {
+        float3 rng = hash3(uv + float2(time, time * 0.7));
+
+        /* Respawn at origin with small random offset */
+        float theta = rng.x * 6.28318;
+        float phi = acos(2.0 * rng.y - 1.0);
+        float r = pow(rng.z, 0.333) * 0.1;
+
+        pos.x = r * sin(phi) * cos(theta);
+        pos.y = r * sin(phi) * sin(theta);
+        pos.z = r * cos(phi);
+
+        age = 0.0;
+        life = 0.0;
+    } else {
+        /* Integrate position */
+        pos += vel.xyz * dt;
+
+        /* Normalized lifetime 0..1 */
+        life = age / lifetime;
+    }
+
+    return float4(pos, life);
+}
+
+/* Velocity update: forces + respawn velocity */
+float4 PSSimVelocity(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 state = state_tex.Sample(pointSampler, uv);
+    float4 vel   = vel_tex.Sample(pointSampler, uv);
+
+    float3 v   = vel.xyz;
+    float  age = vel.w;
+
+    /* Respawn: assign new velocity */
+    if (age + dt >= lifetime) {
+        float3 rng = hash3(uv + float2(time * 1.3, time * 0.9));
+        float3 rng2 = hash3(uv + float2(time * 2.1, time * 1.7));
+
+        float theta = rng.x * 6.28318;
+        float phi = rng.y * 3.14159 * 0.6; /* upward bias */
+        float spd = emit_speed * (0.5 + rng.z);
+
+        v.x = spd * sin(phi) * cos(theta);
+        v.y = spd * cos(phi);
+        v.z = spd * sin(phi) * sin(theta);
+
+        /* Audio burst on respawn */
+        v *= 1.0 + bands.x * audio_force * 0.5;
+
+        age = 0.0;
+    } else {
+        /* Gravity */
+        v.y += gravity * dt;
+
+        /* Audio-reactive forces */
+        float bass_force = bands.x * audio_force;
+        float3 radial = normalize(state.xyz + float3(0.001, 0.001, 0.001));
+        v += radial * bass_force * dt * 2.0;
+
+        /* Treble turbulence */
+        float turb = bands.w * audio_force * 0.3;
+        float3 noise_dir = hash3(uv + float2(time * 3.0, 0.0)) * 2.0 - 1.0;
+        v += noise_dir * turb * dt;
+
+        /* Mild drag */
+        v *= 1.0 - 0.5 * dt;
+
+        age += dt;
+    }
+
+    return float4(v, age);
+}
+
+technique SimState
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSimState(vert_in);
+    }
+}
+
+technique SimVelocity
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSimVelocity(vert_in);
+    }
+}

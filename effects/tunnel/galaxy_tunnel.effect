@@ -1,0 +1,152 @@
+/*
+ * VJLink Galaxy Tunnel Effect
+ * Raymarched star-field tunnel with volumetric nebula.
+ * Bass drives nebula intensity, treble drives star brightness.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float fly_speed;       /* camera speed (default 1.5) */
+uniform float star_density;    /* star count factor (default 1.0) */
+uniform float nebula_density;  /* nebula brightness (default 0.8) */
+uniform float color_speed;     /* color cycling (default 0.2) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash(float3 p)
+{
+    p = frac(p * float3(443.897, 441.423, 437.195));
+    p += dot(p, p.yzx + 19.19);
+    return frac((p.x + p.y) * p.z);
+}
+
+float noise3d(float3 p)
+{
+    float3 i = floor(p);
+    float3 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n = lerp(
+        lerp(lerp(hash(i), hash(i + float3(1,0,0)), f.x),
+             lerp(hash(i + float3(0,1,0)), hash(i + float3(1,1,0)), f.x), f.y),
+        lerp(lerp(hash(i + float3(0,0,1)), hash(i + float3(1,0,1)), f.x),
+             lerp(hash(i + float3(0,1,1)), hash(i + float3(1,1,1)), f.x), f.y),
+        f.z);
+    return n;
+}
+
+float fbm3d(float3 p)
+{
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        v += a * noise3d(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+/* Star layer */
+float stars(float2 uv, float layer)
+{
+    float2 cell = floor(uv);
+    float2 f = frac(uv) - 0.5;
+
+    float h = hash(float3(cell, layer));
+    float2 offset = float2(hash(float3(cell + 100.0, layer)),
+                           hash(float3(cell + 200.0, layer))) - 0.5;
+
+    float d = length(f - offset * 0.7);
+    float brightness = pow(h, 3.0);
+    float star = brightness * exp(-d * d * 80.0);
+
+    return star;
+}
+
+float4 PSGalaxyTunnel(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float speed = max(fly_speed, 0.1) + bands.x * 0.5;
+    float z_pos = time * speed;
+
+    /* Tunnel warp: bend toward center */
+    float r = length(p);
+    float a = atan2(p.y, p.x);
+
+    float3 color = float3(0.0, 0.0, 0.0);
+
+    /* Star layers at different depths */
+    float star_dens = max(star_density, 0.1);
+    for (int i = 0; i < 4; i++) {
+        float fi = float(i);
+        float depth = 1.0 + fi * 0.5;
+        float2 star_uv = p * (10.0 + fi * 5.0) * star_dens;
+        star_uv += float2(cos(a + fi) * z_pos * 0.3, sin(a + fi) * z_pos * 0.3);
+
+        float s = stars(star_uv, fi);
+        float3 star_col = float3(0.8 + 0.2 * sin(fi), 0.9, 1.0) * s;
+        star_col *= (1.0 + bands.w * 2.0); /* treble = brighter stars */
+        color += star_col / depth;
+    }
+
+    /* Nebula volume */
+    float neb_dens = max(nebula_density, 0.0);
+    float3 nebula_pos = float3(p * 2.0, z_pos * 0.2);
+    float nebula = fbm3d(nebula_pos);
+    nebula = pow(nebula, 1.5) * neb_dens;
+
+    float hue = frac(time * color_speed + r * 0.3 + bands.y * 0.2);
+    float3 neb_col;
+    neb_col.r = abs(hue * 6.0 - 3.0) - 1.0;
+    neb_col.g = 2.0 - abs(hue * 6.0 - 2.0);
+    neb_col.b = 2.0 - abs(hue * 6.0 - 4.0);
+    neb_col = saturate(neb_col);
+
+    color += neb_col * nebula * (1.0 + bands.x * 1.5);
+
+    /* Tunnel radial glow */
+    float tunnel_glow = exp(-r * 2.0) * 0.15;
+    color += float3(0.3, 0.2, 0.5) * tunnel_glow * (1.0 + bands.x);
+
+    /* Beat flash */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    color += float3(0.2, 0.15, 0.3) * beat * bands.x * 0.5;
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSGalaxyTunnel(vert_in);
+    }
+}

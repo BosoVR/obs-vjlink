@@ -1,0 +1,14 @@
+{
+    "id": "color_grade",
+    "name": "Color Grade",
+    "category": "postprocess",
+    "description": "Post-processing: brightness, contrast, saturation, hue, vignette",
+    "params": [
+        { "name": "pp_brightness", "label": "Brightness", "type": "float", "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },
+        { "name": "pp_contrast", "label": "Contrast", "type": "float", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05 },
+        { "name": "pp_saturation", "label": "Saturation", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 0.05 },
+        { "name": "pp_hue_shift", "label": "Hue Shift", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+        { "name": "pp_vignette", "label": "Vignette", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05 },
+        { "name": "pp_gamma", "label": "Gamma", "type": "float", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05 }
+    ]
+}

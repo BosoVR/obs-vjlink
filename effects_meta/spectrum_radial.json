@@ -1,0 +1,13 @@
+{
+    "effect_id": "spectrum_radial",
+    "name": "Spectrum Radial",
+    "category": "audio_viz",
+    "description": "Circular frequency spectrum with rainbow bars and beat-pulsing inner ring",
+    "author": "VJLink",
+    "params": [
+        { "id": "inner_radius", "name": "Inner Radius", "type": "float", "default": 0.2, "min": 0.05, "max": 0.5, "step": 0.05 },
+        { "id": "bar_height", "name": "Bar Height", "type": "float", "default": 0.3, "min": 0.05, "max": 0.8, "step": 0.05 },
+        { "id": "bar_count", "name": "Bar Count", "type": "float", "default": 64.0, "min": 8.0, "max": 128.0, "step": 8.0 },
+        { "id": "mirror_mode", "name": "Mirror", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+    ]
+}

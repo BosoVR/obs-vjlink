@@ -1,0 +1,36 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Fractal Journey",
+    "category": "fractal",
+    "description": "Morphing Julia set with audio-driven parameters and feedback",
+    "effect_chain": [
+        {
+            "effect_id": "julia_set",
+            "blend_mode": "normal",
+            "params": {
+                "julia_zoom": 1.5,
+                "max_iterations": 128.0,
+                "orbit_radius": 0.7885,
+                "orbit_speed": 0.2
+            },
+            "animations": [
+                { "param": "orbit_radius", "source": "audio_band", "config": { "band": "bass", "scale": 0.3, "offset": 0.6 } },
+                { "param": "orbit_speed", "source": "lfo", "config": { "waveform": "sine", "freq": 0.05, "min": 0.1, "max": 0.5 } }
+            ]
+        },
+        {
+            "effect_id": "feedback",
+            "blend_mode": "add",
+            "params": {
+                "fb_decay": 0.9,
+                "fb_zoom": 1.005,
+                "fb_rotation": 0.002,
+                "fb_hue_shift": 0.01,
+                "fb_mix": 0.3
+            }
+        }
+    ],
+    "lfo_config": [
+        { "waveform": "sine", "freq": 0.05, "sync_to_beat": false }
+    ]
+}

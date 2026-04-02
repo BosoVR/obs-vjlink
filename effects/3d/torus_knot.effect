@@ -1,0 +1,158 @@
+/*
+ * VJLink Torus Knot Effect
+ * Raymarched torus knot with audio-reactive deformation.
+ * Bass warps the knot, treble drives specular highlights.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+/* Custom params */
+uniform float knot_p;          /* knot parameter p (default 3) */
+uniform float knot_q;          /* knot parameter q (default 2) */
+uniform float knot_radius;     /* major radius (default 2.0) */
+uniform float tube_radius;     /* tube radius (default 0.4) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+/* Torus knot curve point at parameter t */
+float3 knotPoint(float t, float pp, float qq, float R)
+{
+    float r_minor = R * 0.4;
+    float3 pt;
+    pt.x = (R + r_minor * cos(qq * t)) * cos(pp * t);
+    pt.y = (R + r_minor * cos(qq * t)) * sin(pp * t);
+    pt.z = r_minor * sin(qq * t);
+    return pt;
+}
+
+/* Distance to torus knot via closest-point sampling */
+float sdTorusKnot(float3 p, float pp, float qq, float R, float tubeR)
+{
+    float minDist = 1e10;
+    float bass_warp = bands.x * 0.3;
+
+    for (int i = 0; i < 32; i++) {
+        float t = float(i) / 32.0 * 6.28318;
+        float3 kp = knotPoint(t, pp, qq, R);
+
+        /* Audio warp */
+        kp += sin(t * 3.0 + time) * bass_warp;
+
+        float d = length(p - kp) - tubeR;
+        minDist = min(minDist, d);
+    }
+    return minDist;
+}
+
+float sceneSDF(float3 p)
+{
+    float pp = max(knot_p, 1.0);
+    float qq = max(knot_q, 1.0);
+    float R = max(knot_radius, 0.5);
+    float tubeR = max(tube_radius, 0.05);
+
+    /* Beat pulse on tube radius */
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+    tubeR += beat * 0.15;
+
+    return sdTorusKnot(p, pp, qq, R, tubeR);
+}
+
+float3 calcNormal(float3 p)
+{
+    float2 e = float2(0.01, 0.0);
+    return normalize(float3(
+        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
+        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
+        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
+    ));
+}
+
+float4 PSTorusKnot(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    /* Orbiting camera */
+    float angle = time * 0.4;
+    float3 ro = float3(cos(angle) * 5.0, sin(time * 0.3) * 2.0, sin(angle) * 5.0);
+    float3 ta = float3(0.0, 0.0, 0.0);
+
+    float3 ww = normalize(ta - ro);
+    float3 uu = normalize(cross(ww, float3(0.0, 1.0, 0.0)));
+    float3 vv = cross(uu, ww);
+    float3 rd = normalize(p.x * uu + p.y * vv + 1.8 * ww);
+
+    /* Raymarch */
+    float t = 0.0;
+    float3 color = float3(0.02, 0.01, 0.04); /* dark background */
+    float glow = 0.0;
+
+    for (int i = 0; i < 48; i++) {
+        float3 pos = ro + rd * t;
+        float d = sceneSDF(pos);
+
+        glow += 0.015 / (0.05 + d * d);
+
+        if (d < 0.01) {
+            float3 n = calcNormal(pos);
+            float3 light = normalize(float3(0.6, 0.8, -0.4));
+            float diff = max(dot(n, light), 0.0);
+            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 16.0 + bands.w * 48.0);
+
+            /* Iridescent color based on position */
+            float hue = frac(atan2(pos.z, pos.x) * 0.5 / 3.14159 + time * 0.1);
+            float3 base;
+            base.r = abs(hue * 6.0 - 3.0) - 1.0;
+            base.g = 2.0 - abs(hue * 6.0 - 2.0);
+            base.b = 2.0 - abs(hue * 6.0 - 4.0);
+            base = saturate(base);
+
+            color = base * (diff * 0.7 + 0.3) + float3(1.0, 0.9, 0.8) * spec;
+            break;
+        }
+
+        t += d * 0.8;
+        if (t > 30.0) break;
+    }
+
+    /* Glow */
+    float3 glow_col = float3(0.4 + bands.y * 0.6, 0.2, 0.6 + bands.z * 0.4);
+    color += glow_col * glow * 0.01;
+
+    color = color / (1.0 + color);
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSTorusKnot(vert_in);
+    }
+}

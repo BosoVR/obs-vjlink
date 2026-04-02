@@ -1,0 +1,33 @@
+{
+    "vjlink_version": "1.0",
+    "preset_name": "Hex Rave",
+    "category": "tunnel",
+    "description": "Hex tunnel with intense color cycling and beat-driven speed",
+    "effect_chain": [
+        {
+            "effect_id": "hex_tunnel",
+            "blend_mode": "normal",
+            "params": {
+                "hex_scale": 10.0,
+                "tunnel_speed": 1.5,
+                "glow_width": 0.06,
+                "color_cycle": 0.5
+            },
+            "animations": [
+                { "param": "tunnel_speed", "source": "audio_band", "config": { "band": "bass", "scale": 3.0, "offset": 0.5 } },
+                { "param": "color_cycle", "source": "beat_env", "config": { "decay": 1.5, "scale": 2.0 } }
+            ]
+        },
+        {
+            "effect_id": "beat_flash",
+            "blend_mode": "add",
+            "params": {
+                "flash_decay": 5.0,
+                "flash_color_r": 1.0,
+                "flash_color_g": 0.5,
+                "flash_color_b": 1.0,
+                "flash_intensity": 0.2
+            }
+        }
+    ]
+}

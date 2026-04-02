@@ -1,0 +1,12 @@
+{
+  "id": "flash_snare",
+  "name": "Snare Flash",
+  "category": "flash",
+  "params": [
+    { "name": "intensity", "label": "Intensity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01 },
+    { "name": "sharpness", "label": "Sharpness", "type": "float", "default": 3.0, "min": 1.0, "max": 8.0, "step": 0.1 },
+    { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 }
+  ]
+}

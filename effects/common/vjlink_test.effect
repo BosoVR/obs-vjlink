@@ -1,0 +1,92 @@
+/*
+ * VJLink Test Effect
+ * Audio-reactive plasma visualization for pipeline validation.
+ *
+ * Samples the audio texture to drive colors and movement speed
+ * based on frequency band energy (bass, low-mid, high-mid, treble).
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;      /* x=bass, y=lowmid, z=highmid, w=treble */
+uniform float     beat_phase;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float4 PSAudioPlasma(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0; /* center coordinates: -1 to 1 */
+
+    /* Aspect ratio correction */
+    p.x *= resolution.x / resolution.y;
+
+    /* Audio-driven parameters */
+    float bass    = bands.x;
+    float lowmid  = bands.y;
+    float highmid = bands.z;
+    float treble  = bands.w;
+
+    /* Speed driven by overall energy */
+    float speed = time * (0.5 + bass * 2.0);
+
+    /* Plasma function: layered sine waves */
+    float v1 = sin(p.x * 3.0 + speed);
+    float v2 = sin(p.y * 4.0 - speed * 0.7);
+    float v3 = sin((p.x + p.y) * 2.0 + speed * 1.3);
+    float v4 = sin(length(p) * 5.0 - speed * 0.9);
+
+    /* Combine with audio weighting */
+    float plasma = v1 * (0.3 + bass * 0.7)
+                 + v2 * (0.3 + lowmid * 0.7)
+                 + v3 * (0.3 + highmid * 0.7)
+                 + v4 * (0.3 + treble * 0.7);
+
+    plasma *= 0.25; /* normalize to roughly -1..1 */
+
+    /* Color mapping: audio bands drive RGB channels */
+    float3 color;
+    color.r = 0.5 + 0.5 * sin(plasma * 3.14159 + bass * 6.28 + 0.0);
+    color.g = 0.5 + 0.5 * sin(plasma * 3.14159 + highmid * 6.28 + 2.094);
+    color.b = 0.5 + 0.5 * sin(plasma * 3.14159 + treble * 6.28 + 4.189);
+
+    /* Beat flash: brief brightness boost on beat */
+    float beat_flash = 1.0 - beat_phase;
+    beat_flash = beat_flash * beat_flash * beat_flash; /* cubic falloff */
+    color += beat_flash * 0.3 * bass;
+
+    /* Vignette */
+    float vignette = 1.0 - length(uv - 0.5) * 1.2;
+    vignette = clamp(vignette, 0.0, 1.0);
+    color *= vignette;
+
+    return float4(color, 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSAudioPlasma(vert_in);
+    }
+}
