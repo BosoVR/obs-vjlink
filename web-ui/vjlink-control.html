@@ -2267,17 +2267,16 @@ async function selectEffect(effectId) {
   renderEffects();
 }
 
+let _bandParamSilent = false; /* suppress flash during audio polling */
 async function setBandParam(bandIndex, name, value) {
-  if (!ws || !connected) {
-    const el = document.getElementById('paramVal_' + name);
-    if (el) { el.style.color = 'var(--red)'; setTimeout(() => { el.style.color = ''; }, 300); }
-    return;
-  }
+  if (!ws || !connected) return;
   const resp = await sendRequest('SetBandParam', { band: bandIndex, param: name, value: parseFloat(value) });
-  const el = document.getElementById('paramVal_' + name);
-  if (el) {
-    el.style.color = resp ? 'var(--green)' : 'var(--red)';
-    setTimeout(() => { el.style.color = ''; }, 200);
+  if (!_bandParamSilent) {
+    const el = document.getElementById('paramVal_' + name);
+    if (el) {
+      el.style.color = resp ? 'var(--green)' : 'var(--red)';
+      setTimeout(() => { el.style.color = ''; }, 200);
+    }
   }
 }
 
@@ -2511,18 +2510,25 @@ function renderParams() {
 function renderParamBandAmount(paramName, parentEl) {
   const wrap = document.getElementById('paramBandAmountWrap_' + paramName);
   if (!wrap) return;
-  if (paramBandMappings[paramName]) {
-    wrap.innerHTML = `<div style="display:flex;gap:4px;align-items:center">
-      <span style="font-size:9px;color:var(--text-dim)">Amt</span>
-      <input type="range" min="0" max="200" value="100" step="5"
-        style="width:50px;height:3px"
-        title="Amount: how much audio affects this param"
-        oninput="setParamBandAmount('${paramName}',this.value/100)">
-      <span style="font-size:9px;color:var(--text-dim)">Thr</span>
-      <input type="range" min="0" max="80" value="0" step="5"
-        style="width:50px;height:3px"
-        title="Threshold: audio level below this is ignored"
-        oninput="setParamBandThreshold('${paramName}',this.value/100)">
+  const m = paramBandMappings[paramName];
+  if (m) {
+    const bandLabels = ['Bass','LowMid','HiMid','Treble'];
+    const bandColors = ['var(--bass-color)','var(--lowmid-color)','var(--highmid-color)','var(--treble-color)'];
+    wrap.innerHTML = `
+    <div style="margin-top:6px;padding:8px;background:var(--bg);border:1px solid ${bandColors[m.band]};border-radius:6px">
+      <div style="font-size:10px;color:${bandColors[m.band]};font-weight:600;margin-bottom:6px">Audio: ${bandLabels[m.band]}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text);width:55px">Amount</span>
+        <input type="range" min="0" max="300" value="${((m.amount||1)*100).toFixed(0)}" step="5" style="flex:1;height:4px"
+          oninput="setParamBandAmount('${paramName}',this.value/100);this.nextElementSibling.textContent=this.value+'%'">
+        <span style="font-size:11px;color:var(--cyan);width:40px;text-align:right;font-variant-numeric:tabular-nums">${((m.amount||1)*100).toFixed(0)}%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text);width:55px">Threshold</span>
+        <input type="range" min="0" max="90" value="${((m.threshold||0)*100).toFixed(0)}" step="5" style="flex:1;height:4px"
+          oninput="setParamBandThreshold('${paramName}',this.value/100);this.nextElementSibling.textContent=this.value+'%'">
+        <span style="font-size:11px;color:var(--orange);width:40px;text-align:right;font-variant-numeric:tabular-nums">${((m.threshold||0)*100).toFixed(0)}%</span>
+      </div>
     </div>`;
   } else {
     wrap.innerHTML = '';
@@ -2824,16 +2830,28 @@ function setBandParamAudioMapping(bandIdx, paramName, audioBand, min, max) {
 function renderBandParamControls(paramName, parentEl) {
   const wrap = document.getElementById('bandParamExtra_' + paramName);
   if (!wrap) return;
-  if (bandParamMappings[paramName]) {
-    wrap.innerHTML = `<div style="display:flex;gap:4px;align-items:center;margin-top:3px">
-      <span style="font-size:9px;color:var(--text-dim)">Amt</span>
-      <input type="range" min="0" max="200" value="100" step="5" style="width:50px;height:3px"
-        title="Amount: how much audio affects this param"
-        oninput="if(bandParamMappings['${paramName}'])bandParamMappings['${paramName}'].amount=this.value/100">
-      <span style="font-size:9px;color:var(--text-dim)">Thr</span>
-      <input type="range" min="0" max="80" value="0" step="5" style="width:50px;height:3px"
-        title="Threshold: audio level below this is ignored"
-        oninput="if(bandParamMappings['${paramName}'])bandParamMappings['${paramName}'].threshold=this.value/100">
+  const m = bandParamMappings[paramName];
+  if (m) {
+    const bandLabels = ['Bass','LowMid','HiMid','Treble'];
+    const bandColors = ['var(--bass-color)','var(--lowmid-color)','var(--highmid-color)','var(--treble-color)'];
+    wrap.innerHTML = `
+    <div style="margin-top:6px;padding:8px;background:var(--bg);border:1px solid ${bandColors[m.audioBand]};border-radius:6px">
+      <div style="font-size:10px;color:${bandColors[m.audioBand]};font-weight:600;margin-bottom:6px">Audio: ${bandLabels[m.audioBand]}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text);width:55px">Amount</span>
+        <input type="range" min="0" max="300" value="${(m.amount*100).toFixed(0)}" step="5" style="flex:1;height:4px"
+          oninput="if(bandParamMappings['${paramName}']){bandParamMappings['${paramName}'].amount=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
+        <span style="font-size:11px;color:var(--cyan);width:40px;text-align:right;font-variant-numeric:tabular-nums">${(m.amount*100).toFixed(0)}%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text);width:55px">Threshold</span>
+        <input type="range" min="0" max="90" value="${(m.threshold*100).toFixed(0)}" step="5" style="flex:1;height:4px"
+          oninput="if(bandParamMappings['${paramName}']){bandParamMappings['${paramName}'].threshold=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
+        <span style="font-size:11px;color:var(--orange);width:40px;text-align:right;font-variant-numeric:tabular-nums">${(m.threshold*100).toFixed(0)}%</span>
+      </div>
+      <div style="margin-top:4px;font-size:10px;color:var(--text-dim)">
+        Live: <span id="bandParamLive_${paramName}" style="color:var(--green);font-weight:600">—</span>
+      </div>
     </div>`;
   } else {
     wrap.innerHTML = '';
@@ -2842,19 +2860,25 @@ function renderBandParamControls(paramName, parentEl) {
 
 /* Called from the polling loop to apply audio modulation to band params */
 function updateBandParamMappings(bandLevels) {
+  _bandParamSilent = true;
   Object.entries(bandParamMappings).forEach(([paramName, m]) => {
     let level = bandLevels[m.audioBand] || 0;
     /* Apply threshold: ignore audio below this level */
-    if (level < m.threshold) level = 0;
-    else level = (level - m.threshold) / (1.0 - m.threshold); /* remap 0-1 above threshold */
+    const thr = m.threshold || 0;
+    if (level < thr) level = 0;
+    else if (thr < 1.0) level = (level - thr) / (1.0 - thr);
     /* Apply amount */
-    level *= m.amount;
-    const modulated = m.baseValue + (m.max - m.baseValue) * level;
+    level *= (m.amount || 1.0);
+    /* Modulate: base value + (range * level) */
+    const range = m.max - m.min;
+    const modulated = m.baseValue + range * level;
     const val = Math.min(m.max, Math.max(m.min, modulated));
     setBandParam(m.bandIndex, paramName, val);
-    const valEl = document.getElementById('paramVal_' + paramName);
-    if (valEl) valEl.textContent = val.toFixed(2);
+    /* Update live display */
+    const liveEl = document.getElementById('bandParamLive_' + paramName);
+    if (liveEl) liveEl.textContent = val.toFixed(2);
   });
+  _bandParamSilent = false;
 }
 
 async function updateBandSlot(bandIndex) {
