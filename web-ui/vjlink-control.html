@@ -2374,38 +2374,62 @@ const randomizableParams = [
   'scan_angle','sort_direction','aberration_type',
 ];
 
-let randomIntervals = {}; /* paramName -> intervalId */
+let randomIntervals = {}; /* "bandIdx:paramName" -> intervalId */
 let activeBandIndex = -1; /* -1 = main effect, 0-3 = band slot */
 
-function startRandomParam(paramName, min, max, step) {
-  if (randomIntervals[paramName]) return;
-  const bandIdx = activeBandIndex; /* capture current context */
-  randomIntervals[paramName] = setInterval(() => {
+function rndKey(paramName) {
+  return (activeBandIndex >= 0 ? activeBandIndex : 'main') + ':' + paramName;
+}
+
+function startRandomParam(paramName, min, max, step, bandIdx) {
+  if (bandIdx === undefined) bandIdx = activeBandIndex;
+  const key = (bandIdx >= 0 ? bandIdx : 'main') + ':' + paramName;
+  if (randomIntervals[key]) return; /* already running */
+  randomIntervals[key] = setInterval(() => {
     const range = max - min;
     const isInt = step >= 1;
     let val = isInt
       ? Math.floor(Math.random() * (range / step + 1)) * step + min
       : Math.random() * range + min;
     val = Math.round(val / step) * step;
+    /* Always send to backend regardless of which tab is shown */
     if (bandIdx >= 0) {
       setBandParam(bandIdx, paramName, val);
+      bandSlots[bandIdx].paramCache[paramName] = val;
     } else {
       setParam(paramName, val);
     }
-    const valEl = document.getElementById('paramVal_' + paramName);
-    if (valEl) valEl.textContent = val.toFixed(isInt ? 0 : 2);
-    const slider = document.getElementById('paramSlider_' + paramName);
-    if (slider) slider.value = val;
-    const sel = document.getElementById('paramSelect_' + paramName);
-    if (sel) sel.value = val;
+    /* Only update UI if this band's tab is currently visible */
+    const isVisible = (bandIdx >= 0 && activeBandIndex === bandIdx) ||
+                      (bandIdx < 0 && activeBandIndex < 0);
+    if (isVisible) {
+      const valEl = document.getElementById('paramVal_' + paramName);
+      if (valEl) valEl.textContent = val.toFixed(isInt ? 0 : 2);
+      const slider = document.getElementById('paramSlider_' + paramName);
+      if (slider) slider.value = val;
+      const sel = document.getElementById('paramSelect_' + paramName);
+      if (sel) sel.value = val;
+    }
   }, 500 + Math.random() * 1500);
 }
 
-function stopRandomParam(paramName) {
-  if (randomIntervals[paramName]) {
-    clearInterval(randomIntervals[paramName]);
-    delete randomIntervals[paramName];
+function stopRandomParam(paramName, bandIdx) {
+  if (bandIdx === undefined) bandIdx = activeBandIndex;
+  const key = (bandIdx >= 0 ? bandIdx : 'main') + ':' + paramName;
+  if (randomIntervals[key]) {
+    clearInterval(randomIntervals[key]);
+    delete randomIntervals[key];
   }
+}
+
+function stopAllRandomForBand(bandIdx) {
+  const prefix = (bandIdx >= 0 ? bandIdx : 'main') + ':';
+  Object.keys(randomIntervals).forEach(k => {
+    if (k.startsWith(prefix)) {
+      clearInterval(randomIntervals[k]);
+      delete randomIntervals[k];
+    }
+  });
 }
 
 function toggleRandomParam(paramName, min, max, step, checkbox) {
@@ -2414,14 +2438,22 @@ function toggleRandomParam(paramName, min, max, step, checkbox) {
   } else {
     stopRandomParam(paramName);
   }
+  /* Cache RND state in active band slot */
+  if (activeBandIndex >= 0) {
+    bandSlots[activeBandIndex].paramCache['_rnd_' + paramName] = checkbox.checked;
+  }
 }
 
 function renderParams() {
+  /* Don't overwrite band params if a band tab is active */
+  if (activeBandIndex >= 0) return;
+
   const container = document.getElementById('paramsContainer');
+  /* Only clear main effect mappings, not band mappings */
   paramBandMappings = {};
-  activeBandIndex = -1; /* main effect mode */
-  /* Stop all random intervals */
-  Object.keys(randomIntervals).forEach(k => stopRandomParam(k));
+  activeBandIndex = -1;
+  /* Only stop main effect random intervals, keep band intervals running */
+  stopAllRandomForBand(-1);
 
   if (!activeEffect) {
     container.innerHTML = `<div style="color:var(--text-dim);font-size:12px;padding:20px 0;text-align:center;">
@@ -2597,10 +2629,10 @@ const bandInfo = [
 ];
 
 let bandSlots = [
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0 },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
 ];
 
 function renderBandEffects() {
@@ -2666,7 +2698,18 @@ function updateThresholdLines() {
 async function setBandEffect(bandIndex) {
   const slot = bandSlots[bandIndex];
   const sel = document.getElementById('bandEffect_' + bandIndex);
-  slot.effect = sel ? sel.value : '';
+  const newEffect = sel ? sel.value : '';
+  /* Only clear cache if effect actually changed */
+  if (newEffect !== slot.effect) {
+    slot.paramCache = {};
+    /* Stop random intervals for this band */
+    stopAllRandomForBand(bandIndex);
+    /* Clear audio mappings for this band */
+    Object.keys(bandParamMappings).forEach(k => {
+      if (k.startsWith(bandIndex + ':')) delete bandParamMappings[k];
+    });
+  }
+  slot.effect = newEffect;
   updateThresholdLines();
   await sendRequest('SetBandEffect', {
     band: bandIndex,
@@ -2722,7 +2765,8 @@ function renderBandParams(bandIndex) {
     return;
   }
 
-  activeBandIndex = bandIndex; /* band effect mode */
+  activeBandIndex = bandIndex;
+  /* Don't stop random intervals — they keep running in the background */
   /* Stop random intervals from main params */
   Object.keys(randomIntervals).forEach(k => stopRandomParam(k));
 
@@ -2752,6 +2796,7 @@ function renderBandParams(bandIndex) {
   params.forEach(p => {
     const isDropdown = paramDropdowns[p.name] && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
+    const rndCached = slot.paramCache['_rnd_' + p.name] || false;
 
     html += `<div class="param-slider">
       <div class="control-label" style="display:flex;align-items:center;gap:4px">
@@ -2759,36 +2804,43 @@ function renderBandParams(bandIndex) {
 
     if (isRandomizable) {
       html += `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;color:var(--orange)" title="Randomize">
-        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)"
+        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)" ${rndCached ? 'checked' : ''}
           onchange="toggleRandomParam('${p.name}',${p.min},${p.max},${p.step},this)">
         RND</label>`;
     }
 
-    html += `<span class="control-value" id="paramVal_${p.name}">${p.default.toFixed(p.step >= 1 ? 0 : 2)}</span></div>`;
+    /* Use cached value if available, otherwise default */
+    const cachedVal = (slot.paramCache[p.name] !== undefined) ? slot.paramCache[p.name] : p.default;
+    const displayVal = cachedVal.toFixed(p.step >= 1 ? 0 : 2);
+
+    html += `<span class="control-value" id="paramVal_${p.name}">${displayVal}</span></div>`;
 
     if (isDropdown) {
       const options = paramDropdowns[p.name];
+      const selIdx = Math.round(cachedVal);
       html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
-        onchange="document.getElementById('paramVal_${p.name}').textContent=this.value;setBandParam(${bandIndex},'${p.name}',this.selectedIndex)">`;
+        onchange="bandSlots[${bandIndex}].paramCache['${p.name}']=this.selectedIndex;document.getElementById('paramVal_${p.name}').textContent=this.value;setBandParam(${bandIndex},'${p.name}',this.selectedIndex)">`;
       options.forEach((opt, idx) => {
-        html += `<option value="${idx}" ${idx === p.default ? 'selected' : ''}>${opt}</option>`;
+        html += `<option value="${idx}" ${idx === selIdx ? 'selected' : ''}>${opt}</option>`;
       });
       html += `</select>`;
     } else {
-      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"
-        oninput="document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setBandParam(${bandIndex},'${p.name}',this.value);if(bandParamMappings['${p.name}'])bandParamMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
+      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${cachedVal}"
+        oninput="bandSlots[${bandIndex}].paramCache['${p.name}']=parseFloat(this.value);document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setBandParam(${bandIndex},'${p.name}',this.value);var mk=bandParamKey(${bandIndex},'${p.name}');if(bandParamMappings[mk])bandParamMappings[mk].baseValue=parseFloat(this.value)">`;
 
-      /* Audio band mapping for this param */
+      /* Audio band mapping for this param — restore cached selection */
+      const cachedAudio = slot.paramCache['_audio_' + p.name];
+      const audioSel = (cachedAudio !== undefined) ? cachedAudio : -1;
       html += `<div style="margin-top:4px">
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
           <select style="flex:1;font-size:11px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
             onchange="setBandParamAudioMapping(${bandIndex},'${p.name}',parseInt(this.value),${p.min},${p.max});renderBandParamControls('${p.name}')">
-            <option value="-1">None</option>
-            <option value="0">Bass</option>
-            <option value="1">Low-Mid</option>
-            <option value="2">High-Mid</option>
-            <option value="3">Treble</option>
+            <option value="-1" ${audioSel===-1?'selected':''}>None</option>
+            <option value="0" ${audioSel===0?'selected':''}>Bass</option>
+            <option value="1" ${audioSel===1?'selected':''}>Low-Mid</option>
+            <option value="2" ${audioSel===2?'selected':''}>High-Mid</option>
+            <option value="3" ${audioSel===3?'selected':''}>Treble</option>
           </select>
         </div>
         <div id="bandParamExtra_${p.name}"></div>
@@ -2799,33 +2851,52 @@ function renderBandParams(bandIndex) {
   });
 
   container.innerHTML = html;
+
+  /* Restore audio mapping panels and RND intervals for cached selections */
+  params.forEach(p => {
+    if (slot.paramCache['_audio_' + p.name] >= 0) {
+      renderBandParamControls(p.name);
+    }
+    if (slot.paramCache['_rnd_' + p.name]) {
+      startRandomParam(p.name, p.min, p.max, p.step);
+    }
+  });
+
   renderParamTabs();
 }
 
-/* Audio band mapping for band effect params */
-let bandParamMappings = {}; /* { paramName: { bandIndex, audioBand, min, max, baseValue } } */
+/* Audio band mapping for band effect params — keyed by "bandIdx:paramName" */
+let bandParamMappings = {};
+
+function bandParamKey(bandIdx, paramName) { return bandIdx + ':' + paramName; }
 
 function setBandParamAudioMapping(bandIdx, paramName, audioBand, min, max) {
+  const key = bandParamKey(bandIdx, paramName);
   if (audioBand < 0) {
-    delete bandParamMappings[paramName];
+    delete bandParamMappings[key];
+    /* Also store in slot cache so we remember "None" on tab switch */
+    bandSlots[bandIdx].paramCache['_audio_' + paramName] = -1;
   } else {
     const slider = document.getElementById('paramSlider_' + paramName);
-    bandParamMappings[paramName] = {
+    bandParamMappings[key] = {
       bandIndex: bandIdx,
       audioBand: audioBand,
+      paramName: paramName,
       min: min,
       max: max,
       baseValue: slider ? parseFloat(slider.value) : (min + max) / 2,
       amount: 1.0,
       threshold: 0.0
     };
+    bandSlots[bandIdx].paramCache['_audio_' + paramName] = audioBand;
   }
 }
 
 function renderBandParamControls(paramName) {
   const wrap = document.getElementById('bandParamExtra_' + paramName);
   if (!wrap) return;
-  const m = bandParamMappings[paramName];
+  const key = bandParamKey(activeBandIndex, paramName);
+  const m = bandParamMappings[key];
   if (m) {
     const bandLabels = ['Bass','LowMid','HiMid','Treble'];
     const bandColors = ['var(--bass-color)','var(--lowmid-color)','var(--highmid-color)','var(--treble-color)'];
@@ -2835,13 +2906,13 @@ function renderBandParamControls(paramName) {
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
         <span style="font-size:11px;color:var(--text);width:55px">Amount</span>
         <input type="range" min="0" max="300" value="${(m.amount*100).toFixed(0)}" step="5" style="flex:1;height:4px"
-          oninput="if(bandParamMappings['${paramName}']){bandParamMappings['${paramName}'].amount=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
+          oninput="var k=bandParamKey(${m.bandIndex},'${paramName}');if(bandParamMappings[k]){bandParamMappings[k].amount=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
         <span style="font-size:11px;color:var(--cyan);width:40px;text-align:right;font-variant-numeric:tabular-nums">${(m.amount*100).toFixed(0)}%</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:11px;color:var(--text);width:55px">Threshold</span>
         <input type="range" min="0" max="90" value="${(m.threshold*100).toFixed(0)}" step="5" style="flex:1;height:4px"
-          oninput="if(bandParamMappings['${paramName}']){bandParamMappings['${paramName}'].threshold=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
+          oninput="var k=bandParamKey(${m.bandIndex},'${paramName}');if(bandParamMappings[k]){bandParamMappings[k].threshold=this.value/100;this.nextElementSibling.textContent=this.value+'%';}">
         <span style="font-size:11px;color:var(--orange);width:40px;text-align:right;font-variant-numeric:tabular-nums">${(m.threshold*100).toFixed(0)}%</span>
       </div>
       <div style="margin-top:4px;font-size:10px;color:var(--text-dim)">
@@ -2855,25 +2926,19 @@ function renderBandParamControls(paramName) {
 
 /* Called from the polling loop to apply audio modulation to band params */
 function updateBandParamMappings(bandLevels) {
-  _bandParamSilent = true;
-  Object.entries(bandParamMappings).forEach(([paramName, m]) => {
+  Object.entries(bandParamMappings).forEach(([key, m]) => {
     let level = bandLevels[m.audioBand] || 0;
-    /* Apply threshold: ignore audio below this level */
     const thr = m.threshold || 0;
     if (level < thr) level = 0;
     else if (thr < 1.0) level = (level - thr) / (1.0 - thr);
-    /* Apply amount */
     level *= (m.amount || 1.0);
-    /* Modulate: base value + (range * level) */
     const range = m.max - m.min;
     const modulated = m.baseValue + range * level;
     const val = Math.min(m.max, Math.max(m.min, modulated));
-    setBandParam(m.bandIndex, paramName, val);
-    /* Update live display */
-    const liveEl = document.getElementById('bandParamLive_' + paramName);
+    setBandParam(m.bandIndex, m.paramName, val);
+    const liveEl = document.getElementById('bandParamLive_' + m.paramName);
     if (liveEl) liveEl.textContent = val.toFixed(2);
   });
-  _bandParamSilent = false;
 }
 
 async function updateBandSlot(bandIndex) {
