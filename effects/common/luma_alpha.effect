@@ -34,8 +34,14 @@ float4 PSLumaAlpha(VertInOut vert_in) : TARGET
     /* Alpha from maximum color channel (brightness) */
     float a = max(max(src.r, src.g), src.b);
 
-    /* Slight curve to avoid near-black fringing */
-    a = smoothstep(0.02, 0.15, a) * a + (1.0 - smoothstep(0.02, 0.15, a)) * 0.0;
+    /* Hard cutoff: pixels below 3% brightness are fully transparent.
+     * Above that, alpha scales with brightness for smooth blending. */
+    if (a < 0.03) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    /* Boost alpha so mid-bright pixels are more opaque */
+    a = saturate(a * 1.5);
 
     /* Premultiply RGB for correct alpha blending in OBS */
     return float4(src.rgb * a, a);

@@ -540,23 +540,22 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 				? comp->renderer->feedback_a
 				: comp->renderer->feedback_b;
 		} else {
-			/* No output: force fully transparent to clear last frame.
-			 * Use BLEND_ONE/BLEND_ZERO to directly write alpha=0,
-			 * ensuring OBS doesn't keep the cached last frame. */
-			gs_blend_state_push();
-			gs_enable_blending(true);
-			gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
-
-			gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-			gs_eparam_t *cp = gs_effect_get_param_by_name(solid, "color");
-			struct vec4 clear;
-			vec4_zero(&clear);
-			gs_effect_set_vec4(cp, &clear);
-			while (gs_effect_loop(solid, "Solid")) {
-				gs_draw_sprite(NULL, 0, comp->width, comp->height);
+			/* No output from compositor.
+			 * When transparent_bg is on: don't draw anything — OBS
+			 * treats us as fully transparent, sources below show through.
+			 * When transparent_bg is off: draw opaque black to behave
+			 * like a normal black canvas. */
+			if (!comp->renderer->transparent_bg) {
+				gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+				gs_eparam_t *cp = gs_effect_get_param_by_name(solid, "color");
+				struct vec4 black;
+				vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
+				gs_effect_set_vec4(cp, &black);
+				while (gs_effect_loop(solid, "Solid")) {
+					gs_draw_sprite(NULL, 0, comp->width, comp->height);
+				}
 			}
-
-			gs_blend_state_pop();
+			/* else: draw nothing — fully transparent via OBS compositing */
 			ctx->compositor_output = NULL;
 		}
 	}
