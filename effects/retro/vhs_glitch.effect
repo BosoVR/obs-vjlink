@@ -108,9 +108,8 @@ float4 PSVhs(VertInOut vert_in) : TARGET
     bool has_input = (has_input_source > 0.5);
 
     if (!has_input) {
-        float3 pattern = vhsPattern(uv, time, bands.x, bands.w);
-        float out_alpha = max(max(pattern.r, pattern.g), pattern.b);
-        return float4(pattern, out_alpha);
+        /* No source to process — output transparent */
+        return float4(0.0, 0.0, 0.0, 0.0);
     }
 
     float src_alpha = image.Sample(texSampler, uv).a;

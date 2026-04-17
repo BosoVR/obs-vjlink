@@ -110,15 +110,15 @@ float4 PSCrt(VertInOut vert_in) : TARGET
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
+    if (!has_input) {
+        /* No source to process — output transparent */
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    /* Filter: process input source */
     float3 color;
     float src_alpha;
-
-    if (!has_input) {
-        /* Standalone: CRT test pattern */
-        color = crtTestPattern(curved_uv, time, bands.x);
-        src_alpha = 1.0;
-    } else {
-        /* Filter: process input source */
+    {
         float2 edge_dist = curved_uv - 0.5;
         float edge_amount = length(edge_dist) * 0.002;
 
@@ -163,7 +163,7 @@ float4 PSCrt(VertInOut vert_in) : TARGET
     /* Slight green tint for old monitor feel */
     color *= float3(0.95, 1.0, 0.95);
 
-    float out_alpha = has_input ? src_alpha : max(max(color.r, color.g), color.b);
+    float out_alpha = src_alpha;
     return float4(color, out_alpha);
 }
 
