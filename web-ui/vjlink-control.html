@@ -2268,16 +2268,45 @@ function logoInputId(slot) {
   return slot === 0 ? 'logoPathInput' : 'logoPathInput' + (slot + 1);
 }
 
+/* Logo paths can't be read back from the backend, so cache them locally
+ * so they survive page reloads and end up in saved profiles. */
+const LOGO_CACHE_KEY = 'vjlink_logo_paths_v1';
+
+function persistLogoPaths() {
+  const arr = [];
+  for (let li = 0; li < 3; li++) {
+    const inp = document.getElementById(logoInputId(li));
+    arr[li] = inp ? inp.value : '';
+  }
+  try { localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(arr)); }
+  catch (e) {}
+}
+
+function restoreLogoPaths() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LOGO_CACHE_KEY) || '[]');
+    if (!Array.isArray(arr)) return;
+    for (let li = 0; li < 3; li++) {
+      const inp = document.getElementById(logoInputId(li));
+      if (inp && arr[li]) inp.value = arr[li];
+    }
+  } catch (e) {}
+}
+
 async function applyLogoPath(slot) {
   slot = slot || 0;
   const input = document.getElementById(logoInputId(slot));
   if (!input) return;
   const path = stripQuotes(input.value);
   input.value = path;
+  persistLogoPaths();
   if (path) {
     const resp = await sendRequest('SetLogo', { path: path, slot: slot });
     input.style.borderColor = resp ? 'var(--green)' : 'var(--red)';
     setTimeout(() => { input.style.borderColor = 'var(--border)'; }, 1500);
+  } else {
+    /* explicit empty apply also clears the slot */
+    await sendRequest('SetLogo', { path: '', slot: slot });
   }
 }
 
@@ -2285,6 +2314,7 @@ async function clearLogoPath(slot) {
   slot = slot || 0;
   const input = document.getElementById(logoInputId(slot));
   if (input) input.value = '';
+  persistLogoPaths();
   await sendRequest('SetLogo', { path: '', slot: slot });
 }
 
@@ -2352,68 +2382,54 @@ function captureCurrentSettings() {
 async function applyProfile(settings) {
   if (!settings) return;
 
-  /* Settings */
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  /* Lock the polling sync while we're rewriting the backend state.
+   * Without this, GetState polls (~500ms) can clobber `activeEffect`
+   * back to the old value before the new SetEffect lands. */
+  effectClickLock = true;
+  if (effectClickTimer) clearTimeout(effectClickTimer);
+  effectClickTimer = setTimeout(() => { effectClickLock = false; }, 4000);
+
+  /* --- Toggles: always force re-apply, since backend state may differ
+   *     from what the DOM currently shows (e.g. after a page reload). --- */
   if (typeof settings.transparent_bg === 'boolean') {
     const el = document.getElementById('toggleTransparentBg');
-    if (el && el.checked !== settings.transparent_bg) {
-      el.checked = settings.transparent_bg;
-      toggleTransparentBg(settings.transparent_bg);
-    }
+    if (el) el.checked = settings.transparent_bg;
+    await toggleTransparentBg(settings.transparent_bg);
   }
   if (typeof settings.debug_overlay === 'boolean') {
     const el = document.getElementById('toggleDebugOverlay');
-    if (el && el.checked !== settings.debug_overlay) {
-      el.checked = settings.debug_overlay;
-      toggleDebugOverlay(settings.debug_overlay);
-    }
+    if (el) el.checked = settings.debug_overlay;
+    await toggleDebugOverlay(settings.debug_overlay);
   }
+
+  /* --- Logos: always send all 3 slots (including empty paths to clear),
+   *     and update the DOM inputs so the UI matches the loaded profile. --- */
   for (let li = 0; li < 3; li++) {
     const key = li === 0 ? 'logo_path' : 'logo_path' + (li + 1);
-    const val = settings[key];
-    if (val !== undefined) {
-      const input = document.getElementById(logoInputId(li));
-      if (input) input.value = val;
-      if (val) await sendRequest('SetLogo', { path: val, slot: li });
-    }
+    const val = (settings[key] !== undefined && settings[key] !== null) ? String(settings[key]) : '';
+    const input = document.getElementById(logoInputId(li));
+    if (input) input.value = val;
+    await sendRequest('SetLogo', { path: val, slot: li });
   }
+  persistLogoPaths();
 
-  /* Band slots */
-  if (Array.isArray(settings.bands)) {
-    for (let i = 0; i < 4; i++) {
-      const saved = settings.bands[i];
-      if (!saved) continue;
-      bandSlots[i].effect = saved.effect || '';
-      bandSlots[i].threshold = saved.threshold ?? 0.3;
-      bandSlots[i].intensity = saved.intensity ?? 1.0;
-      bandSlots[i].paramCache = Object.assign({}, saved.paramCache || {});
-      /* Send to backend */
-      await sendRequest('SetBandEffect', {
-        band: i,
-        effect_id: bandSlots[i].effect,
-        threshold: bandSlots[i].threshold,
-        intensity: bandSlots[i].intensity
-      });
-      /* Send each cached param value */
-      for (const [pname, pval] of Object.entries(bandSlots[i].paramCache)) {
-        if (pname.startsWith('_')) continue; /* skip meta keys */
-        if (typeof pval === 'number') {
-          await sendRequest('SetBandParam', { band: i, param: pname, value: pval });
-        }
-      }
-    }
-    renderBandEffects();
-  }
+  /* --- Main effect: always set, even when unchanged or empty.
+   *     Empty effect_id clears the chain on the backend. --- */
+  const newActive = settings.active_effect || '';
+  activeEffect = newActive;
+  await sendRequest('SetEffect', { effect_id: newActive });
+  renderEffects();
+  renderParams();
 
-  /* Main effect */
-  if (settings.active_effect && settings.active_effect !== activeEffect) {
-    activeEffect = settings.active_effect;
-    await sendRequest('SetEffect', { effect_id: activeEffect });
-    renderEffects();
-    renderParams();
-  }
+  /* Give the render thread a frame to instantiate the effect before
+   * we start sending SetParam calls — otherwise the params can be
+   * dropped because chain_length is still 0. */
+  await sleep(120);
 
   /* Main effect params */
-  if (settings.main_params && activeEffect) {
+  if (settings.main_params && newActive) {
     for (const [pname, pval] of Object.entries(settings.main_params)) {
       const slider = document.getElementById('paramSlider_' + pname);
       if (slider) {
@@ -2425,13 +2441,40 @@ async function applyProfile(settings) {
     }
   }
 
+  /* --- Band slots: always send all 4 (empty effect_id = clear) --- */
+  for (let i = 0; i < 4; i++) {
+    const saved = (Array.isArray(settings.bands) ? settings.bands[i] : null)
+                  || { effect: '', threshold: 0.3, intensity: 1.0, paramCache: {} };
+    bandSlots[i].effect = saved.effect || '';
+    bandSlots[i].threshold = (typeof saved.threshold === 'number') ? saved.threshold : 0.3;
+    bandSlots[i].intensity = (typeof saved.intensity === 'number') ? saved.intensity : 1.0;
+    bandSlots[i].paramCache = Object.assign({}, saved.paramCache || {});
+    await sendRequest('SetBandEffect', {
+      band: i,
+      effect_id: bandSlots[i].effect,
+      threshold: bandSlots[i].threshold,
+      intensity: bandSlots[i].intensity
+    });
+  }
+
+  /* Wait for backend to instantiate the band effects before sending
+   * per-band parameter values. */
+  await sleep(120);
+
+  for (let i = 0; i < 4; i++) {
+    if (!bandSlots[i].effect) continue;
+    for (const [pname, pval] of Object.entries(bandSlots[i].paramCache)) {
+      if (pname.startsWith('_')) continue; /* skip meta keys */
+      if (typeof pval === 'number') {
+        await sendRequest('SetBandParam', { band: i, param: pname, value: pval });
+      }
+    }
+  }
+  renderBandEffects();
+
   /* Audio mappings */
-  if (settings.main_param_mappings) {
-    paramBandMappings = Object.assign({}, settings.main_param_mappings);
-  }
-  if (settings.band_param_mappings) {
-    bandParamMappings = Object.assign({}, settings.band_param_mappings);
-  }
+  paramBandMappings = Object.assign({}, settings.main_param_mappings || {});
+  bandParamMappings = Object.assign({}, settings.band_param_mappings || {});
 }
 
 function saveProfile() {
@@ -2473,8 +2516,11 @@ function deleteProfile() {
   refreshProfileList();
 }
 
-/* Initialize profile list on load */
-setTimeout(refreshProfileList, 500);
+/* Initialize profile list + restore cached logo paths on load */
+setTimeout(() => {
+  refreshProfileList();
+  restoreLogoPaths();
+}, 500);
 
 async function openOBSProperties() {
   /* Try to open OBS properties dialog for the VJLink Compositor source.
