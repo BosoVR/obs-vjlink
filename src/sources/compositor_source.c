@@ -33,11 +33,19 @@ struct vjlink_compositor_data {
 	bool                       needs_effect_update;
 	bool                       needs_band_update;
 
-	/* Logo image */
+	/* Logo images (up to 3) */
 	char                       logo_path[512];
+	char                       logo_path2[512];
+	char                       logo_path3[512];
 	gs_image_file_t            logo_image;
+	gs_image_file_t            logo_image2;
+	gs_image_file_t            logo_image3;
 	bool                       logo_loaded;
+	bool                       logo_loaded2;
+	bool                       logo_loaded3;
 	bool                       logo_needs_load;
+	bool                       logo_needs_load2;
+	bool                       logo_needs_load3;
 
 	/* Media layers and source triggers */
 	struct vjlink_media_layers    media_layers;
@@ -103,11 +111,21 @@ static void vjlink_compositor_destroy(void *data)
 		gs_image_file_free(&comp->logo_image);
 		comp->logo_loaded = false;
 	}
+	if (comp->logo_loaded2) {
+		gs_image_file_free(&comp->logo_image2);
+		comp->logo_loaded2 = false;
+	}
+	if (comp->logo_loaded3) {
+		gs_image_file_free(&comp->logo_image3);
+		comp->logo_loaded3 = false;
+	}
 	vjlink_media_layers_destroy(&comp->media_layers);
 	if (comp->renderer)
 		vjlink_compositor_destroy_renderer(comp->renderer);
 	obs_leave_graphics();
 	ctx->logo_texture = NULL;
+	ctx->logo_texture2 = NULL;
+	ctx->logo_texture3 = NULL;
 	ctx->compositor_output = NULL;
 
 	free(comp);
@@ -153,11 +171,32 @@ static void vjlink_compositor_update(void *data, obs_data_t *settings)
 			obs_data_set_string(settings, "last_error_display", c->last_error);
 	}
 
-	/* Logo image path */
-	const char *logo = obs_data_get_string(settings, "logo_path");
-	if (logo && strcmp(logo, comp->logo_path) != 0) {
-		strncpy(comp->logo_path, logo, sizeof(comp->logo_path) - 1);
-		comp->logo_needs_load = true;
+	/* Logo image paths (3 slots) */
+	const char *logo_keys[3] = { "logo_path", "logo_path2", "logo_path3" };
+	char *comp_paths[3] = { comp->logo_path, comp->logo_path2, comp->logo_path3 };
+	bool *needs_load[3] = {
+		&comp->logo_needs_load, &comp->logo_needs_load2, &comp->logo_needs_load3
+	};
+	for (int li = 0; li < 3; li++) {
+		const char *logo = obs_data_get_string(settings, logo_keys[li]);
+		char logo_clean[512] = {0};
+		if (logo) {
+			size_t len = strlen(logo);
+			const char *start = logo;
+			if (len >= 2 && (logo[0] == '"' || logo[0] == '\'') &&
+			    (logo[len-1] == '"' || logo[len-1] == '\'')) {
+				start = logo + 1;
+				len -= 2;
+			}
+			if (len >= sizeof(logo_clean)) len = sizeof(logo_clean) - 1;
+			memcpy(logo_clean, start, len);
+			logo_clean[len] = '\0';
+		}
+		if (strcmp(logo_clean, comp_paths[li]) != 0) {
+			strncpy(comp_paths[li], logo_clean, 511);
+			comp_paths[li][511] = '\0';
+			*needs_load[li] = true;
+		}
 	}
 
 	/* Read custom effect parameters from OBS UI sliders.
@@ -265,8 +304,16 @@ static obs_properties_t *vjlink_compositor_properties(void *data)
 	obs_properties_add_bool(props, "debug_overlay",
 		"Debug Overlay (Bands/BPM/FPS)");
 
-	/* Logo image */
-	obs_properties_add_path(props, "logo_path", "Logo Image",
+	/* Logo images (up to 3 slots) */
+	obs_properties_add_path(props, "logo_path", "Logo Image 1",
+		OBS_PATH_FILE,
+		"Image Files (*.png *.jpg *.jpeg *.gif *.bmp);;All Files (*.*)",
+		NULL);
+	obs_properties_add_path(props, "logo_path2", "Logo Image 2",
+		OBS_PATH_FILE,
+		"Image Files (*.png *.jpg *.jpeg *.gif *.bmp);;All Files (*.*)",
+		NULL);
+	obs_properties_add_path(props, "logo_path3", "Logo Image 3",
 		OBS_PATH_FILE,
 		"Image Files (*.png *.jpg *.jpeg *.gif *.bmp);;All Files (*.*)",
 		NULL);
@@ -380,23 +427,41 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 		ctx->active_band_fx = &comp->renderer->band_fx;
 	}
 
-	/* Load/reload logo image (GPU texture init must happen on graphics thread) */
-	if (comp->logo_needs_load) {
-		if (comp->logo_loaded) {
-			gs_image_file_free(&comp->logo_image);
-			comp->logo_loaded = false;
-			ctx->logo_texture = NULL;
-		}
-		comp->logo_needs_load = false;
-		if (comp->logo_path[0]) {
-			gs_image_file_init(&comp->logo_image, comp->logo_path);
-			if (comp->logo_image.loaded) {
-				gs_image_file_init_texture(&comp->logo_image);
-				comp->logo_loaded = true;
-				blog(LOG_INFO, "[VJLink] Logo loaded: %s", comp->logo_path);
-			} else {
-				blog(LOG_WARNING, "[VJLink] Failed to load logo: %s",
-				     comp->logo_path);
+	/* Load/reload logo images (3 slots) */
+	{
+		char *paths[3] = { comp->logo_path, comp->logo_path2, comp->logo_path3 };
+		gs_image_file_t *images[3] = {
+			&comp->logo_image, &comp->logo_image2, &comp->logo_image3
+		};
+		bool *loaded[3] = {
+			&comp->logo_loaded, &comp->logo_loaded2, &comp->logo_loaded3
+		};
+		bool *needs_load2[3] = {
+			&comp->logo_needs_load, &comp->logo_needs_load2, &comp->logo_needs_load3
+		};
+		gs_texture_t **ctx_tex[3] = {
+			&ctx->logo_texture, &ctx->logo_texture2, &ctx->logo_texture3
+		};
+		for (int li = 0; li < 3; li++) {
+			if (*needs_load2[li]) {
+				if (*loaded[li]) {
+					gs_image_file_free(images[li]);
+					*loaded[li] = false;
+					*ctx_tex[li] = NULL;
+				}
+				*needs_load2[li] = false;
+				if (paths[li][0]) {
+					gs_image_file_init(images[li], paths[li]);
+					if (images[li]->loaded) {
+						gs_image_file_init_texture(images[li]);
+						*loaded[li] = true;
+						blog(LOG_INFO, "[VJLink] Logo %d loaded: %s",
+						     li + 1, paths[li]);
+					} else {
+						blog(LOG_WARNING, "[VJLink] Failed to load logo %d: %s",
+						     li + 1, paths[li]);
+					}
+				}
 			}
 		}
 	}
@@ -413,19 +478,46 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 		}
 	}
 
-	/* Check for WebSocket logo override */
-	if (ctx->logo_pending) {
-		ctx->logo_pending = false;
-		strncpy(comp->logo_path, ctx->pending_logo_path,
-		        sizeof(comp->logo_path) - 1);
-		comp->logo_needs_load = true;
+	/* Check for WebSocket logo override (3 slots) */
+	{
+		char *comp_paths[3] = { comp->logo_path, comp->logo_path2, comp->logo_path3 };
+		char *pend_paths[3] = {
+			ctx->pending_logo_path, ctx->pending_logo_path2, ctx->pending_logo_path3
+		};
+		volatile bool *pend_flags[3] = {
+			&ctx->logo_pending, &ctx->logo_pending2, &ctx->logo_pending3
+		};
+		bool *needs_load3[3] = {
+			&comp->logo_needs_load, &comp->logo_needs_load2, &comp->logo_needs_load3
+		};
+		for (int li = 0; li < 3; li++) {
+			if (*pend_flags[li]) {
+				*pend_flags[li] = false;
+				strncpy(comp_paths[li], pend_paths[li], 511);
+				comp_paths[li][511] = '\0';
+				*needs_load3[li] = true;
+			}
+		}
 	}
 
-	/* Update logo texture for GIF animation + sync to context */
-	if (comp->logo_loaded) {
-		gs_image_file_tick(&comp->logo_image, 0.016667f);
-		gs_image_file_update_texture(&comp->logo_image);
-		ctx->logo_texture = comp->logo_image.texture;
+	/* Update logo textures for GIF animation + sync to context (3 slots) */
+	{
+		gs_image_file_t *images[3] = {
+			&comp->logo_image, &comp->logo_image2, &comp->logo_image3
+		};
+		bool loaded[3] = {
+			comp->logo_loaded, comp->logo_loaded2, comp->logo_loaded3
+		};
+		gs_texture_t **ctx_tex[3] = {
+			&ctx->logo_texture, &ctx->logo_texture2, &ctx->logo_texture3
+		};
+		for (int li = 0; li < 3; li++) {
+			if (loaded[li]) {
+				gs_image_file_tick(images[li], 0.016667f);
+				gs_image_file_update_texture(images[li]);
+				*ctx_tex[li] = images[li]->texture;
+			}
+		}
 	}
 
 	/* Check for WebSocket effect override */
@@ -514,13 +606,19 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 		gs_texture_t *output = vjlink_compositor_render(comp->renderer);
 
 		if (output) {
-			/* When transparent_bg is on, the luma_alpha post-process
-			 * produces premultiplied alpha output. Use ONE/INVSRCALPHA
-			 * blend so OBS correctly composites over sources below. */
+			/* Always push a blend state so OBS' default SRC_ALPHA blend
+			 * doesn't leak into our output. Shaders write alpha = max(r,g,b)
+			 * which would otherwise make dark regions transparent even when
+			 * transparent_bg is OFF. */
+			gs_blend_state_push();
 			if (comp->renderer->transparent_bg) {
-				gs_blend_state_push();
+				/* Transparent mode: luma_alpha produces premultiplied RGB,
+				 * composite over sources below with ONE/INVSRCALPHA. */
 				gs_enable_blending(true);
 				gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+			} else {
+				/* Opaque mode: ignore shader alpha, write RGB as-is. */
+				gs_enable_blending(false);
 			}
 
 			/* Draw the compositor output to screen */
@@ -532,8 +630,7 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 				gs_draw_sprite(output, 0, comp->width, comp->height);
 			}
 
-			if (comp->renderer->transparent_bg)
-				gs_blend_state_pop();
+			gs_blend_state_pop();
 
 			/* Store in global context for video wall sources */
 			ctx->compositor_output = comp->renderer->feedback_current

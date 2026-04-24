@@ -11,6 +11,8 @@
     { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
-    { "name": "cell_gap", "label": "Cell Gap", "type": "float", "default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01 }
+    { "name": "cell_gap", "label": "Cell Gap", "type": "float", "default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01 },
+    { "name": "logo_shuffle_mode", "label": "Logo Shuffle (0=Stable 1=OnStrobe 2=Time)", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 },
+    { "name": "logo_switch_speed", "label": "Logo Switch Speed", "type": "float", "default": 0.0, "min": 0.0, "max": 5.0, "step": 0.1 }
   ]
 }

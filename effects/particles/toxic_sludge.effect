@@ -1,0 +1,198 @@
+/*
+ * VJLink - Toxic Sludge
+ * Black-green toxic liquid with bubbling surface, oily sheen,
+ * and radioactive glow. Acid-industrial biological hazard visual.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float surface_tension;  /* liquid tension (default 0.6) */
+uniform float bubble_density;   /* bubbles amount (default 0.7) */
+uniform float toxic_glow;       /* radioactivity (default 1.0) */
+uniform float oil_slicks;       /* rainbow oil amount (default 0.5) */
+uniform float churn_speed;      /* liquid movement (default 0.4) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float noise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float fbm(float2 p, int octaves)
+{
+    float val = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 6; i++) {
+        if (i >= octaves) break;
+        val += amp * noise(p);
+        p *= 2.0;
+        amp *= 0.5;
+    }
+    return val;
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float4 PSToxicSludge(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / resolution.y;
+
+    float bass = bands.x;
+    float lowmid = bands.y;
+    float highmid = bands.z;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat;
+
+    float tension = max(surface_tension, 0.0);
+    float bubbles = max(bubble_density, 0.0);
+    float glow = max(toxic_glow, 0.0);
+    float oil = max(oil_slicks, 0.0);
+    float churn = max(churn_speed, 0.0);
+
+    /* Liquid surface domain warp */
+    float t = time * churn;
+    float2 q = float2(0.0, 0.0);
+    q.x = fbm(p + float2(0.0, t * 0.3), 4);
+    q.y = fbm(p + float2(5.2, 1.3) + t * 0.2, 4);
+
+    float2 r = float2(0.0, 0.0);
+    r.x = fbm(p + q * tension * 3.0 + float2(1.7, 9.2) + t * 0.15, 4);
+    r.y = fbm(p + q * tension * 3.0 + float2(8.3, 2.8) - t * 0.12, 4);
+
+    float liquid = fbm(p + r * tension * 2.0, 4);
+
+    /* Bubbles */
+    float bubble_field = 0.0;
+    for (float i = 0.0; i < 12.0; i += 1.0) {
+        float fi = i;
+        float2 bubble_center = float2(
+            (hash11(fi * 3.7 + 100.0) - 0.5) * 2.5,
+            (hash11(fi * 5.1 + 101.0) - 0.5) * 2.0
+        );
+        /* Bubbles rise */
+        bubble_center.y += frac(t * 0.1 + fi * 0.3) * 2.0 - 1.0;
+        bubble_center.x += sin(t * 0.5 + fi) * 0.1;
+
+        float bdist = length(p - bubble_center);
+        float bsize = 0.02 + hash11(fi * 2.3 + 102.0) * 0.04;
+        float bubble = smoothstep(bsize, bsize * 0.3, bdist);
+
+        /* Bubble interior highlight */
+        float bhighlight = smoothstep(bsize * 0.5, bsize * 0.2, bdist) * 0.5;
+
+        bubble_field += (bubble + bhighlight) * bubbles;
+    }
+
+    /* Oil slick: thin-film interference */
+    float oil_pattern = fbm(p * 3.0 + t * 0.1 + r * 2.0, 3);
+    oil_pattern = pow(oil_pattern, 2.0);
+    float oil_hue = frac(oil_pattern * 3.0 + t * 0.05);
+    float3 oil_col = hsv2rgb(float3(oil_hue, 0.6, 0.3)) * oil * 0.5;
+
+    /* Toxic color palette: black-green base */
+    float3 base_col = float3(0.0, 0.03, 0.01);
+
+    /* Surface color: deep toxic green-black */
+    float3 surface_col = lerp(
+        float3(0.0, 0.06, 0.02),   /* dark green */
+        float3(0.01, 0.12, 0.04), /* toxic green */
+        liquid
+    );
+
+    /* Radioactive glow spots */
+    float glow_spots = fbm(p * 2.0 - t * 0.2 + 50.0, 3);
+    glow_spots = smoothstep(0.5, 0.8, glow_spots);
+    float3 glow_col = float3(0.2, 1.0, 0.0) * glow_spots * glow * (0.5 + bass * 0.5);
+
+    /* Build color */
+    float3 color = base_col;
+    color += surface_col * (0.5 + bass * 0.3);
+
+    /* Add bubbles: bright toxic centers */
+    color += float3(0.0, 0.3, 0.1) * bubble_field;
+    color += float3(0.1, 0.8, 0.2) * bubble_field * beat * 0.5; /* pulse on beat */
+
+    /* Oil slick sheen */
+    color += oil_col;
+
+    /* Radioactive glow */
+    color += glow_col;
+
+    /* Bass churn: surface disturbance flash */
+    float churn_flash = exp(-beat * 2.0) * bass * 0.15;
+    color += float3(0.0, 0.5, 0.1) * churn_flash;
+
+    /* Treble creates steam/haze */
+    float steam = fbm(p * 5.0 + t * 0.5, 3) * treble * 0.3;
+    color += float3(0.05, 0.1, 0.05) * steam;
+
+    color = color / (1.0 + color * 0.45);
+    color = saturate(color);
+    float __a = max(max(color.r, color.g), color.b);
+    return float4(color, __a);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSToxicSludge(vert_in);
+    }
+}

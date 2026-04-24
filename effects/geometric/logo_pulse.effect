@@ -6,6 +6,8 @@
 
 uniform float4x4 ViewProj;
 uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
@@ -16,6 +18,7 @@ uniform float pulse_strength;  /* 0.0-3.0, default 1.5 */
 uniform float decay_rate;      /* 0.5-5.0, default 2.0 */
 uniform float glow_amount;     /* 0.0-2.0, default 0.8 */
 uniform float rotation_speed;  /* 0.0-2.0, default 0.0 */
+uniform float logo_switch_speed; /* 0-5, default 0 — cycles among the 3 logos (0=only logo 1) */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -34,6 +37,24 @@ VertInOut VSDefault(VertInOut vert_in)
     vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
     vert_out.uv  = vert_in.uv;
     return vert_out;
+}
+
+bool is_fallback(float4 s) {
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.99);
+}
+
+float4 sample_logo_slot(int slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    if (slot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!is_fallback(s2)) return s2;
+    } else if (slot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!is_fallback(s3)) return s3;
+    }
+    return s1;
 }
 
 float4 PSLogoPulse(VertInOut vert_in) : TARGET
@@ -76,10 +97,16 @@ float4 PSLogoPulse(VertInOut vert_in) : TARGET
     float3 col = float3(0.0, 0.0, 0.0);
     float out_alpha = 0.0;
 
+    /* Cycle between the 3 logo slots — speed 0 = always logo 1 */
+    int cur_slot = 0;
+    if (logo_switch_speed > 0.01) {
+        cur_slot = (int)floor(time * logo_switch_speed) % 3;
+    }
+
     /* Main logo sample */
     if (logo_uv.x >= 0.0 && logo_uv.x <= 1.0 &&
         logo_uv.y >= 0.0 && logo_uv.y <= 1.0) {
-        float4 lsample = logo_tex.Sample(texSampler, logo_uv);
+        float4 lsample = sample_logo_slot(cur_slot, logo_uv);
         float lvis = max(max(lsample.r, lsample.g), lsample.b);
 
         if (lvis > 0.01 || lsample.a < 0.99) {
@@ -98,7 +125,7 @@ float4 PSLogoPulse(VertInOut vert_in) : TARGET
 
         if (glow_uv.x >= 0.0 && glow_uv.x <= 1.0 &&
             glow_uv.y >= 0.0 && glow_uv.y <= 1.0) {
-            float4 gsample = logo_tex.Sample(texSampler, glow_uv);
+            float4 gsample = sample_logo_slot(cur_slot, glow_uv);
 
             /* Glow color based on logo, blurred feel via larger scale */
             float glow_intensity = gsample.a * glow * 0.3 *

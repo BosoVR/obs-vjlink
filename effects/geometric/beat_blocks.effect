@@ -8,6 +8,8 @@
 uniform float4x4 ViewProj;
 uniform texture2d audio_tex;
 uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
@@ -21,6 +23,7 @@ uniform float flash_color_g;   /* default 1.0 */
 uniform float flash_color_b;   /* default 1.0 */
 uniform float logo_scale;      /* 0.01-0.5, default 0.12 */
 uniform float color_variation; /* 0.0-1.0, default 0.3 */
+uniform float logo_switch_speed; /* 0-5, default 0 — 0=fixed corners, >0=rotates */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -61,6 +64,24 @@ float3 hsv2rgb(float3 c)
     float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+bool is_fallback(float4 s) {
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.99);
+}
+
+float4 sample_logo_slot(int slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    if (slot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!is_fallback(s2)) return s2;
+    } else if (slot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!is_fallback(s3)) return s3;
+    }
+    return s1;
 }
 
 float4 PSBeatBlocks(VertInOut vert_in) : TARGET
@@ -158,11 +179,17 @@ float4 PSBeatBlocks(VertInOut vert_in) : TARGET
     corners[2] = float2(lscale * 0.5, 1.0 - lscale * 0.5);       /* bottom-left */
     corners[3] = float2(1.0 - lscale * 0.5, 1.0 - lscale * 0.5); /* bottom-right */
 
+    /* Rotate which logo appears at each corner — speed 0 = fixed */
+    int slot_shift = 0;
+    if (logo_switch_speed > 0.01) {
+        slot_shift = (int)floor(time * logo_switch_speed);
+    }
     for (int c = 0; c < 4; c++) {
         float2 logo_uv = (uv - corners[c]) / lscale + 0.5;
         if (logo_uv.x >= 0.0 && logo_uv.x <= 1.0 &&
             logo_uv.y >= 0.0 && logo_uv.y <= 1.0) {
-            float4 lsample = logo_tex.Sample(texSampler, logo_uv);
+            int corner_slot = (c + slot_shift) % 3;
+            float4 lsample = sample_logo_slot(corner_slot, logo_uv);
             float lvis = max(max(lsample.r, lsample.g), lsample.b);
             if (lsample.a > 0.01 && lvis > 0.01) {
                 float logo_brightness = 0.7 + beat * bass * 0.3;

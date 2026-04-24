@@ -1173,18 +1173,47 @@
       <!-- Logo Path -->
       <div style="padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:12px;color:var(--text)">Logo Image</span>
+          <span style="font-size:12px;color:var(--text)">Logo Images (up to 3)</span>
           <button onclick="openOBSProperties()" style="background:var(--surface);color:var(--cyan);border:1px solid var(--cyan);padding:3px 10px;border-radius:5px;font-size:10px;cursor:pointer;font-weight:600" title="Opens OBS source properties with native file picker">OBS File Picker</button>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:6px">
-          <input type="text" id="logoPathInput" placeholder="C:\path\to\logo.png" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')applyLogoPath()">
-          <button onclick="applyLogoPath()" style="background:var(--accent);color:white;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Apply</button>
-          <button onclick="clearLogoPath()" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Clear logo">X</button>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <span style="font-size:10px;color:var(--text-dim);width:14px;align-self:center">1</span>
+          <input type="text" id="logoPathInput" placeholder="C:\path\to\logo.png" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')applyLogoPath(0)">
+          <button onclick="applyLogoPath(0)" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Apply</button>
+          <button onclick="clearLogoPath(0)" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Clear logo 1">X</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <span style="font-size:10px;color:var(--text-dim);width:14px;align-self:center">2</span>
+          <input type="text" id="logoPathInput2" placeholder="Optional 2nd logo" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')applyLogoPath(1)">
+          <button onclick="applyLogoPath(1)" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Apply</button>
+          <button onclick="clearLogoPath(1)" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Clear logo 2">X</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <span style="font-size:10px;color:var(--text-dim);width:14px;align-self:center">3</span>
+          <input type="text" id="logoPathInput3" placeholder="Optional 3rd logo" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')applyLogoPath(2)">
+          <button onclick="applyLogoPath(2)" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Apply</button>
+          <button onclick="clearLogoPath(2)" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Clear logo 3">X</button>
         </div>
       </div>
     </div>
 
     <!-- === Unified Effect Parameters === -->
+    <!-- === Profile (Save/Load) === -->
+    <div class="section-title" style="margin-top:12px">Profile</div>
+    <div style="padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:12px">
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <select id="profileSelect" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onchange="loadProfile()">
+          <option value="">-- Select profile --</option>
+        </select>
+        <button onclick="deleteProfile()" style="background:var(--surface);color:var(--red);border:1px solid var(--red);padding:5px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Delete selected profile">X</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="profileName" placeholder="Profile name..." style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')saveProfile()">
+        <button onclick="saveProfile()" style="background:var(--accent);color:white;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Save</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Saves effect, band configs, logo path, settings. Persists in browser.</div>
+    </div>
+
     <div class="section-title" style="margin-top:8px">Parameters</div>
     <div id="paramTabs" style="display:none;margin-bottom:8px"></div>
     <div id="paramsContainer">
@@ -1339,13 +1368,13 @@ const builtinPresets = [
 ];
 
 const effectCategories = {
-  tunnel: { label: 'Tunnels', effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel'] },
+  tunnel: { label: 'Tunnels', effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','dna_helix'] },
   plasma: { label: 'Plasma', effects: ['plasma_classic','lava_lamp','liquid_metal'] },
-  particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm'] },
+  particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm','toxic_sludge'] },
   fractal: { label: 'Fractals', effects: ['mandelbrot_zoom','julia_set','ifs_fractal'] },
-  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse'] },
+  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala'] },
   glitch: { label: 'Glitch', effects: ['rgb_split','datamosh','pixel_sort','ascii_art'] },
-  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch'] },
+  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch','virtual_drug'] },
   '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs'] },
   audio_viz: { label: 'Audio Viz', effects: ['waveform_bars','spectrum_radial','beat_flash','laser_scan'] },
   postprocess: { label: 'Post-FX', effects: ['color_grade','feedback','displacement'] },
@@ -1369,7 +1398,13 @@ const effectNames = {
   strobe_gate:'Strobe Gate', flash_shake:'Flash Shake', strobe_grid:'Strobe Grid',
   beat_blocks:'Beat Blocks', logo_runner:'Logo Runner', beat_rings:'Beat Rings',
   logo_pulse:'Logo Pulse', laser_scan:'Laser Scan',
+  acid_mandala:'Acid Mandala', toxic_sludge:'Toxic Sludge', virtual_drug:'Virtual Drug',
 };
+
+/* Effects added recently — shown with NEW badge in UI */
+const NEW_EFFECTS = new Set([
+  'acid_mandala','toxic_sludge','virtual_drug',
+]);
 
 // Standard effect parameters (every effect supports these via SetParam)
 const effectParams = {
@@ -1635,6 +1670,7 @@ const effectParams = {
     { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'logo_scale', label: 'Logo Scale', min: 0.01, max: 0.5, step: 0.01, default: 0.12 },
     { name: 'color_variation', label: 'Color Variation', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'logo_switch_speed', label: 'Logo Switch Speed', min: 0, max: 5, step: 0.1, default: 0.0 },
   ],
   logo_runner: [
     { name: 'direction', label: 'Direction', min: 0, max: 4, step: 1, default: 0 },
@@ -1642,6 +1678,7 @@ const effectParams = {
     { name: 'speed', label: 'Speed', min: 0.1, max: 5, step: 0.1, default: 1.0 },
     { name: 'count', label: 'Logo Count', min: 1, max: 10, step: 1, default: 3 },
     { name: 'trail', label: 'Trail', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'logo_switch_speed', label: 'Logo Switch Speed', min: 0, max: 5, step: 0.1, default: 0.0 },
   ],
   beat_rings: [
     { name: 'ring_width', label: 'Ring Width', min: 0.005, max: 0.1, step: 0.005, default: 0.02 },
@@ -1659,6 +1696,7 @@ const effectParams = {
     { name: 'decay_rate', label: 'Decay Rate', min: 0.5, max: 5, step: 0.1, default: 2.0 },
     { name: 'glow_amount', label: 'Glow', min: 0, max: 2, step: 0.1, default: 0.8 },
     { name: 'rotation_speed', label: 'Rotation', min: 0, max: 2, step: 0.1, default: 0.0 },
+    { name: 'logo_switch_speed', label: 'Logo Switch Speed', min: 0, max: 5, step: 0.1, default: 0.0 },
   ],
   laser_scan: [
     { name: 'line_count', label: 'Line Count', min: 1, max: 10, step: 1, default: 3 },
@@ -1680,6 +1718,29 @@ const effectParams = {
     { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'cell_gap', label: 'Cell Gap', min: 0, max: 0.3, step: 0.01, default: 0.05 },
+    { name: 'logo_shuffle_mode', label: 'Logo Shuffle (0=Stable 1=OnStrobe 2=Time)', min: 0, max: 2, step: 1, default: 0 },
+    { name: 'logo_switch_speed', label: 'Logo Switch Speed', min: 0, max: 5, step: 0.1, default: 0.0 },
+  ],
+    acid_mandala: [
+    { name: 'complexity', label: 'Complexity', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'breathe_speed', label: 'Breathe Speed', min: 0.1, max: 5.0, step: 0.1, default: 1.0 },
+    { name: 'color_speed', label: 'Color Speed', min: 0.1, max: 5.0, step: 0.1, default: 1.0 },
+    { name: 'spiral_warp', label: 'Spiral Warp', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'kaleido_count', label: 'Kaleido Count', min: 0.1, max: 10.0, step: 0.1, default: 3.0 },
+  ],
+  toxic_sludge: [
+    { name: 'surface_tension', label: 'Surface Tension', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'bubble_density', label: 'Bubble Density', min: 0.1, max: 10.0, step: 0.1, default: 3.0 },
+    { name: 'toxic_glow', label: 'Toxic Glow', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'oil_slicks', label: 'Oil Slicks', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'churn_speed', label: 'Churn Speed', min: 0.1, max: 5.0, step: 0.1, default: 1.0 },
+  ],
+  virtual_drug: [
+    { name: 'trip_intensity', label: 'Trip Intensity', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'chromatic', label: 'Chromatic', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'trail_decay', label: 'Trail Decay', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'breathing', label: 'Breathing', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
+    { name: 'complexity', label: 'Complexity', min: 0.0, max: 2.0, step: 0.05, default: 1.0 },
   ],
 };
 
@@ -2192,20 +2253,228 @@ async function toggleDebugOverlay(enabled) {
   }
 }
 
-async function applyLogoPath() {
-  const input = document.getElementById('logoPathInput');
-  const path = input.value.trim();
+function stripQuotes(s) {
+  s = s.trim();
+  if (s.length >= 2) {
+    const first = s[0], last = s[s.length - 1];
+    if ((first === '"' || first === "'") && (last === '"' || last === "'")) {
+      s = s.slice(1, -1);
+    }
+  }
+  return s;
+}
+
+function logoInputId(slot) {
+  return slot === 0 ? 'logoPathInput' : 'logoPathInput' + (slot + 1);
+}
+
+async function applyLogoPath(slot) {
+  slot = slot || 0;
+  const input = document.getElementById(logoInputId(slot));
+  if (!input) return;
+  const path = stripQuotes(input.value);
+  input.value = path;
   if (path) {
-    const resp = await sendRequest('SetLogo', { path: path });
+    const resp = await sendRequest('SetLogo', { path: path, slot: slot });
     input.style.borderColor = resp ? 'var(--green)' : 'var(--red)';
     setTimeout(() => { input.style.borderColor = 'var(--border)'; }, 1500);
   }
 }
 
-async function clearLogoPath() {
-  document.getElementById('logoPathInput').value = '';
-  await sendRequest('SetLogo', { path: '' });
+async function clearLogoPath(slot) {
+  slot = slot || 0;
+  const input = document.getElementById(logoInputId(slot));
+  if (input) input.value = '';
+  await sendRequest('SetLogo', { path: '', slot: slot });
 }
+
+/* === Profile Save/Load (localStorage) === */
+const PROFILE_STORAGE_KEY = 'vjlink_profiles_v1';
+
+function getProfiles() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+
+function saveProfilesToStorage(profiles) {
+  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profiles));
+}
+
+function refreshProfileList() {
+  const sel = document.getElementById('profileSelect');
+  if (!sel) return;
+  const profiles = getProfiles();
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">-- Select profile --</option>';
+  Object.keys(profiles).sort().forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  sel.value = currentVal;
+}
+
+function captureCurrentSettings() {
+  const settings = {
+    version: 1,
+    timestamp: Date.now(),
+    active_effect: activeEffect || '',
+    logo_path: document.getElementById('logoPathInput')?.value || '',
+    logo_path2: document.getElementById('logoPathInput2')?.value || '',
+    logo_path3: document.getElementById('logoPathInput3')?.value || '',
+    transparent_bg: document.getElementById('toggleTransparentBg')?.checked || false,
+    debug_overlay: document.getElementById('toggleDebugOverlay')?.checked || false,
+    /* Band slots with full params */
+    bands: bandSlots.map(slot => ({
+      effect: slot.effect || '',
+      threshold: slot.threshold,
+      intensity: slot.intensity,
+      paramCache: Object.assign({}, slot.paramCache || {})
+    })),
+    /* Audio band mappings (main + band) */
+    main_param_mappings: Object.assign({}, paramBandMappings),
+    band_param_mappings: Object.assign({}, bandParamMappings),
+    /* Main effect param values from current sliders */
+    main_params: {}
+  };
+  /* Read main effect slider values from DOM */
+  if (activeEffect) {
+    const params = effectParams[activeEffect] || [];
+    params.forEach(p => {
+      const slider = document.getElementById('paramSlider_' + p.name);
+      if (slider) settings.main_params[p.name] = parseFloat(slider.value);
+    });
+  }
+  return settings;
+}
+
+async function applyProfile(settings) {
+  if (!settings) return;
+
+  /* Settings */
+  if (typeof settings.transparent_bg === 'boolean') {
+    const el = document.getElementById('toggleTransparentBg');
+    if (el && el.checked !== settings.transparent_bg) {
+      el.checked = settings.transparent_bg;
+      toggleTransparentBg(settings.transparent_bg);
+    }
+  }
+  if (typeof settings.debug_overlay === 'boolean') {
+    const el = document.getElementById('toggleDebugOverlay');
+    if (el && el.checked !== settings.debug_overlay) {
+      el.checked = settings.debug_overlay;
+      toggleDebugOverlay(settings.debug_overlay);
+    }
+  }
+  for (let li = 0; li < 3; li++) {
+    const key = li === 0 ? 'logo_path' : 'logo_path' + (li + 1);
+    const val = settings[key];
+    if (val !== undefined) {
+      const input = document.getElementById(logoInputId(li));
+      if (input) input.value = val;
+      if (val) await sendRequest('SetLogo', { path: val, slot: li });
+    }
+  }
+
+  /* Band slots */
+  if (Array.isArray(settings.bands)) {
+    for (let i = 0; i < 4; i++) {
+      const saved = settings.bands[i];
+      if (!saved) continue;
+      bandSlots[i].effect = saved.effect || '';
+      bandSlots[i].threshold = saved.threshold ?? 0.3;
+      bandSlots[i].intensity = saved.intensity ?? 1.0;
+      bandSlots[i].paramCache = Object.assign({}, saved.paramCache || {});
+      /* Send to backend */
+      await sendRequest('SetBandEffect', {
+        band: i,
+        effect_id: bandSlots[i].effect,
+        threshold: bandSlots[i].threshold,
+        intensity: bandSlots[i].intensity
+      });
+      /* Send each cached param value */
+      for (const [pname, pval] of Object.entries(bandSlots[i].paramCache)) {
+        if (pname.startsWith('_')) continue; /* skip meta keys */
+        if (typeof pval === 'number') {
+          await sendRequest('SetBandParam', { band: i, param: pname, value: pval });
+        }
+      }
+    }
+    renderBandEffects();
+  }
+
+  /* Main effect */
+  if (settings.active_effect && settings.active_effect !== activeEffect) {
+    activeEffect = settings.active_effect;
+    await sendRequest('SetEffect', { effect_id: activeEffect });
+    renderEffects();
+    renderParams();
+  }
+
+  /* Main effect params */
+  if (settings.main_params && activeEffect) {
+    for (const [pname, pval] of Object.entries(settings.main_params)) {
+      const slider = document.getElementById('paramSlider_' + pname);
+      if (slider) {
+        slider.value = pval;
+        const valEl = document.getElementById('paramVal_' + pname);
+        if (valEl) valEl.textContent = parseFloat(pval).toFixed(2);
+      }
+      await sendRequest('SetParam', { param: pname, value: pval });
+    }
+  }
+
+  /* Audio mappings */
+  if (settings.main_param_mappings) {
+    paramBandMappings = Object.assign({}, settings.main_param_mappings);
+  }
+  if (settings.band_param_mappings) {
+    bandParamMappings = Object.assign({}, settings.band_param_mappings);
+  }
+}
+
+function saveProfile() {
+  const input = document.getElementById('profileName');
+  const name = (input?.value || '').trim();
+  if (!name) {
+    input?.focus();
+    return;
+  }
+  const profiles = getProfiles();
+  profiles[name] = captureCurrentSettings();
+  saveProfilesToStorage(profiles);
+  refreshProfileList();
+  const sel = document.getElementById('profileSelect');
+  if (sel) sel.value = name;
+  input.value = '';
+  input.placeholder = 'Saved as "' + name + '"';
+  setTimeout(() => { if (input) input.placeholder = 'Profile name...'; }, 2000);
+}
+
+async function loadProfile() {
+  const sel = document.getElementById('profileSelect');
+  const name = sel?.value || '';
+  if (!name) return;
+  const profiles = getProfiles();
+  const settings = profiles[name];
+  if (!settings) return;
+  await applyProfile(settings);
+}
+
+function deleteProfile() {
+  const sel = document.getElementById('profileSelect');
+  const name = sel?.value || '';
+  if (!name) return;
+  if (!confirm('Delete profile "' + name + '"?')) return;
+  const profiles = getProfiles();
+  delete profiles[name];
+  saveProfilesToStorage(profiles);
+  refreshProfileList();
+}
+
+/* Initialize profile list on load */
+setTimeout(refreshProfileList, 500);
 
 async function openOBSProperties() {
   /* Try to open OBS properties dialog for the VJLink Compositor source.
@@ -2613,7 +2882,15 @@ function renderEffects() {
     cat.effects.forEach(id => {
       const btn = document.createElement('button');
       btn.className = 'effect-btn' + (activeEffect === id ? ' active' : '');
-      btn.textContent = effectNames[id] || id;
+      const label = effectNames[id] || id;
+      if (NEW_EFFECTS && NEW_EFFECTS.has(id)) {
+        btn.innerHTML = label +
+          '<span style="display:inline-block;margin-left:6px;padding:1px 6px;font-size:9px;font-weight:700;' +
+          'background:linear-gradient(135deg,#ec4899,#7c3aed);color:white;border-radius:8px;' +
+          'vertical-align:middle;letter-spacing:0.5px;box-shadow:0 0 6px rgba(236,72,153,0.5);">NEW</span>';
+      } else {
+        btn.textContent = label;
+      }
       btn.onclick = () => selectEffect(id);
       grid.appendChild(btn);
     });
@@ -2643,7 +2920,9 @@ function renderBandEffects() {
   Object.entries(effectCategories).forEach(([catKey, cat]) => {
     optionsHtml += `<optgroup label="${cat.label}">`;
     cat.effects.forEach(id => {
-      optionsHtml += `<option value="${id}">${effectNames[id] || id}</option>`;
+      const effName = effectNames[id] || id;
+      const newMark = (NEW_EFFECTS && NEW_EFFECTS.has(id)) ? ' ✨ NEW' : '';
+      optionsHtml += `<option value="${id}">${effName}${newMark}</option>`;
     });
     optionsHtml += '</optgroup>';
   });

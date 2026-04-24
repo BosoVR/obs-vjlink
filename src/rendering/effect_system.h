@@ -71,6 +71,8 @@ struct vjlink_effect_entry {
 	gs_eparam_t     *p_band_activation;
 	gs_eparam_t     *p_has_input;     /* "has_input_source" uniform */
 	gs_eparam_t     *p_logo_tex;     /* "logo_tex" uniform */
+	gs_eparam_t     *p_logo_tex2;    /* "logo_tex2" uniform */
+	gs_eparam_t     *p_logo_tex3;    /* "logo_tex3" uniform */
 
 	/* Custom parameters */
 	struct vjlink_param_def  params[VJLINK_MAX_PARAMS];

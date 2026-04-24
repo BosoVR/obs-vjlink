@@ -167,7 +167,10 @@ float4 PSPlasma(VertInOut vert_in) : TARGET
     float vig = 1.0 - dot((vuv - 0.5) * 1.2, (vuv - 0.5) * 1.2);
     color *= saturate(vig);
 
-    return float4(saturate(color), 1.0);
+    color = color / (1.0 + color * 0.45);
+    color = saturate(color);
+    float __a = max(max(color.r, color.g), color.b);
+    return float4(color, __a);
 }
 
 technique Draw

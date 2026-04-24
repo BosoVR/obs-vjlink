@@ -93,7 +93,7 @@ float4 PSWaveformBars(VertInOut vert_in) : TARGET
     float gradient = 1.0 - (y / (magnitude + 0.001)) * 0.3;
     val *= gradient;
 
-    /* Peak indicator line */
+    /* Peak indicator ln_v */
     float peak_line = smoothstep(0.02, 0.0, abs(y - magnitude));
     float3 peak_color = float3(1.0, 1.0, 1.0) * peak_line * in_bar;
 

@@ -1,0 +1,53 @@
+{
+  "effect_id": "virtual_drug",
+  "name": "Virtual Drug",
+  "category": "retro",
+  "description": "Virtual Drug \u2014 underground category effect",
+  "params": [
+    {
+      "id": "trip_intensity",
+      "name": "Trip Intensity",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+    },
+    {
+      "id": "chromatic",
+      "name": "Chromatic",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+    },
+    {
+      "id": "trail_decay",
+      "name": "Trail Decay",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+    },
+    {
+      "id": "breathing",
+      "name": "Breathing",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+    },
+    {
+      "id": "complexity",
+      "name": "Complexity",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05
+    }
+  ]
+}

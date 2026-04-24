@@ -1,0 +1,202 @@
+/*
+ * VJLink - Virtual Drug
+ * Psychedelic screen-space warp with chromatic aberration trails.
+ * Simulates visual hallucination through iterative UV distortion.
+ * ShelterNET underground rave visual.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+
+uniform float trip_intensity;   /* warp strength (default 0.6) */
+uniform float chromatic;        /* color separation (default 0.5) */
+uniform float trail_decay;      /* feedback trail length (default 0.85) */
+uniform float breathing;        /* slow pulsation (default 0.4) */
+uniform float complexity;       /* warp iterations (default 3.0) */
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float3 hsv2rgb(float3 c)
+{
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+/* Fractal Brownian Motion */
+float fbm(float2 p, float t)
+{
+    float val = 0.0;
+    float amp = 0.5;
+    float2 shift = float2(100.0, 100.0);
+
+    for (int i = 0; i < 5; i++) {
+        float fi = float(i);
+        float2 q = p * (1.0 + fi * 0.5) + t * 0.1 * (1.0 + fi * 0.3);
+        float2 iq = floor(q);
+        float2 fq = frac(q);
+        fq = fq * fq * (3.0 - 2.0 * fq);
+
+        float a = hash21(iq);
+        float b = hash21(iq + float2(1.0, 0.0));
+        float c = hash21(iq + float2(0.0, 1.0));
+        float d = hash21(iq + float2(1.0, 1.0));
+
+        float n = lerp(lerp(a, b, fq.x), lerp(c, d, fq.x), fq.y);
+        val += amp * n;
+        p = p * 2.0 + shift;
+        amp *= 0.5;
+    }
+    return val;
+}
+
+float4 PSVirtualDrug(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+
+    float bass = bands.x;
+    float lowmid = bands.y;
+    float highmid = bands.z;
+    float treble = bands.w;
+
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+
+    float trip = max(trip_intensity, 0.0);
+    float chroma = max(chromatic, 0.0);
+    float decay = saturate(trail_decay);
+    float breathe = max(breathing, 0.0);
+    float comp = max(complexity, 1.0);
+
+    /* Breathing time: slow sinusoidal + beat punch */
+    float breathe_t = time * breathe;
+    float breath = sin(breathe_t) * 0.2 + sin(breathe_t * 1.7) * 0.1 + 1.0;
+    breath += beat * bass * 0.5;
+
+    /* Iterative UV warp: each pass distorts more */
+    float2 warped_uv = uv;
+    float total_warp = 0.0;
+
+    for (float i = 0.0; i < 6.0; i += 1.0) {
+        if (i >= comp) break;
+
+        float fi = i;
+        float2 p = (warped_uv - 0.5) * 2.0;
+        p.x *= resolution.x / resolution.y;
+
+        /* Multi-frequency distortion field */
+        float dist_x = fbm(p + fi * 50.0, time * 0.3 + fi);
+        float dist_y = fbm(p + fi * 50.0 + 100.0, time * 0.25 + fi);
+
+        /* Radial twist */
+        float angle = length(p) * 3.0 * trip * breath + fi;
+        float cs = cos(angle);
+        float sn = sin(angle);
+        float2 twisted = float2(
+            p.x * cs - p.y * sn,
+            p.x * sn + p.y * cs
+        );
+
+        /* Combine twist with noise warp */
+        float2 offset = float2(
+            (dist_x - 0.5) * trip * breath * (0.1 + fi * 0.05),
+            (dist_y - 0.5) * trip * breath * (0.1 + fi * 0.05)
+        );
+
+        /* Add spiral component */
+        float spiral = atan2(p.y, p.x) * 0.1 * trip * breath / (length(p) + 0.5);
+        offset += float2(cos(spiral), sin(spiral)) * 0.02 * trip;
+
+        warped_uv += offset * (1.0 - fi * 0.15);
+        total_warp += length(offset);
+    }
+
+    /* Chromatic aberration: RGB channels at different offsets */
+    float2 chroma_offset = normalize((uv - 0.5) + 0.001) * chroma * trip * breath * 0.03;
+
+    float2 uv_r = warped_uv + chroma_offset * (1.0 + bass);
+    float2 uv_g = warped_uv;
+    float2 uv_b = warped_uv - chroma_offset * (1.0 + treble * 0.5);
+
+    /* Generate procedural color at each UV */
+    float3 color;
+
+    /* Red channel */
+    float r_pattern = fbm((uv_r - 0.5) * 3.0, time * 0.2);
+    float r_hue = frac(0.85 + time * 0.05 + bass * 0.1 + r_pattern * 0.2);
+    color.r = hsv2rgb(float3(r_hue, 0.9, 0.8)).r;
+    color.r += smoothstep(0.6, 0.9, r_pattern) * 0.5 * beat;
+
+    /* Green channel */
+    float g_pattern = fbm((uv_g - 0.5) * 3.0 + 50.0, time * 0.15);
+    float g_hue = frac(0.5 + time * 0.04 + g_pattern * 0.2);
+    color.g = hsv2rgb(float3(g_hue, 0.9, 0.8)).g;
+    color.g += smoothstep(0.6, 0.9, g_pattern) * 0.5 * lowmid;
+
+    /* Blue channel */
+    float b_pattern = fbm((uv_b - 0.5) * 3.0 + 100.0, time * 0.18);
+    float b_hue = frac(0.15 + time * 0.06 + b_pattern * 0.2);
+    color.b = hsv2rgb(float3(b_hue, 0.9, 0.8)).b;
+    color.b += smoothstep(0.6, 0.9, b_pattern) * 0.5 * treble;
+
+    /* Trail decay: darker where heavily warped */
+    color *= 1.0 - total_warp * (1.0 - decay) * 0.5;
+
+    /* Neon edge glow on high warp areas */
+    float edge = smoothstep(0.1, 0.4, total_warp);
+    float3 edge_col = hsv2rgb(float3(frac(time * 0.1), 1.0, 1.0));
+    edge_col = lerp(edge_col, float3(1.0, 0.0, 1.0), 0.5);
+    color += edge_col * edge * trip * 0.3;
+
+    /* Center vortex pull */
+    float center_dist = length((uv - 0.5) * 2.0);
+    float vortex = exp(-center_dist * 3.0) * (0.3 + bass * beat * 2.0);
+    color += float3(1.0, 0.0, 0.8) * vortex * 0.4;
+
+    /* Strobo flashes on highmid */
+    float strobe = step(0.5, highmid) * hash21(floor(uv * 30.0) + floor(time * 15.0));
+    color += float3(1.0, 1.0, 1.0) * strobe * chroma * 0.2;
+
+    /* Vignette for focus */
+    float vig = 1.0 - smoothstep(0.5, 1.5, center_dist);
+    color *= 0.5 + vig * 0.5;
+
+    return float4(saturate(color), 1.0);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSVirtualDrug(vert_in);
+    }
+}

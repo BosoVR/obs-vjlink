@@ -12,7 +12,7 @@ uniform float4    bands;
 uniform float     beat_phase;
 
 uniform float pattern_scale;   /* pattern size (default 3.0) */
-uniform float line_width;      /* line thickness (default 0.02) */
+uniform float line_width;      /* ln_v thickness (default 0.02) */
 uniform float rotation_speed;  /* rotation (default 0.1) */
 uniform float layers;          /* number of ring layers (default 3.0) */
 
@@ -114,7 +114,7 @@ float4 PSSacredGeometry(VertInOut vert_in) : TARGET
     }
 
     /* Render lines */
-    float line = 1.0 - smoothstep(0.0, line_w, d);
+    float ln_v = 1.0 - smoothstep(0.0, line_w, d);
 
     /* Color based on distance from center */
     float dist_center = length(p) / (float(num_layers) * radius + 0.01);
@@ -129,7 +129,7 @@ float4 PSSacredGeometry(VertInOut vert_in) : TARGET
     /* Glow */
     float3 glow_col = line_col * glow_accum * 0.1 * (1.0 + bands.z);
 
-    float3 color = line_col * line * (0.8 + bands.x * 0.5) + glow_col;
+    float3 color = line_col * ln_v * (0.8 + bands.x * 0.5) + glow_col;
 
     /* Background subtle gradient */
     color += float3(0.02, 0.01, 0.03) * (1.0 - dist_center * 0.5);

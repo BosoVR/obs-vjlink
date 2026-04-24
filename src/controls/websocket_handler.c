@@ -684,13 +684,30 @@ static void handle_set_logo(obs_data_t *request_data,
 {
 	UNUSED_PARAMETER(priv);
 	const char *path = obs_data_get_string(request_data, "path");
+	int slot = (int)obs_data_get_int(request_data, "slot"); /* 0,1,2 */
+	if (slot < 0 || slot > 2) slot = 0;
 	struct vjlink_context *ctx = vjlink_get_context();
 
 	if (path) {
-		strncpy(ctx->pending_logo_path, path,
-		        sizeof(ctx->pending_logo_path) - 1);
-		ctx->pending_logo_path[sizeof(ctx->pending_logo_path) - 1] = '\0';
-		ctx->logo_pending = true;
+		/* Strip surrounding quotes */
+		size_t len = strlen(path);
+		const char *start = path;
+		if (len >= 2 && (path[0] == '"' || path[0] == '\'') &&
+		    (path[len-1] == '"' || path[len-1] == '\'')) {
+			start = path + 1;
+			len -= 2;
+		}
+		char *target_path = (slot == 0) ? ctx->pending_logo_path :
+		                    (slot == 1) ? ctx->pending_logo_path2 :
+		                                  ctx->pending_logo_path3;
+		volatile bool *target_flag = (slot == 0) ? &ctx->logo_pending :
+		                             (slot == 1) ? &ctx->logo_pending2 :
+		                                           &ctx->logo_pending3;
+		size_t buf_size = sizeof(ctx->pending_logo_path);
+		if (len >= buf_size) len = buf_size - 1;
+		memcpy(target_path, start, len);
+		target_path[len] = '\0';
+		*target_flag = true;
 		obs_data_set_bool(response_data, "success", true);
 	} else {
 		obs_data_set_bool(response_data, "success", false);

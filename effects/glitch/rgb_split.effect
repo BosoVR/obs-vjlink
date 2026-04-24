@@ -76,7 +76,7 @@ float3 glitchPattern(float2 uv, float bass, float treble, float beat)
     float2 uv_r = uv + float2(band_offset * 1.5, 0.0);
     float2 uv_b = uv - float2(band_offset * 1.2, 0.0);
 
-    /* Neon line pattern */
+    /* Neon ln_v pattern */
     float line_y = frac(uv.y * 100.0 + time * 5.0);
     float scanline = smoothstep(0.0, 0.02, line_y) * smoothstep(0.1, 0.08, line_y);
 
@@ -181,7 +181,10 @@ float4 PSRgbSplit(VertInOut vert_in) : TARGET
     scan = pow(scan, 4.0) * 0.08 * treble;
     col -= scan;
 
-    return float4(saturate(col), a_ch);
+    col = col / (1.0 + col * 0.45);
+    col = saturate(col);
+    float __a = max(max(col.r, col.g), col.b);
+    return float4(col, __a);
 }
 
 technique Draw

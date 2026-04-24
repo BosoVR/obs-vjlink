@@ -1,0 +1,131 @@
+/*
+ * VJLink - Acid Mandala (Pro VJ Shelter style)
+ * Rotating holographic mandala with multi-layered petals.
+ * Kaleidoscope fold + spiral warp. Deep cyberpunk neon.
+ * Breathing on bass, color cycles on mids, glitter on treble.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     onset_strength;
+
+uniform float complexity;       /* 1-8, default 5 */
+uniform float breathe_speed;    /* 0-4, default 0.8 */
+uniform float color_speed;      /* 0-4, default 1.0 */
+uniform float spiral_warp;      /* 0-2, default 0.8 */
+uniform float kaleido_count;    /* 3-24, default 12 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+VertInOut VSDefault(VertInOut vert_in) {
+    VertInOut o; o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj); o.uv = vert_in.uv; return o;
+}
+
+float hash21(float2 p) {
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float3 mandalaPal(float t) {
+    float3 magenta = float3(1.0, 0.1, 0.75);
+    float3 cyan    = float3(0.1, 0.85, 1.0);
+    float3 violet  = float3(0.55, 0.1, 1.0);
+    float3 green   = float3(0.2, 1.0, 0.3);
+    float p = frac(t);
+    if (p < 0.25)      return lerp(violet,  magenta, p * 4.0);
+    else if (p < 0.5)  return lerp(magenta, cyan,    (p - 0.25) * 4.0);
+    else if (p < 0.75) return lerp(cyan,    green,   (p - 0.5) * 4.0);
+    else               return lerp(green,   violet,  (p - 0.75) * 4.0);
+}
+
+float4 PSMandala(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x, low = bands.y, high = bands.z, treble = bands.w;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float onset = saturate(onset_strength);
+
+    float comp    = clamp(complexity, 1.0, 8.0);
+    float breathe = max(breathe_speed, 0.0);
+    float col_spd = max(color_speed, 0.0);
+    float warp    = max(spiral_warp, 0.0);
+    float kal     = clamp(kaleido_count, 3.0, 24.0);
+
+    /* Breathing scale + beat bloom */
+    float bloom = 1.0 + sin(time * breathe) * 0.08 + bass * 0.4 * beat;
+    p /= bloom;
+
+    /* Rotation — driven by lowmid */
+    float rot = time * 0.3 + low * 1.0;
+    float cs = cos(rot), sn = sin(rot);
+    p = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+
+    float r = length(p);
+    float ang = atan2(p.y, p.x);
+
+    /* Kaleidoscope fold */
+    float seg = 6.28318 / kal;
+    ang = abs(frac(ang / seg + 0.5) - 0.5) * seg;
+
+    /* Spiral warp on treble */
+    ang += r * warp * 3.5 + treble * 3.0 * r;
+    float2 sp = float2(cos(ang), sin(ang)) * r;
+
+    float3 col = float3(0.0, 0.0, 0.0);
+
+    /* Petal ring layers */
+    for (int i = 0; i < 8; i++) {
+        if (float(i) >= comp) break;
+        float fi = float(i);
+        float ring_r = 0.15 + fi * 0.13;
+        float wave = sin(ang * (6.0 + fi * 2.0) + time * (0.8 + fi * 0.2));
+        float width = 0.04 * (1.0 + bass * 0.6);
+        float petal = smoothstep(width, 0.0, abs(r - ring_r + wave * 0.05));
+        petal *= smoothstep(0.0, 0.08, r) * smoothstep(1.4, 0.6, r);
+        float pulse = 0.55 + sin(time * 1.8 + fi * 1.9) * 0.25 + bass * 0.5 * beat;
+        float3 lcol = mandalaPal(time * 0.08 * col_spd + fi * 0.15 + bass * 0.08);
+        col += lcol * petal * pulse;
+    }
+
+    /* Radial spokes */
+    float spokes = abs(sin(ang * kal * 0.5 + time * 0.5));
+    float spoke_line = smoothstep(0.97, 1.0, spokes) * smoothstep(1.3, 0.0, r);
+    col += mandalaPal(time * 0.15) * spoke_line * 0.4 * (0.5 + high);
+
+    /* Center flash */
+    float core = exp(-r * 6.0);
+    col += float3(1.0, 0.85, 1.0) * core * (0.4 + bass * beat * 1.6);
+
+    /* Outer halo ring */
+    float halo = exp(-abs(r - 0.95) * 4.0);
+    col += mandalaPal(time * 0.1 + 0.5) * halo * (0.3 + low * 0.5);
+
+    /* Treble sparkles */
+    float sparkle = step(0.985, hash21(floor(sp * 60.0) + floor(time * 15.0)));
+    col += float3(1.0, 1.0, 1.0) * sparkle * treble * 0.8;
+
+    /* Onset flash */
+    col += mandalaPal(onset * 3.0) * onset * 0.35;
+
+    col = col / (1.0 + col * 0.5);
+    float lum = dot(col, float3(0.299, 0.587, 0.114));
+    col = lerp(float3(lum, lum, lum), col, 1.3);
+    col = saturate(col);
+    float alpha = max(max(col.r, col.g), col.b);
+    return float4(col, alpha);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSMandala(vert_in);
+    }
+}

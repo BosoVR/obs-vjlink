@@ -9,6 +9,8 @@ uniform texture2d image;
 uniform texture2d input_tex;
 uniform texture2d audio_tex;
 uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
@@ -24,6 +26,8 @@ uniform float flash_color_r;   /* default 1.0 */
 uniform float flash_color_g;   /* default 1.0 */
 uniform float flash_color_b;   /* default 1.0 */
 uniform float cell_gap;        /* 0.0-0.3, default 0.05 */
+uniform float logo_shuffle_mode; /* 0=stable per cell, 1=shuffle each strobe cycle, 2=cycle by time */
+uniform float logo_switch_speed; /* 0-5, default 0 — for mode 2 (time cycle) */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -49,6 +53,24 @@ float hash21(float2 p)
     p = frac(p * float2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return frac(p.x * p.y);
+}
+
+bool is_fallback(float4 s) {
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.99);
+}
+
+float4 sample_logo_slot(int slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    if (slot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!is_fallback(s2)) return s2;
+    } else if (slot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!is_fallback(s3)) return s3;
+    }
+    return s1;
 }
 
 float4 PSStrobeGrid(VertInOut vert_in) : TARGET
@@ -162,9 +184,25 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
 
     col *= strength;
 
-    /* Logo inside cells */
+    /* Logo inside cells — slot selection depends on shuffle mode */
     if (logo_in_cells > 0.5) {
-        float4 logo_sample = logo_tex.Sample(texSampler, cell_frac);
+        int cell_slot;
+        if (logo_shuffle_mode >= 1.5) {
+            /* Mode 2: time-based cycle, all cells sync (with offset) */
+            int t_step = (int)floor(time * max(logo_switch_speed, 0.1));
+            int off = (int)(hash21(cell_id * 11.7) * 3.0);
+            cell_slot = (off + t_step) % 3;
+        } else if (logo_shuffle_mode >= 0.5) {
+            /* Mode 1: swap each strobe cycle — new slot every time the strobe retriggers */
+            int cycle_id = (int)floor(time * wspd * 0.5 + cell_phase);
+            cell_slot = (int)(hash21(cell_id * 11.7 + (float)cycle_id * 3.17) * 3.0);
+        } else {
+            /* Mode 0: stable per cell */
+            cell_slot = (int)(hash21(cell_id * 11.7) * 3.0);
+        }
+        if (cell_slot > 2) cell_slot = 2;
+        if (cell_slot < 0) cell_slot = 0;
+        float4 logo_sample = sample_logo_slot(cell_slot, cell_frac);
         float logo_vis = max(max(logo_sample.r, logo_sample.g), logo_sample.b);
 
         /* Skip fallback texture (1x1 black with alpha=1) */

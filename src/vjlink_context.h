@@ -86,12 +86,18 @@ struct vjlink_context {
     bool             gpu_supports_float_tex;
     bool             gpu_checked;
 
-    /* Logo texture (set by compositor source each frame) */
-    gs_texture_t    *logo_texture;
+    /* Logo textures (up to 3 user-selectable images) */
+    gs_texture_t    *logo_texture;     /* logo_tex — primary */
+    gs_texture_t    *logo_texture2;    /* logo_tex2 — secondary */
+    gs_texture_t    *logo_texture3;    /* logo_tex3 — tertiary */
 
-    /* WebSocket -> logo path override */
+    /* WebSocket -> logo path override (slot 0,1,2) */
     char             pending_logo_path[512];
+    char             pending_logo_path2[512];
+    char             pending_logo_path3[512];
     volatile bool    logo_pending;
+    volatile bool    logo_pending2;
+    volatile bool    logo_pending3;
 
     /* WebSocket -> transparent bg override */
     bool             pending_transparent_bg;

@@ -341,6 +341,8 @@ static void cache_standard_params(struct vjlink_effect_entry *entry)
 	entry->p_band_activation = gs_effect_get_param_by_name(e, "band_activation");
 	entry->p_has_input = gs_effect_get_param_by_name(e, "has_input_source");
 	entry->p_logo_tex  = gs_effect_get_param_by_name(e, "logo_tex");
+	entry->p_logo_tex2 = gs_effect_get_param_by_name(e, "logo_tex2");
+	entry->p_logo_tex3 = gs_effect_get_param_by_name(e, "logo_tex3");
 
 	/* Cache custom parameter handles */
 	for (uint32_t i = 0; i < entry->param_count; i++) {
@@ -527,18 +529,13 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 	if (entry->p_quality)
 		gs_effect_set_float(entry->p_quality, (float)ctx->gpu_quality);
 
-	/* Logo texture (user-selected image) */
-	if (entry->p_logo_tex && ctx->logo_texture) {
+	/* Logo textures (up to 3 user-selected images) */
+	if (entry->p_logo_tex && ctx->logo_texture)
 		gs_effect_set_texture(entry->p_logo_tex, ctx->logo_texture);
-	} else if (entry->p_logo_tex && !ctx->logo_texture) {
-		/* Logo param exists in shader but no logo loaded */
-		static int logo_warn_count = 0;
-		if (logo_warn_count < 3) {
-			blog(LOG_INFO, "[VJLink] Effect '%s' wants logo_tex but none loaded",
-			     entry->id);
-			logo_warn_count++;
-		}
-	}
+	if (entry->p_logo_tex2 && ctx->logo_texture2)
+		gs_effect_set_texture(entry->p_logo_tex2, ctx->logo_texture2);
+	if (entry->p_logo_tex3 && ctx->logo_texture3)
+		gs_effect_set_texture(entry->p_logo_tex3, ctx->logo_texture3);
 }
 
 void vjlink_effect_bind_custom_params(struct vjlink_effect_entry *entry,
@@ -636,6 +633,8 @@ bool vjlink_effect_check_hot_reload(struct vjlink_effect_entry *entry)
 	entry->p_band_activation = NULL;
 	entry->p_has_input = NULL;
 	entry->p_logo_tex = NULL;
+	entry->p_logo_tex2 = NULL;
+	entry->p_logo_tex3 = NULL;
 	memset(entry->param_handles, 0, sizeof(entry->param_handles));
 
 	/* Reload */

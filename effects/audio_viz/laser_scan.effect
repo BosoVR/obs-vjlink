@@ -91,16 +91,16 @@ float4 PSLaserScan(VertInOut vert_in) : TARGET
         float scan_pos = frac(time * line_speed * 0.3 + phase);
         float dist_to_line = abs(rotated_uv.y - scan_pos);
 
-        /* Wrap distance (line wraps from bottom to top) */
+        /* Wrap distance (ln_v wraps from bottom to top) */
         dist_to_line = min(dist_to_line, 1.0 - dist_to_line);
 
-        /* Sharp line core */
+        /* Sharp ln_v core */
         float line_bright = smoothstep(lwidth, 0.0, dist_to_line);
 
         /* Soft glow */
         float line_glow = exp(-dist_to_line * (30.0 - glow * 15.0)) * glow * 0.3;
 
-        /* Line color with slight variation per line */
+        /* Line color with slight variation per ln_v */
         float hue_var = hash11(fi * 27.3) * 0.1;
         float3 lcol = laser_col;
         lcol.r = saturate(lcol.r + hue_var);

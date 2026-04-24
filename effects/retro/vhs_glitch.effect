@@ -161,7 +161,7 @@ float4 PSVhs(VertInOut vert_in) : TARGET
     float snow = noise_px * noise_int * 0.08 * (0.3 + bands.w * 0.7);
     color += float3(snow, snow, snow);
 
-    /* Occasional horizontal static line (rare) */
+    /* Occasional horizontal static ln_v (rare) */
     if (noise_line > (1.0 - noise_int * 0.02)) {
         float line_noise = hash2d(float2(scanline * 3.0, time * 20.0));
         color = lerp(color, float3(line_noise, line_noise, line_noise), 0.25);

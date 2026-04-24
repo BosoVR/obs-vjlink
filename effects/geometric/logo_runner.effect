@@ -6,6 +6,8 @@
 
 uniform float4x4 ViewProj;
 uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
@@ -16,6 +18,7 @@ uniform float logo_scale;   /* 0.02-0.5, default 0.15 */
 uniform float speed;        /* 0.1-5.0, default 1.0 */
 uniform float count;        /* 1-10, default 3 */
 uniform float trail;        /* 0.0-1.0, default 0.3 */
+uniform float logo_switch_speed; /* 0-5, default 0 — 0=one slot per instance (stable), >0=all instances cycle */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -42,6 +45,25 @@ float hash11(float p)
     p *= p + 33.33;
     p *= p + p;
     return frac(p);
+}
+
+/* 1x1 black+alpha=1 is the driver default texture -> treat as unbound */
+bool is_fallback(float4 s) {
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.99);
+}
+
+float4 sample_logo_slot(int slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    if (slot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!is_fallback(s2)) return s2;
+    } else if (slot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!is_fallback(s3)) return s3;
+    }
+    return s1;
 }
 
 float2 get_direction(float mode, float instance_id)
@@ -83,6 +105,19 @@ float4 PSLogoRunner(VertInOut vert_in) : TARGET
         float fi = (float)i;
         float phase_offset = fi / num_logos;
 
+        /* Pick which of the 3 logo slots this instance uses
+         * switch_speed 0  -> each instance keeps its own random slot (stable)
+         * switch_speed >0 -> each instance rotates through slots over time */
+        int logo_slot;
+        if (logo_switch_speed > 0.01) {
+            int t_step = (int)floor(time * logo_switch_speed);
+            int base = (int)(hash11(fi * 17.3) * 3.0);
+            logo_slot = (base + t_step + i) % 3;
+        } else {
+            logo_slot = (int)(hash11(fi * 17.3) * 3.0);
+            if (logo_slot > 2) logo_slot = 2;
+        }
+
         float2 dir = get_direction(direction, fi);
 
         /* Position along travel path */
@@ -108,7 +143,7 @@ float4 PSLogoRunner(VertInOut vert_in) : TARGET
         if (logo_uv.x >= -0.1 && logo_uv.x <= 1.1 &&
             logo_uv.y >= -0.1 && logo_uv.y <= 1.1) {
             float2 clamped = saturate(logo_uv);
-            float4 lsample = logo_tex.Sample(texSampler, clamped);
+            float4 lsample = sample_logo_slot(logo_slot, clamped);
 
             /* Fade edges outside 0-1 range */
             float edge_fade = smoothstep(-0.1, 0.0, logo_uv.x) *
@@ -135,7 +170,7 @@ float4 PSLogoRunner(VertInOut vert_in) : TARGET
 
                 if (tr_uv.x >= 0.0 && tr_uv.x <= 1.0 &&
                     tr_uv.y >= 0.0 && tr_uv.y <= 1.0) {
-                    float4 tr_sample = logo_tex.Sample(texSampler, tr_uv);
+                    float4 tr_sample = sample_logo_slot(logo_slot, tr_uv);
                     float tr_a = tr_sample.a * trail_fade;
                     col += tr_sample.rgb * tr_a * 0.3;
                     max_alpha = max(max_alpha, tr_a * 0.5);

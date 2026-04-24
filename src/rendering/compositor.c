@@ -400,11 +400,13 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
 	if (has_chain) {
 		/* Chain effects need input: use feedback or seed */
 		prev_output = feedback_tex;
-	} else if (!comp->transparent_bg) {
-		/* No chain, opaque mode: band effects overlay on black */
-		prev_output = feedback_tex;
+	} else {
+		/* No chain: band effects start from an empty base.
+		 * Never reuse feedback_tex here — it still holds the last
+		 * rendered frame from a previously-active effect, which would
+		 * make a cleared main effect appear frozen on screen. */
+		prev_output = NULL;
 	}
-	/* else: transparent_bg + no chain → prev_output stays NULL */
 
 	/* Render each effect in the chain */
 	for (uint32_t i = 0; i < comp->chain_length; i++) {
