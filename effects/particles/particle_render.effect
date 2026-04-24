@@ -40,13 +40,18 @@ float4 PSRender(VertInOut vert_in) : TARGET
 
     float4 total_color = float4(0.0, 0.0, 0.0, 0.0);
 
-    /* Iterate over all particles in state texture */
-    float inv_size = 1.0 / tex_size;
+    /* Iterate over all particles in state texture.
+     * tex_size is always VJLINK_PARTICLE_TEX_SIZE (=128) — use a static
+     * cap so the HLSL compiler can unroll/bound the loop properly. */
+    float inv_size = 1.0 / max(tex_size, 1.0);
+    int tsi = (int)min(tex_size, 128.0);
 
-    for (float py = 0.0; py < tex_size; py += 1.0) {
-        for (float px = 0.0; px < tex_size; px += 1.0) {
-            float2 puv = float2((px + 0.5) * inv_size,
-                                (py + 0.5) * inv_size);
+    for (int py = 0; py < 128; py++) {
+        if (py >= tsi) break;
+        for (int px = 0; px < 128; px++) {
+            if (px >= tsi) break;
+            float2 puv = float2(((float)px + 0.5) * inv_size,
+                                ((float)py + 0.5) * inv_size);
 
             float4 state = state_tex.Sample(pointSampler, puv);
 

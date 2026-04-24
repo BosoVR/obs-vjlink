@@ -1,7 +1,8 @@
 /*
- * VJLink - Waveform Bars
- * Spectrum analyzer visualization with frequency bars.
- * Reads FFT data directly from audio_tex row 0.
+ * VJLink - Waveform Bars (Pro)
+ * Pro-grade spectrum analyzer with multiple display modes,
+ * styles, color modes, peak-hold caps, log frequency mapping,
+ * glow bloom, and full beat reactivity.
  */
 
 uniform float4x4 ViewProj;
@@ -10,12 +11,19 @@ uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
 uniform float     beat_phase;
+uniform float     onset_strength;
 
-/* Custom parameters */
-uniform float     bar_count;       /* 16.0 - 128.0, default 64.0 */
-uniform float     bar_width;       /* 0.3 - 0.95, default 0.8 */
-uniform float     sensitivity;     /* 1.0 - 10.0, default 5.0 */
-uniform float     mirror;          /* 0.0 or 1.0, default 1.0 */
+uniform float bar_count;        /* 16 - 256, default 64 */
+uniform float bar_width;        /* 0.3 - 1.0, default 0.85 */
+uniform float sensitivity;      /* 0.5 - 10, default 3 */
+uniform float display_mode;     /* 0=Vertical 1=MirrorCenter 2=MirrorOutward 3=Oscilloscope 4=Dual 5=Spiral */
+uniform float bar_style;        /* 0=Solid 1=Hollow 2=LED 3=NeonGlow */
+uniform float color_mode;       /* 0=Rainbow 1=Single 2=AmplitudeGradient 3=DualBand 4=PaletteCycle */
+uniform float base_color_r;     /* default 1.0 */
+uniform float base_color_g;     /* default 0.2 */
+uniform float base_color_b;     /* default 0.7 */
+uniform float glow_amount;      /* 0 - 2, default 1.0 */
+uniform float peak_hold;        /* 0 - 1, default 0.6 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -23,93 +31,240 @@ sampler_state texSampler {
     AddressV = Clamp;
 };
 
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv  = vert_in.uv;
+    return o;
 }
 
-float3 hsv2rgb(float3 c)
-{
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 hsv2rgb(float3 c) {
     float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+/* Sample FFT magnitude at logarithmic frequency position 0..1 */
+float sample_fft(float norm_pos)
+{
+    /* Log-ish curve: emphasize low end, compress high end */
+    float u = pow(saturate(norm_pos), 2.2) * 0.5; /* first half of 512 bins */
+    float4 s = audio_tex.Sample(texSampler, float2(u, 0.125));
+    return s.r;
+}
+
+/* Color picker per bar based on color_mode */
+float3 bar_color(int mode, float norm_pos, float magnitude, float fi)
+{
+    float3 base = float3(saturate(base_color_r), saturate(base_color_g), saturate(base_color_b));
+    if (mode < 0.5) {
+        /* Rainbow across spectrum */
+        return hsv2rgb(float3(frac(norm_pos * 0.85 + time * 0.04), 0.85, 1.0));
+    } else if (mode < 1.5) {
+        /* Single base color */
+        return base;
+    } else if (mode < 2.5) {
+        /* Amplitude → gradient (deep red → magenta → white) */
+        float3 c1 = float3(0.05, 0.0, 0.15);
+        float3 c2 = float3(1.0, 0.1, 0.6);
+        float3 c3 = float3(1.0, 1.0, 1.0);
+        if (magnitude < 0.5)
+            return lerp(c1, c2, magnitude * 2.0);
+        else
+            return lerp(c2, c3, (magnitude - 0.5) * 2.0);
+    } else if (mode < 3.5) {
+        /* Dual band: bass = base color, treble = complementary */
+        float3 alt = float3(1.0 - base.r, 1.0 - base.g, 1.0 - base.b);
+        return lerp(base, alt, norm_pos);
+    } else {
+        /* Palette cycle */
+        float t = norm_pos + time * 0.1 + fi * 0.07;
+        float3 a = float3(0.5, 0.5, 0.5);
+        float3 b = float3(0.5, 0.5, 0.5);
+        float3 c = float3(1.0, 1.0, 1.0);
+        float3 d = float3(0.0, 0.33, 0.67);
+        return a + b * cos(6.28318 * (c * t + d));
+    }
+}
+
+/* Apply bar style (filling pattern) */
+float bar_style_factor(int style, float bar_pos, float y_local, float magnitude)
+{
+    float bar_edge = abs(bar_pos - 0.5) * 2.0;
+    float in_bar_h = step(bar_edge, bar_width);
+
+    if (style < 0.5) {
+        /* Solid */
+        return in_bar_h * step(y_local, magnitude);
+    } else if (style < 1.5) {
+        /* Hollow outline */
+        float outline = smoothstep(0.0, 0.012, abs(y_local - magnitude));
+        outline = 1.0 - outline;
+        float side = 1.0 - smoothstep(bar_width - 0.05, bar_width, bar_edge);
+        side *= step(y_local, magnitude);
+        return max(outline * in_bar_h, side);
+    } else if (style < 2.5) {
+        /* LED segments — divide bar into 16 horizontal cells */
+        float seg = floor(y_local * 16.0) / 16.0;
+        float seg_filled = step(seg + 0.062, magnitude);
+        float seg_gap = step(0.05, frac(y_local * 16.0)) * step(frac(y_local * 16.0), 0.95);
+        return in_bar_h * seg_filled * seg_gap;
+    } else {
+        /* Neon glow — soft edges, brighter at peak */
+        float top_glow = smoothstep(0.04, 0.0, abs(y_local - magnitude));
+        float fill = step(y_local, magnitude) * smoothstep(bar_width, bar_width - 0.1, bar_edge);
+        return saturate(fill * 0.6 + top_glow);
+    }
 }
 
 float4 PSWaveformBars(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
     float bass = bands.x;
+    float low = bands.y;
+    float high = bands.z;
+    float treble = bands.w;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float onset = saturate(onset_strength);
 
     int num_bars = max(16, (int)bar_count);
-    float bar_w = 1.0 / (float)num_bars;
+    float sens = max(sensitivity, 0.5);
+    int dmode = (int)display_mode;
+    int style = (int)bar_style;
+    int cmode = (int)color_mode;
+    float glow = max(glow_amount, 0.0);
+    float peak = saturate(peak_hold);
 
-    /* Which bar are we in? */
-    int bar_index = (int)(uv.x * (float)num_bars);
-    float bar_pos = frac(uv.x * (float)num_bars);
+    /* Working coords: u along bars [0..1], y_local = bar height pos */
+    float u_axis;
+    float y_local;
+    float side_sign = 1.0;
 
-    /* Sample FFT magnitude from audio_tex row 0 */
-    /* Map bar_index to FFT bin (logarithmic for perceptual spacing) */
-    float norm_idx = (float)bar_index / (float)num_bars;
-    float log_idx = pow(norm_idx, 2.0); /* quadratic for pseudo-log spacing */
-    float fft_u = log_idx * 0.5; /* use first half of 512 bins (0-256) */
-
-    /* Sample audio texture: row 0 = FFT spectrum */
-    float2 fft_uv = float2(fft_u, 0.125); /* y=0.125 = center of row 0 in 4-row texture */
-    float4 fft_sample = audio_tex.Sample(texSampler, fft_uv);
-    float magnitude = fft_sample.r * sensitivity;
-
-    /* Clamp magnitude */
-    magnitude = clamp(magnitude, 0.0, 1.0);
-
-    /* Bar rendering */
-    float y;
-    if (mirror > 0.5) {
-        /* Mirrored: bars grow from center */
-        y = abs(uv.y - 0.5) * 2.0;
+    if (dmode == 0) {
+        /* Vertical bottom-up */
+        u_axis = uv.x;
+        y_local = 1.0 - uv.y;
+    } else if (dmode == 1) {
+        /* Mirror center: bars grow up+down from middle */
+        u_axis = uv.x;
+        y_local = abs(uv.y - 0.5) * 2.0;
+        side_sign = (uv.y < 0.5) ? -1.0 : 1.0;
+    } else if (dmode == 2) {
+        /* Mirror outward: top half + bottom half mirror around horizontal middle (bars on top + bottom growing inward) */
+        u_axis = uv.x;
+        y_local = 1.0 - abs(uv.y - 0.5) * 2.0;
+    } else if (dmode == 3) {
+        /* Oscilloscope: PCM waveform line */
+        u_axis = uv.x;
+        y_local = uv.y;
+    } else if (dmode == 4) {
+        /* Dual: top half = spectrum, bottom = mirror with offset color */
+        u_axis = uv.x;
+        if (uv.y < 0.5) {
+            y_local = (0.5 - uv.y) * 2.0;
+            side_sign = -1.0;
+        } else {
+            y_local = (uv.y - 0.5) * 2.0;
+        }
     } else {
-        /* Bottom-up */
-        y = 1.0 - uv.y;
+        /* Spiral: polar coords, bars radiating */
+        float2 p = (uv - 0.5) * 2.0;
+        p.x *= aspect;
+        float r = length(p);
+        float ang = atan2(p.y, p.x);
+        u_axis = (ang + 3.14159) / 6.28318;
+        y_local = saturate(1.0 - r);
     }
 
-    /* Is this pixel inside the bar? */
-    float bar_edge = abs(bar_pos - 0.5) * 2.0;
-    float in_bar = step(bar_edge, bar_width);
-    float in_height = step(y, magnitude);
+    int bar_index = (int)(u_axis * (float)num_bars);
+    float bar_pos = frac(u_axis * (float)num_bars);
+    float norm_pos = (float)bar_index / (float)num_bars;
 
-    /* Color: hue based on frequency, brightness based on amplitude */
-    float hue = norm_idx * 0.8 + time * 0.02; /* frequency-based rainbow */
-    float sat = 0.8;
-    float val = in_bar * in_height;
+    float magnitude = sample_fft(norm_pos) * sens;
+    /* Sub-bass thickening — first 10% of bars get bass boost */
+    if (norm_pos < 0.1)
+        magnitude += bass * 0.35 * (1.0 - norm_pos / 0.1);
+    magnitude = saturate(magnitude);
 
-    /* Gradient within bar: brighter at base */
-    float gradient = 1.0 - (y / (magnitude + 0.001)) * 0.3;
-    val *= gradient;
+    /* Smooth peak: simulate "peak hold" by reading neighboring bins
+     * and combining max of nearby bins; gives that capped-bar feel. */
+    float peak_mag = magnitude;
+    if (peak > 0.05) {
+        float p1 = sample_fft(norm_pos + 0.005) * sens;
+        float p2 = sample_fft(norm_pos - 0.005) * sens;
+        peak_mag = max(magnitude, max(p1, p2));
+    }
 
-    /* Peak indicator ln_v */
-    float peak_line = smoothstep(0.02, 0.0, abs(y - magnitude));
-    float3 peak_color = float3(1.0, 1.0, 1.0) * peak_line * in_bar;
+    float3 col = float3(0.0, 0.0, 0.0);
+    float alpha_acc = 0.0;
 
-    float3 color = hsv2rgb(float3(frac(hue), sat, clamp(val, 0.0, 1.0)));
-    color += peak_color;
+    if (dmode == 3) {
+        /* Oscilloscope mode: trace a line based on PCM (use bands as proxy if no PCM lookup) */
+        /* Sample PCM row (y=0.375) — gives waveform [-1..1] in r */
+        float4 pcm = audio_tex.Sample(texSampler, float2(u_axis, 0.375));
+        float wave_y = 0.5 + (pcm.r - 0.5) * (0.6 + bass * 0.4);
+        float dist = abs(uv.y - wave_y);
+        float line_core = smoothstep(0.006, 0.0, dist);
+        float line_halo = exp(-dist * (40.0 - glow * 20.0)) * glow * 0.3;
+        float3 trace_col = bar_color(cmode, u_axis, 0.7, 0.0);
+        col = trace_col * (line_core + line_halo) * (0.7 + bass * 0.5);
+        alpha_acc = saturate(line_core + line_halo);
+    } else {
+        /* Bar visibility */
+        float bar_v = bar_style_factor(style, bar_pos, y_local, magnitude);
 
-    /* Beat flash on background */
-    float beat = (1.0 - beat_phase);
-    beat = beat * beat * beat;
-    float3 bg = float3(0.02, 0.02, 0.05) + beat * bass * 0.1 * float3(0.3, 0.1, 0.5);
+        /* Vertical gradient: brighter at peak, darker at base */
+        float vg = lerp(0.55, 1.0, saturate(y_local / max(magnitude, 0.001)));
 
-    /* Final: bar or background */
-    float3 final_color = lerp(bg, color, in_bar * in_height);
-    final_color += peak_color;
+        float3 c = bar_color(cmode, norm_pos, magnitude, (float)bar_index);
+        col = c * bar_v * vg;
+        alpha_acc = bar_v;
 
-    return float4(clamp(final_color, 0.0, 1.0), 1.0);
+        /* Peak cap line */
+        if (peak > 0.05) {
+            float cap_dist = abs(y_local - peak_mag);
+            float cap = smoothstep(0.012, 0.0, cap_dist);
+            cap *= step(abs(bar_pos - 0.5) * 2.0, bar_width);
+            col += float3(1.0, 1.0, 1.0) * cap * 0.9 * peak;
+            alpha_acc = max(alpha_acc, cap * 0.9);
+        }
+
+        /* Soft glow above bar tip — bloom */
+        if (glow > 0.05) {
+            float top_dist = abs(y_local - magnitude);
+            float bloom = exp(-top_dist * (16.0 - glow * 8.0));
+            bloom *= step(abs(bar_pos - 0.5) * 2.0, bar_width + 0.05);
+            bloom *= smoothstep(magnitude + 0.15, magnitude, y_local);
+            col += c * bloom * glow * 0.4;
+            alpha_acc = max(alpha_acc, bloom * 0.4);
+        }
+    }
+
+    /* Beat overlay: subtle full-screen color tint on kick */
+    float beat_tint = beat * bass * 0.08;
+    col += float3(0.6, 0.1, 0.4) * beat_tint;
+
+    /* Onset white burst at base */
+    if (dmode == 0 || dmode == 1) {
+        float base_glow = exp(-y_local * 6.0) * onset * 0.3;
+        col += float3(1.0, 0.9, 1.0) * base_glow;
+        alpha_acc = max(alpha_acc, base_glow);
+    }
+
+    /* HDR-ish tonemap */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    /* Premultiplied alpha (max channel = visibility) */
+    float final_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, max(final_alpha, alpha_acc * 0.7));
 }
 
 technique Draw

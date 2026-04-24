@@ -117,7 +117,7 @@ float4 PSSacredGeometry(VertInOut vert_in) : TARGET
     float ln_v = 1.0 - smoothstep(0.0, line_w, d);
 
     /* Color based on distance from center */
-    float dist_center = length(p) / (float(num_layers) * radius + 0.01);
+    float dist_center = length(p) / max(float(num_layers) * radius, 0.1);
 
     float hue = frac(dist_center * 0.3 + time * 0.02 + bands.y * 0.1);
     float3 line_col;

@@ -1,7 +1,7 @@
 /*
- * VJLink Spectrum Radial Effect
- * Circular frequency spectrum visualization.
- * Each frequency bin maps to an angle around the circle.
+ * VJLink - Spectrum Radial (Pro)
+ * Circular spectrum analyzer with multiple display modes,
+ * inner ring pulse, mirroring, beat-driven spin.
  */
 
 uniform float4x4 ViewProj;
@@ -10,11 +10,18 @@ uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
 uniform float     beat_phase;
+uniform float     onset_strength;
 
-uniform float inner_radius;    /* inner circle size (default 0.2) */
-uniform float bar_height;      /* max bar extension (default 0.3) */
-uniform float bar_count;       /* number of bars (default 64.0) */
-uniform float mirror_mode;     /* 0=single, 1=mirrored (default 1.0) */
+uniform float inner_radius;     /* 0.05 - 0.5, default 0.2 */
+uniform float bar_height;       /* 0.05 - 0.6, default 0.3 */
+uniform float bar_count;        /* 8 - 256, default 96 */
+uniform float display_mode;     /* 0=Bars 1=LineStroke 2=DualRing 3=Mandala 4=Petals 5=Particles */
+uniform float color_mode;       /* 0=Rainbow 1=Single 2=BandSplit 3=PaletteCycle 4=Heat */
+uniform float mirror_mode;      /* 0=full, 1=half mirror, 2=quarter mandala */
+uniform float spin_speed;       /* 0 - 5, default 0.5 */
+uniform float base_color_r;     /* default 1.0 */
+uniform float base_color_g;     /* default 0.15 */
+uniform float base_color_b;     /* default 0.7 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -22,93 +29,222 @@ sampler_state texSampler {
     AddressV = Clamp;
 };
 
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv  = vert_in.uv;
+    return o;
+}
+
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 hsv2rgb(float3 c) {
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float sample_fft(float pos)
+{
+    float u = pow(saturate(pos), 2.0) * 0.5;
+    return audio_tex.Sample(texSampler, float2(u, 0.125)).r;
+}
+
+float3 ring_color(int cmode, float norm_pos, float mag)
+{
+    float3 base = float3(saturate(base_color_r), saturate(base_color_g), saturate(base_color_b));
+    if (cmode < 0.5) {
+        return hsv2rgb(float3(frac(norm_pos + time * 0.05), 0.85, 1.0));
+    } else if (cmode < 1.5) {
+        return base;
+    } else if (cmode < 2.5) {
+        /* Band split: 4 quadrants by frequency */
+        if (norm_pos < 0.25) return float3(1.0, 0.1, 0.2);     /* bass red */
+        if (norm_pos < 0.5)  return float3(1.0, 0.5, 0.05);    /* lowmid orange */
+        if (norm_pos < 0.75) return float3(0.2, 1.0, 0.4);     /* highmid green */
+        return float3(0.2, 0.7, 1.0);                          /* treble blue */
+    } else if (cmode < 3.5) {
+        float t = norm_pos + time * 0.08;
+        return 0.5 + 0.5 * cos(6.28318 * (float3(1.0, 1.0, 1.0) * t + float3(0.0, 0.33, 0.67)));
+    } else {
+        /* Heat: amplitude → black-red-yellow-white */
+        float3 c1 = float3(0.05, 0.0, 0.05);
+        float3 c2 = float3(1.0, 0.1, 0.0);
+        float3 c3 = float3(1.0, 0.85, 0.2);
+        float3 c4 = float3(1.0, 1.0, 1.0);
+        if (mag < 0.33) return lerp(c1, c2, mag * 3.0);
+        if (mag < 0.66) return lerp(c2, c3, (mag - 0.33) * 3.0);
+        return lerp(c3, c4, (mag - 0.66) * 3.0);
+    }
 }
 
 float4 PSSpectrumRadial(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float treble = bands.w;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float onset = saturate(onset_strength);
 
     float r = length(p);
-    float a = atan2(p.y, p.x); /* -PI to PI */
+    float a = atan2(p.y, p.x);
 
     float inner = max(inner_radius, 0.05);
     float height = max(bar_height, 0.05);
-    float bars = max(bar_count, 8.0);
-    float mirror = saturate(mirror_mode);
+    float bars = clamp(bar_count, 8.0, 256.0);
+    int dmode = (int)display_mode;
+    int cmode = (int)color_mode;
+    int mirror = (int)mirror_mode;
 
-    /* Normalize angle to 0..1 */
+    /* Beat-driven spin */
+    float spin = time * spin_speed * 0.1 + bass * 0.5 + beat * bass * 0.2;
+    a += spin;
+
     float angle_norm = (a + 3.14159) / 6.28318;
+    angle_norm = frac(angle_norm);
 
-    /* Mirror mode: fold at 0.5 */
-    float spectrum_pos;
-    if (mirror > 0.5) {
-        spectrum_pos = abs(angle_norm - 0.5) * 2.0;
+    /* Apply mirror */
+    float spec_pos;
+    if (mirror == 1) {
+        spec_pos = abs(angle_norm - 0.5) * 2.0;
+    } else if (mirror == 2) {
+        /* Quarter symmetry — kaleidoscopic */
+        float sec = frac(angle_norm * 4.0);
+        spec_pos = abs(sec - 0.5) * 2.0;
     } else {
-        spectrum_pos = angle_norm;
+        spec_pos = angle_norm;
     }
 
-    /* Quantize to bars */
-    float bar_idx = floor(spectrum_pos * bars);
-    float bar_frac = frac(spectrum_pos * bars);
+    float bar_idx = floor(spec_pos * bars);
+    float bar_frac = frac(spec_pos * bars);
+    float norm_pos = bar_idx / bars;
 
-    /* Sample FFT from audio texture (row 0) */
-    float fft_uv = (bar_idx + 0.5) / bars;
-    fft_uv = saturate(fft_uv);
-    float fft_val = audio_tex.Sample(texSampler, float2(fft_uv, 0.125)).r;
+    float mag = sample_fft(norm_pos) * 1.5;
+    /* Bass boost lower bins */
+    if (norm_pos < 0.1) mag += bass * 0.35;
+    mag = saturate(mag);
+    float bar_len = mag * height;
 
-    /* Scale FFT value */
-    float bar_len = fft_val * height;
-
-    /* Bar shape: check if pixel is within bar */
     float dist_from_inner = r - inner;
-    float in_bar = 0.0;
+    float in_band = step(0.0, dist_from_inner) * step(dist_from_inner, bar_len);
 
-    /* Bar width with gap */
-    float bar_width_ratio = 0.7;
-    if (abs(bar_frac - 0.5) < bar_width_ratio * 0.5 && dist_from_inner > 0.0 && dist_from_inner < bar_len) {
-        in_bar = 1.0;
+    float3 col = float3(0.0, 0.0, 0.0);
+    float alpha = 0.0;
+
+    /* === Display modes === */
+    if (dmode == 0) {
+        /* Bars: classic radial bars */
+        float bw = 0.65;
+        float in_bar = step(abs(bar_frac - 0.5) * 2.0, bw);
+        float v = in_band * in_bar;
+        float vg = lerp(0.5, 1.5, saturate(dist_from_inner / max(bar_len, 0.001)));
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * v * vg;
+        alpha = v;
+
+        /* Peak rim */
+        float peak_d = abs(dist_from_inner - bar_len);
+        float peak = smoothstep(0.006, 0.0, peak_d) * in_bar;
+        col += float3(1.0, 1.0, 1.0) * peak * 0.7;
+        alpha = max(alpha, peak * 0.7);
+
+    } else if (dmode == 1) {
+        /* Line stroke: continuous waveform around the ring */
+        float wave_r = inner + bar_len;
+        float dist_to_curve = abs(r - wave_r);
+        float line_core = smoothstep(0.008, 0.0, dist_to_curve);
+        float line_halo = exp(-dist_to_curve * 30.0) * 0.4;
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * (line_core + line_halo);
+        alpha = saturate(line_core + line_halo * 0.6);
+
+    } else if (dmode == 2) {
+        /* Dual ring: outward AND inward bars */
+        float outward_len = mag * height;
+        float inward_len = mag * height * 0.7;
+        float in_out = step(0.0, dist_from_inner) * step(dist_from_inner, outward_len);
+        float in_in = step(-inward_len, dist_from_inner) * step(dist_from_inner, 0.0);
+        float bw = 0.7;
+        float in_bar = step(abs(bar_frac - 0.5) * 2.0, bw);
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * (in_out + in_in * 0.7) * in_bar;
+        alpha = (in_out + in_in * 0.7) * in_bar;
+
+    } else if (dmode == 3) {
+        /* Mandala: bars + radial lines connecting them */
+        float bw = 0.55;
+        float in_bar = step(abs(bar_frac - 0.5) * 2.0, bw);
+        float bar_v = in_band * in_bar;
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * bar_v;
+        /* Connecting line at mid-height */
+        float mid_r = inner + bar_len * 0.5;
+        float ring_d = abs(r - mid_r);
+        float ring = smoothstep(0.003, 0.0, ring_d) * step(0.05, mag);
+        col += c * ring * 0.6;
+        alpha = max(bar_v, ring * 0.6);
+
+    } else if (dmode == 4) {
+        /* Petals: rounded, flower-like blooms */
+        float petal_len = mag * height;
+        float petal_r = inner + petal_len;
+        /* Distance to curved petal end (rounded cap) */
+        float petal_t = saturate(dist_from_inner / max(petal_len, 0.001));
+        float petal_w = sin(petal_t * 3.14159) * 0.5; /* wide in middle */
+        float in_petal = step(abs(bar_frac - 0.5) * 2.0, 0.4 + petal_w);
+        in_petal *= step(0.0, dist_from_inner) * step(dist_from_inner, petal_len);
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * in_petal * (0.7 + petal_t * 0.5);
+        alpha = in_petal;
+
+    } else {
+        /* Particles: dot-particles flying outward */
+        float t_offset = time * (1.0 + bass * 0.5);
+        float launch = frac(time * 0.5 + norm_pos * 5.0);
+        float life = launch;
+        float particle_r = inner + life * height * (0.5 + mag * 1.5);
+        float dist = length(float2(r - particle_r, (bar_frac - 0.5) * 0.05));
+        float particle = exp(-dist * 80.0) * mag;
+        particle *= step(0.05, mag);
+        particle *= (1.0 - life); /* fade as it flies */
+        float3 c = ring_color(cmode, norm_pos, mag);
+        col = c * particle * 1.5;
+        alpha = particle;
     }
 
-    /* Color based on frequency position */
-    float hue = frac(bar_idx / bars + time * 0.05);
-    float3 bar_col;
-    bar_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-    bar_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-    bar_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-    bar_col = saturate(bar_col);
+    /* === Inner ring pulse === */
+    float inner_d = abs(r - inner);
+    float ring_pulse = exp(-inner_d * 35.0) * (0.4 + bass * beat * 1.5);
+    float3 ring_col = ring_color(cmode, time * 0.05, bass);
+    col += ring_col * ring_pulse;
+    alpha = max(alpha, ring_pulse);
 
-    /* Brightness gradient along bar height */
-    float height_ratio = dist_from_inner / max(bar_len, 0.001);
-    bar_col *= lerp(0.5, 1.5, height_ratio);
+    /* Center glow on kick */
+    float center_glow = exp(-r * 3.5) * bass * beat * 0.4;
+    col += float3(1.0, 0.6, 0.9) * center_glow;
+    alpha = max(alpha, center_glow);
 
-    float3 color = bar_col * in_bar;
+    /* Onset radial blast */
+    if (onset > 0.2) {
+        float blast_r = onset * 0.4 + 0.1;
+        float blast_d = abs(r - blast_r);
+        float blast = smoothstep(0.04, 0.0, blast_d) * onset;
+        col += float3(1.0, 0.9, 1.0) * blast * 0.5;
+        alpha = max(alpha, blast * 0.5);
+    }
 
-    /* Inner circle glow */
-    float inner_glow = exp(-(r - inner) * 20.0) * 0.3;
-    if (r < inner) inner_glow = 0.5;
-    float3 glow_col = float3(0.3, 0.3, 0.5) * inner_glow * (1.0 + bands.x * 0.5);
-    color += glow_col;
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
 
-    /* Beat pulse on inner ring */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    float ring_pulse = exp(-abs(r - inner) * 40.0) * beat * bands.x;
-    color += float3(1.0, 1.0, 1.0) * ring_pulse * 0.5;
-
-    return float4(color, 1.0);
+    float final_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, max(final_alpha, alpha * 0.6));
 }
 
 technique Draw

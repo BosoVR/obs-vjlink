@@ -1,7 +1,7 @@
 /*
- * VJLink - Laser Scan
- * Scanning laser beam lines across the screen.
- * Audio-reactive sweep speed and intensity.
+ * VJLink - Laser Scan (Pro)
+ * Real laser-style beams: sharp core + halo + scatter haze.
+ * Multiple scan modes, beat-triggered bursts, smoke volume.
  */
 
 uniform float4x4 ViewProj;
@@ -10,15 +10,18 @@ uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
 uniform float     beat_phase;
+uniform float     onset_strength;
 
-uniform float line_count;      /* 1-10, default 3 */
-uniform float line_width;      /* 0.001-0.03, default 0.005 */
-uniform float scan_speed;      /* 0.1-5.0, default 1.0 */
-uniform float laser_color_r;   /* default 0.2 */
-uniform float laser_color_g;   /* default 1.0 */
-uniform float laser_color_b;   /* default 0.3 */
-uniform float scan_angle;      /* 0.0-1.0, default 0.0 (0=horiz, 0.25=diag, 0.5=vert) */
-uniform float glow_size;       /* 0.0-2.0, default 1.0 */
+uniform float line_count;       /* 1 - 16, default 5 */
+uniform float line_width;       /* 0.0005 - 0.02, default 0.003 */
+uniform float scan_speed;       /* 0.1 - 5, default 1 */
+uniform float laser_color_r;    /* default 1.0 */
+uniform float laser_color_g;    /* default 0.1 */
+uniform float laser_color_b;    /* default 0.4 */
+uniform float scan_mode;        /* 0=HorizScan 1=VertScan 2=FanSweep 3=Grid 4=Burst 5=AudioCurve */
+uniform float color_mode;       /* 0=Single 1=PerLine 2=Rainbow 3=BeatReact */
+uniform float glow_size;        /* 0 - 2, default 1 */
+uniform float haze_amount;      /* 0 - 1, default 0.3 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -26,98 +29,235 @@ sampler_state texSampler {
     AddressV = Clamp;
 };
 
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv  = vert_in.uv;
+    return o;
 }
 
-float hash11(float p)
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+
+float noise(float2 p) {
+    float2 i = floor(p); float2 f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
+}
+
+float3 hsv2rgb(float3 c) {
+    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float3 line_color(int cmode, float fi, float lc, float beat_pulse)
 {
-    p = frac(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return frac(p);
+    float3 base = float3(saturate(laser_color_r), saturate(laser_color_g), saturate(laser_color_b));
+    if (cmode < 0.5) {
+        return base;
+    } else if (cmode < 1.5) {
+        return hsv2rgb(float3(frac(fi / max(lc, 1.0) + 0.05), 0.95, 1.0));
+    } else if (cmode < 2.5) {
+        return hsv2rgb(float3(frac(time * 0.1 + fi * 0.13), 0.95, 1.0));
+    } else {
+        /* Beat react: pulses between base and complementary on each kick */
+        float3 alt = float3(1.0 - base.r, 1.0 - base.g, 1.0 - base.b);
+        return lerp(base, alt, beat_pulse);
+    }
+}
+
+/* Distance from point to a line through origin with direction d (unit vector) */
+float dist_to_line_dir(float2 p, float2 d, float2 origin)
+{
+    float2 v = p - origin;
+    float along = dot(v, d);
+    float2 perp = v - d * along;
+    return length(perp);
 }
 
 float4 PSLaserScan(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
     float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
 
     float bass = bands.x;
+    float low = bands.y;
     float treble = bands.w;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float onset = saturate(onset_strength);
 
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-
-    float3 laser_col = float3(
-        saturate(laser_color_r),
-        saturate(laser_color_g),
-        saturate(laser_color_b)
-    );
-
-    float lwidth = max(line_width, 0.001) * (1.0 + treble * 0.5);
-    float spd = max(scan_speed, 0.1) * (1.0 + bass * 2.0);
-    int lcount = clamp((int)line_count, 1, 10);
+    int mode = (int)scan_mode;
+    int cmode = (int)color_mode;
+    float lwidth = max(line_width, 0.0005) * (1.0 + treble * 0.4);
+    float spd = max(scan_speed, 0.1);
+    float lc = clamp(line_count, 1.0, 16.0);
+    int lci = (int)lc;
     float glow = max(glow_size, 0.0);
-
-    /* Rotation angle for scan direction */
-    float angle = scan_angle * 3.14159;
-    float cs = cos(angle);
-    float sn = sin(angle);
+    float haze = saturate(haze_amount);
 
     float3 col = float3(0.0, 0.0, 0.0);
+    float alpha_acc = 0.0;
 
-    for (int i = 0; i < 10; i++) {
-        if (i >= lcount) break;
-
-        float fi = (float)i;
-        float phase = fi / (float)lcount;
-        float line_speed = spd * (0.5 + hash11(fi * 13.7) * 0.5);
-
-        /* Line position (sweeping across rotated axis) */
-        float2 rotated_uv;
-        rotated_uv.x = (uv.x - 0.5) * cs + (uv.y - 0.5) * sn + 0.5;
-        rotated_uv.y = -(uv.x - 0.5) * sn + (uv.y - 0.5) * cs + 0.5;
-
-        float scan_pos = frac(time * line_speed * 0.3 + phase);
-        float dist_to_line = abs(rotated_uv.y - scan_pos);
-
-        /* Wrap distance (ln_v wraps from bottom to top) */
-        dist_to_line = min(dist_to_line, 1.0 - dist_to_line);
-
-        /* Sharp ln_v core */
-        float line_bright = smoothstep(lwidth, 0.0, dist_to_line);
-
-        /* Soft glow */
-        float line_glow = exp(-dist_to_line * (30.0 - glow * 15.0)) * glow * 0.3;
-
-        /* Line color with slight variation per ln_v */
-        float hue_var = hash11(fi * 27.3) * 0.1;
-        float3 lcol = laser_col;
-        lcol.r = saturate(lcol.r + hue_var);
-        lcol.g = saturate(lcol.g - hue_var * 0.5);
-
-        /* Bass drives intensity */
-        float intensity = 0.5 + bass * 0.5 + beat * 0.3;
-
-        col += lcol * (line_bright + line_glow) * intensity;
+    /* === Scan modes === */
+    if (mode == 0) {
+        /* Horizontal scan: beams sweep up/down */
+        for (int i = 0; i < 16; i++) {
+            if (i >= lci) break;
+            float fi = (float)i;
+            float phase = fi / lc;
+            float speed = spd * (0.4 + hash11(fi * 13.7) * 0.8) * (1.0 + bass * 0.6);
+            float scan_y = (sin(time * speed * 0.5 + phase * 6.28) * 0.5 + 0.5) * 1.6 - 0.8;
+            float dist = abs(p.y - scan_y);
+            float core = smoothstep(lwidth * 1.2, 0.0, dist);
+            float halo = exp(-dist * (35.0 - glow * 18.0)) * glow * 0.4;
+            float flick = 0.85 + sin(time * 12.0 + fi * 3.0) * 0.15;
+            float3 c = line_color(cmode, fi, lc, beat * bass);
+            float intensity = 0.6 + bass * 0.4 + beat * bass * 0.5;
+            col += c * (core + halo) * flick * intensity;
+            alpha_acc = max(alpha_acc, core + halo * 0.5);
+        }
+    } else if (mode == 1) {
+        /* Vertical scan */
+        for (int i = 0; i < 16; i++) {
+            if (i >= lci) break;
+            float fi = (float)i;
+            float phase = fi / lc;
+            float speed = spd * (0.4 + hash11(fi * 13.7) * 0.8) * (1.0 + bass * 0.6);
+            float scan_x = (sin(time * speed * 0.5 + phase * 6.28) * 0.5 + 0.5) * 2.0 * aspect - aspect;
+            float dist = abs(p.x - scan_x);
+            float core = smoothstep(lwidth * 1.2, 0.0, dist);
+            float halo = exp(-dist * (35.0 - glow * 18.0)) * glow * 0.4;
+            float flick = 0.85 + sin(time * 12.0 + fi * 3.0) * 0.15;
+            float3 c = line_color(cmode, fi, lc, beat * bass);
+            col += c * (core + halo) * flick * (0.6 + bass * 0.4);
+            alpha_acc = max(alpha_acc, core + halo * 0.5);
+        }
+    } else if (mode == 2) {
+        /* Fan sweep: beams emit from a moving source point, fanning out */
+        float2 src = float2(sin(time * 0.3) * 0.4, -0.85 + sin(time * 0.5) * 0.05);
+        for (int i = 0; i < 16; i++) {
+            if (i >= lci) break;
+            float fi = (float)i;
+            float phase = fi / lc;
+            float ang_base = (phase - 0.5) * 1.2;
+            float ang = ang_base + sin(time * spd * 0.4 + fi * 2.1) * 0.3 + bass * 0.15;
+            float2 dir = normalize(float2(sin(ang), cos(ang)));
+            float2 v = p - src;
+            float along = dot(v, dir);
+            if (along < 0.0) continue;
+            float2 perp = v - dir * along;
+            float pd = length(perp);
+            float core = smoothstep(lwidth, 0.0, pd);
+            float halo = exp(-pd * (25.0 - glow * 12.0)) * glow * 0.35;
+            float depth_fade = exp(-along * 0.25);
+            float flick = 0.9 + hash11(floor(time * 12.0) + fi) * 0.1;
+            float3 c = line_color(cmode, fi, lc, beat * bass);
+            col += c * (core + halo) * flick * depth_fade * (0.6 + bass * 0.4);
+            alpha_acc = max(alpha_acc, (core + halo * 0.5) * depth_fade);
+        }
+    } else if (mode == 3) {
+        /* Grid scan: horizontal + vertical lines crossing */
+        for (int i = 0; i < 16; i++) {
+            if (i >= lci) break;
+            float fi = (float)i;
+            float phase = fi / lc;
+            float speed = spd * (0.4 + hash11(fi * 13.7) * 0.8);
+            /* Half horizontal, half vertical */
+            bool is_v = (i % 2 == 0);
+            float scan_pos = (sin(time * speed * 0.4 + phase * 6.28) * 0.5 + 0.5);
+            float dist;
+            if (is_v) {
+                float scan_x = scan_pos * 2.0 * aspect - aspect;
+                dist = abs(p.x - scan_x);
+            } else {
+                float scan_y = scan_pos * 1.6 - 0.8;
+                dist = abs(p.y - scan_y);
+            }
+            float core = smoothstep(lwidth * 1.2, 0.0, dist);
+            float halo = exp(-dist * (40.0 - glow * 20.0)) * glow * 0.3;
+            float3 c = line_color(cmode, fi, lc, beat * bass);
+            col += c * (core + halo) * (0.6 + bass * 0.4);
+            alpha_acc = max(alpha_acc, core + halo * 0.5);
+        }
+    } else if (mode == 4) {
+        /* Burst: lines radiate from center, triggered by beat */
+        float burst_amt = beat * bass * 1.2 + onset * 0.6;
+        for (int i = 0; i < 16; i++) {
+            if (i >= lci) break;
+            float fi = (float)i;
+            float ang = (fi / lc) * 6.28318 + time * spd * 0.05;
+            float2 dir = float2(cos(ang), sin(ang));
+            float along = dot(p, dir);
+            if (along < 0.0) continue;
+            float2 perp = p - dir * along;
+            float pd = length(perp);
+            /* Width grows with distance */
+            float lw_eff = lwidth * (1.0 + along * 0.2);
+            float core = smoothstep(lw_eff, 0.0, pd);
+            float halo = exp(-pd * (25.0 - glow * 12.0)) * glow * 0.35;
+            float depth_fade = exp(-along * 0.4);
+            float pulse = pow(burst_amt, 1.5);
+            float3 c = line_color(cmode, fi, lc, beat * bass);
+            col += c * (core + halo) * pulse * depth_fade;
+            alpha_acc = max(alpha_acc, (core + halo * 0.5) * pulse * depth_fade);
+        }
+        /* Center burst point */
+        float center_glow = exp(-length(p) * 8.0) * burst_amt;
+        col += float3(1.0, 0.9, 1.0) * center_glow * 0.5;
+        alpha_acc = max(alpha_acc, center_glow);
+    } else {
+        /* Audio curve: a single beam traces an FFT line across screen */
+        float u = uv.x;
+        float fft_u = pow(u, 1.4) * 0.5;
+        float4 fft = audio_tex.Sample(texSampler, float2(fft_u, 0.125));
+        float curve_y = 0.5 + (fft.r * 0.7 + bass * 0.1 - 0.4) * 1.2;
+        float dist = abs(uv.y - curve_y);
+        float core = smoothstep(lwidth * 1.5, 0.0, dist);
+        float halo = exp(-dist * (35.0 - glow * 18.0)) * glow * 0.5;
+        float3 c = line_color(cmode, 0.0, lc, beat * bass);
+        col += c * (core + halo) * (0.7 + bass * 0.5);
+        alpha_acc = max(alpha_acc, core + halo * 0.6);
+        /* Mirror reflection */
+        float curve_y2 = 1.0 - curve_y;
+        float dist2 = abs(uv.y - curve_y2);
+        float core2 = smoothstep(lwidth, 0.0, dist2) * 0.4;
+        float halo2 = exp(-dist2 * 25.0) * glow * 0.2;
+        col += c * (core2 + halo2);
+        alpha_acc = max(alpha_acc, (core2 + halo2) * 0.5);
     }
 
-    /* Ambient laser scatter */
-    col += laser_col * 0.02 * bass;
+    /* Volumetric haze — beams reveal in air */
+    if (haze > 0.01) {
+        float h = fbm(p * 3.0 + time * 0.05);
+        h = pow(h, 2.0);
+        float3 c = line_color(cmode, 0.0, lc, beat * bass);
+        /* Haze brightens where beams are bright */
+        float beam_brightness = max(max(col.r, col.g), col.b);
+        col += c * h * haze * beam_brightness * 0.4;
+        alpha_acc = max(alpha_acc, h * haze * beam_brightness * 0.4);
+    }
 
+    /* Beat tint */
+    col += float3(0.5, 0.05, 0.3) * beat * bass * 0.05;
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
     col = saturate(col);
-    float out_alpha = max(max(col.r, col.g), col.b);
-    return float4(col, out_alpha);
+
+    float final_alpha = max(max(col.r, col.g), col.b);
+    return float4(col, max(final_alpha, alpha_acc * 0.7));
 }
 
 technique Draw

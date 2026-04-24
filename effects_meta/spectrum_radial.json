@@ -1,13 +1,18 @@
 {
-    "effect_id": "spectrum_radial",
-    "name": "Spectrum Radial",
-    "category": "audio_viz",
-    "description": "Circular frequency spectrum with rainbow bars and beat-pulsing inner ring",
-    "author": "VJLink",
-    "params": [
-        { "id": "inner_radius", "name": "Inner Radius", "type": "float", "default": 0.2, "min": 0.05, "max": 0.5, "step": 0.05 },
-        { "id": "bar_height", "name": "Bar Height", "type": "float", "default": 0.3, "min": 0.05, "max": 0.8, "step": 0.05 },
-        { "id": "bar_count", "name": "Bar Count", "type": "float", "default": 64.0, "min": 8.0, "max": 128.0, "step": 8.0 },
-        { "id": "mirror_mode", "name": "Mirror", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 1.0 }
-    ]
+  "id": "spectrum_radial",
+  "name": "Spectrum Radial",
+  "category": "audio_viz",
+  "description": "Pro radial spectrum analyzer with bars, line, dual ring, mandala, petals, particles",
+  "params": [
+    { "name": "inner_radius", "label": "Inner Radius", "type": "float", "default": 0.2, "min": 0.05, "max": 0.5, "step": 0.01 },
+    { "name": "bar_height", "label": "Bar Height", "type": "float", "default": 0.3, "min": 0.05, "max": 0.6, "step": 0.01 },
+    { "name": "bar_count", "label": "Bar Count", "type": "float", "default": 96.0, "min": 8.0, "max": 256.0, "step": 1.0 },
+    { "name": "display_mode", "label": "Mode (0=Bars 1=Line 2=Dual 3=Mandala 4=Petals 5=Particles)", "type": "float", "default": 0.0, "min": 0.0, "max": 5.0, "step": 1.0 },
+    { "name": "color_mode", "label": "Color (0=Rain 1=Single 2=BandSplit 3=Palette 4=Heat)", "type": "float", "default": 0.0, "min": 0.0, "max": 4.0, "step": 1.0 },
+    { "name": "mirror_mode", "label": "Mirror (0=Full 1=Half 2=Quarter)", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 },
+    { "name": "spin_speed", "label": "Spin Speed", "type": "float", "default": 0.5, "min": 0.0, "max": 5.0, "step": 0.05 },
+    { "name": "base_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "base_color_g", "label": "Color G", "type": "float", "default": 0.15, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "base_color_b", "label": "Color B", "type": "float", "default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01 }
+  ]
 }

@@ -1,12 +1,19 @@
 {
-    "id": "waveform_bars",
-    "name": "Waveform Bars",
-    "category": "audio_viz",
-    "description": "Spectrum analyzer with frequency bars reading FFT data",
-    "params": [
-        { "name": "bar_count", "label": "Bar Count", "type": "float", "default": 64.0, "min": 16.0, "max": 128.0, "step": 1.0 },
-        { "name": "bar_width", "label": "Bar Width", "type": "float", "default": 0.8, "min": 0.3, "max": 0.95, "step": 0.05 },
-        { "name": "sensitivity", "label": "Sensitivity", "type": "float", "default": 5.0, "min": 1.0, "max": 10.0, "step": 0.5 },
-        { "name": "mirror", "label": "Mirror Mode", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 1.0 }
-    ]
+  "id": "waveform_bars",
+  "name": "Waveform Bars",
+  "category": "audio_viz",
+  "description": "Pro spectrum analyzer with multiple modes, styles, color modes",
+  "params": [
+    { "name": "bar_count", "label": "Bar Count", "type": "float", "default": 64.0, "min": 16.0, "max": 256.0, "step": 1.0 },
+    { "name": "bar_width", "label": "Bar Width", "type": "float", "default": 0.85, "min": 0.3, "max": 1.0, "step": 0.01 },
+    { "name": "sensitivity", "label": "Sensitivity", "type": "float", "default": 3.0, "min": 0.5, "max": 10.0, "step": 0.1 },
+    { "name": "display_mode", "label": "Mode (0=Vert 1=MirCenter 2=MirOut 3=Osc 4=Dual 5=Spiral)", "type": "float", "default": 0.0, "min": 0.0, "max": 5.0, "step": 1.0 },
+    { "name": "bar_style", "label": "Style (0=Solid 1=Hollow 2=LED 3=Neon)", "type": "float", "default": 0.0, "min": 0.0, "max": 3.0, "step": 1.0 },
+    { "name": "color_mode", "label": "Color (0=Rain 1=Single 2=AmpGrad 3=Dual 4=Palette)", "type": "float", "default": 0.0, "min": 0.0, "max": 4.0, "step": 1.0 },
+    { "name": "base_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "base_color_g", "label": "Color G", "type": "float", "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "base_color_b", "label": "Color B", "type": "float", "default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "glow_amount", "label": "Glow", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "peak_hold", "label": "Peak Hold", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 }
+  ]
 }

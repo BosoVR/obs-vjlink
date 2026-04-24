@@ -159,13 +159,14 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
 
     /* Sort direction with audio wobble */
     float angle_offset = sin(time * 2.0 + uv.y * 10.0) * treble * 0.3;
+    float2 res_safe = max(resolution, float2(1.0, 1.0));
     float2 sort_dir;
     if (direction < 0.5) {
-        sort_dir = float2(sin(angle_offset) / resolution.x,
-                          1.0 / resolution.y);
+        sort_dir = float2(sin(angle_offset) / res_safe.x,
+                          1.0 / res_safe.y);
     } else {
-        sort_dir = float2(1.0 / resolution.x,
-                          sin(angle_offset) / resolution.y);
+        sort_dir = float2(1.0 / res_safe.x,
+                          sin(angle_offset) / res_safe.y);
     }
 
     /* Region-based sort variation */

@@ -100,7 +100,7 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     color = hsv2rgb(hsv);
 
     /* Gamma correction */
-    color = pow(max(color, 0.001), 1.0 / pp_gamma);
+    color = pow(max(color, 0.001), 1.0 / max(pp_gamma, 0.1));
 
     /* Vignette */
     float2 vig_uv = uv - 0.5;
