@@ -1194,6 +1194,107 @@
     box-shadow: 0 0 14px 4px rgba(239,68,68,0.6);
   }
 
+  /* === Pad Banks === */
+  .pad-bank-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pad-bank-btn:hover { border-color: var(--accent); color: var(--text); }
+  .pad-bank-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent2);
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  /* === Pad Edit Mode === */
+  body.pad-edit-mode .pad-edit-only { display: flex !important; }
+  body.pad-edit-mode #padPlayHelp { display: none; }
+  body.pad-edit-mode .perf-pad {
+    cursor: move;
+    border-style: dashed;
+  }
+  body.pad-edit-mode #padEditBtn {
+    background: var(--orange);
+    color: white;
+    border-color: var(--orange);
+  }
+  body:not(.pad-edit-mode) #padEditBtn::before { content: "🔒 "; }
+
+  /* Last triggered pad highlight */
+  .perf-pad.last-triggered {
+    border-color: var(--green);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+  }
+
+  /* Pad with custom color override */
+  .perf-pad[data-pad-color] {
+    border-left: 3px solid var(--pad-color, var(--accent));
+  }
+
+  /* Drag-over indicator */
+  .perf-pad.drag-over {
+    border-color: var(--accent2);
+    background: var(--surface3);
+  }
+
+  /* === Pad Modal === */
+  .pad-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .pad-modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    width: min(420px, 92vw);
+    max-height: 90vh;
+    overflow: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .pad-modal-header {
+    padding: 12px 14px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .pad-color-swatch {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.1s;
+  }
+  .pad-color-swatch:hover { transform: scale(1.1); }
+  .pad-color-swatch.selected {
+    border-color: var(--text);
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(255,255,255,0.3);
+  }
+
   /* === MIDI learn mode visual cue === */
   body.midi-learn-active .perf-pad,
   body.midi-learn-active .pal-btn,
@@ -1634,6 +1735,22 @@
       </div>
     </div>
 
+    <!-- ===== QUALITY PROFILE ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>GPU Quality</span>
+        <span id="qualityAuto" style="font-size:9px;color:var(--text-dim);font-weight:400;letter-spacing:0.4px;text-transform:none">auto-detected</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px">
+        <button class="mini-btn" onclick="setQualityLevel(0)" id="qualBtn0">LOW</button>
+        <button class="mini-btn" onclick="setQualityLevel(1)" id="qualBtn1">MEDIUM</button>
+        <button class="mini-btn" onclick="setQualityLevel(2)" id="qualBtn2">HIGH</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        Affects raymarch step counts, FBM octaves, particle layers. Lower for streaming PC; Higher for gaming PC.
+      </div>
+    </div>
+
     <!-- ===== OSC ===== -->
     <div class="pro-panel pro-only" style="margin-top:12px">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -1768,33 +1885,80 @@
 
     <!-- ===== PERFORMANCE PADS ===== -->
     <div class="pro-panel" style="margin-top:12px">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
         <span>Performance Pads</span>
-        <div style="display:flex;gap:8px;align-items:center;font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0.4px">
-          <label style="display:flex;align-items:center;gap:4px">
-            Count
-            <select id="padCountSel" onchange="setPadCount(parseInt(this.value))"
-              style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px">
-              <option value="4">4</option>
-              <option value="8">8</option>
-              <option value="12" selected>12</option>
-              <option value="16">16</option>
-              <option value="24">24</option>
-            </select>
-          </label>
-          <label style="display:flex;align-items:center;gap:4px">
-            Size
-            <select id="padSizeSel" onchange="setPadSize(this.value)"
-              style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px">
-              <option value="sm">S</option>
-              <option value="md" selected>M</option>
-              <option value="lg">L</option>
-              <option value="xl">XL</option>
-            </select>
-          </label>
+        <button id="padEditBtn" onclick="togglePadEditMode()" class="mini-btn"
+          style="font-size:10px;padding:3px 10px;text-transform:uppercase">🔒 PLAY</button>
+      </div>
+
+      <!-- Bank selector -->
+      <div style="display:flex;gap:4px;margin-top:8px">
+        <button class="pad-bank-btn active" data-bank="A" onclick="setPadBank('A')">BANK A</button>
+        <button class="pad-bank-btn" data-bank="B" onclick="setPadBank('B')">BANK B</button>
+        <button class="pad-bank-btn" data-bank="C" onclick="setPadBank('C')">BANK C</button>
+      </div>
+
+      <!-- Settings (collapsible, only visible in edit mode) -->
+      <div id="padSettingsRow" class="pad-edit-only" style="display:none;gap:8px;align-items:center;font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0.4px;margin-top:8px">
+        <label style="display:flex;align-items:center;gap:4px;flex:1">
+          Count
+          <select id="padCountSel" onchange="setPadCount(parseInt(this.value))"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px;flex:1">
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="12" selected>12</option>
+            <option value="16">16</option>
+            <option value="24">24</option>
+          </select>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;flex:1">
+          Size
+          <select id="padSizeSel" onchange="setPadSize(this.value)"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px;flex:1">
+            <option value="sm">S</option>
+            <option value="md" selected>M</option>
+            <option value="lg">L</option>
+            <option value="xl">XL</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="pad-grid" id="padGrid"></div>
+
+      <!-- Help row, edit-mode only -->
+      <div class="pad-edit-only" style="display:none;font-size:9px;color:var(--text-dim);margin-top:8px;letter-spacing:0.3px;line-height:1.4">
+        💡 EDIT mode: click empty pad to save current state. Click filled pad to edit name/color. Drag pads to reorder. Switch to PLAY to trigger.
+      </div>
+      <div id="padPlayHelp" style="font-size:9px;color:var(--text-dim);margin-top:8px;letter-spacing:0.3px;line-height:1.4">
+        💡 PLAY mode: click pad to trigger. Hotkeys 1-9 / Q W E R / etc. Switch to EDIT to assign new pads.
+      </div>
+    </div>
+
+    <!-- Pad Edit Modal -->
+    <div id="padEditModal" class="pad-modal" style="display:none">
+      <div class="pad-modal-box">
+        <div class="pad-modal-header">
+          <span id="padModalTitle">Edit Pad</span>
+          <button onclick="closePadEditModal()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div class="band-slider-label"><span>Label</span></div>
+            <input type="text" id="padEditLabel" placeholder="Custom name (auto if empty)"
+              style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+          </div>
+          <div>
+            <div class="band-slider-label"><span>Color</span></div>
+            <div id="padEditColors" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px"></div>
+          </div>
+          <div id="padEditInfo" style="font-size:10px;color:var(--text-dim);line-height:1.5;padding:6px;background:var(--surface2);border-radius:5px"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+            <button class="mini-btn" onclick="padEditSave()">Save</button>
+            <button class="mini-btn" onclick="padEditDuplicate()">Duplicate</button>
+            <button class="mini-btn" onclick="padEditClear()" style="color:var(--red);border-color:var(--red)">Clear</button>
+          </div>
         </div>
       </div>
-      <div class="pad-grid" id="padGrid"></div>
     </div>
 
     <!-- Media / Source Triggers -->
@@ -3790,15 +3954,89 @@ function renderCategories() {
   });
 }
 
+/* === Effect Favorites + Tooltips (v1.3.1) === */
+const EFFECT_FAVS_KEY = 'vjlink_effect_favs_v1';
+let effectFavs = new Set();
+try {
+  const raw = localStorage.getItem(EFFECT_FAVS_KEY);
+  if (raw) effectFavs = new Set(JSON.parse(raw));
+} catch (e) {}
+let showFavsOnly = false;
+
+function toggleEffectFav(id) {
+  if (effectFavs.has(id)) effectFavs.delete(id);
+  else effectFavs.add(id);
+  try { localStorage.setItem(EFFECT_FAVS_KEY, JSON.stringify([...effectFavs])); } catch (e) {}
+  renderEffects();
+}
+function toggleFavsFilter() {
+  showFavsOnly = !showFavsOnly;
+  renderEffects();
+}
+
+/* Hover tooltip — uses params from effectParams + builtin descriptions */
+const EFFECT_DESCRIPTIONS = {
+  bloom_pro: '13-tap gaussian bloom, beat-driven intensity. Stack on any generator → instant pro look.',
+  crt_pro: 'Trinitron CRT — phosphor mask, halation, gaussian scanlines, curvature, warmth.',
+  vaporwave_sunset: '80s — sunset gradient, palette-aware sun, perspective grid, wireframe mountains.',
+  demoscene_plasma: 'Classic 90s sin-oscillator plasma + XOR pixel pattern + palette cycling.',
+  witch_sigil: 'Rotating pentagram + outer ring + glyphs + beat-driven blood drips. Dark.',
+  cyber_grid: '80s vector horizon, perspective grid, beat-pulsing lines, sun disk.',
+  wireframe_city: 'Cyberpunk skyline fly-through with neon-twinkling building windows.',
+  type_animator: 'Audio-reactive bold typography — RAVE, BERGHAIN, HARDTECHNO, ACID, DROP, TECHNO.',
+  iridescent_mesh: 'Pseudo-3D oil-on-metal with view-angle iridescence + treble sparkle.',
+  volumetric_light: 'Real raymarched god-rays + configurable light source + quality slider.',
+  liquid_sim: 'Form-aware liquid: depth, caustics, sub-surface glow, beat ripples.',
+  concrete_pulse: 'Brutalist concrete with kick-driven cracks + shockwave rings.',
+  industrial_strobe_tunnel: 'Calm B/W tunnel with smooth beat-locked depth pulses.',
+  smoke_volume: 'Volumetric smoke + audio-reactive light shafts.',
+  mono_outline: 'Brutalist Sobel edge filter — works on any input source.',
+  beat_cuts: 'BPM-quantized hard cuts (1/4, 1/8, 1/16). Disciplined techno strobe.',
+  glitch_basic: 'Clean live glitch — horizontal tears, RGB offsets, block jumps.',
+  rgb_split: 'Chromatic aberration + palette warm/cold accent.',
+  datamosh: 'Codec corruption + I-frame drops on beat.',
+  pixel_sort: 'Aggressive directional pixel stretching with chroma + palette tint.',
+  vhs_glitch: 'VHS tape tracking errors, snow noise, head-switching.',
+  lens_flare: 'Anamorphic streak + ghost orbs + sun disk overlay.',
+  holographic_foil: 'View-angle iridescent shift on input.',
+  feedback: 'Recursive feedback with zoom, rotation, hue shift trails.',
+  displacement: 'UV warp via animated noise + audio swirl + chromatic split.',
+  color_grade: 'Lift / Gamma / Gain + saturation + hue shift + palette tint.',
+};
+
 function renderEffects() {
   const grid = document.getElementById('effectsGrid');
   grid.innerHTML = '';
+
+  /* Toolbar with favs filter */
+  const toolbar = document.createElement('div');
+  toolbar.style.cssText = 'grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:10px;color:var(--text-dim)';
+  toolbar.innerHTML = `
+    <button onclick="toggleFavsFilter()" class="mini-btn" style="font-size:10px;padding:4px 10px;${showFavsOnly ? 'background:var(--accent);color:white;' : ''}">
+      ★ ${showFavsOnly ? 'SHOW ALL' : 'FAVS ONLY'} ${effectFavs.size > 0 ? '('+effectFavs.size+')' : ''}
+    </button>
+    <span>Click effect to use • Click ★ to favorite • Hover for info</span>
+  `;
+  grid.appendChild(toolbar);
 
   const categories = effectProGroups[activeCategory]
     ? [[activeCategory, effectProGroups[activeCategory]]]
     : (activeCategory === 'all'
       ? Object.entries(effectCategories)
       : [[activeCategory, effectCategories[activeCategory]]]);
+
+  /* Collect favs to show first if showing all */
+  if (!showFavsOnly && effectFavs.size > 0 && activeCategory === 'all') {
+    const favHeader = document.createElement('div');
+    favHeader.style.cssText = 'grid-column:1/-1;font-size:10px;font-weight:800;color:var(--accent2);letter-spacing:1.2px;margin-top:4px;text-transform:uppercase';
+    favHeader.textContent = '★ Favorites';
+    grid.appendChild(favHeader);
+    [...effectFavs].forEach(id => grid.appendChild(buildEffectButton(id)));
+    const allHeader = document.createElement('div');
+    allHeader.style.cssText = 'grid-column:1/-1;font-size:10px;font-weight:800;color:var(--text-dim);letter-spacing:1.2px;margin-top:8px;text-transform:uppercase';
+    allHeader.textContent = 'All Effects';
+    grid.appendChild(allHeader);
+  }
 
   categories.forEach(([key, cat]) => {
     if (!cat) return;
@@ -3812,21 +4050,37 @@ function renderEffects() {
       grid.appendChild(note);
     }
     cat.effects.forEach(id => {
-      const btn = document.createElement('button');
-      btn.className = 'effect-btn' + (activeEffect === id ? ' active' : '');
-      const label = effectNames[id] || id;
-      if (NEW_EFFECTS && NEW_EFFECTS.has(id)) {
-        btn.innerHTML = label +
-          '<span style="display:inline-block;margin-left:6px;padding:1px 6px;font-size:9px;font-weight:700;' +
-          'background:linear-gradient(135deg,#ec4899,#7c3aed);color:white;border-radius:8px;' +
-          'vertical-align:middle;letter-spacing:0.5px;box-shadow:0 0 6px rgba(236,72,153,0.5);">NEW</span>';
-      } else {
-        btn.textContent = label;
-      }
-      btn.onclick = () => selectEffect(id);
-      grid.appendChild(btn);
+      if (showFavsOnly && !effectFavs.has(id)) return;
+      grid.appendChild(buildEffectButton(id));
     });
   });
+}
+
+function buildEffectButton(id) {
+  const btn = document.createElement('button');
+  btn.className = 'effect-btn' + (activeEffect === id ? ' active' : '');
+  btn.style.position = 'relative';
+  const label = effectNames[id] || id;
+  const isFav = effectFavs.has(id);
+  let inner = '';
+  /* Star button */
+  inner += `<span class="fav-star" onclick="event.stopPropagation();toggleEffectFav('${id}')"
+    style="position:absolute;top:2px;right:4px;cursor:pointer;font-size:13px;color:${isFav ? 'var(--orange)' : 'var(--text-dim)'};opacity:${isFav ? 1 : 0.4}"
+    title="${isFav ? 'Remove favorite' : 'Add to favorites'}">★</span>`;
+  inner += label;
+  if (NEW_EFFECTS && NEW_EFFECTS.has(id)) {
+    inner += '<span style="display:inline-block;margin-left:4px;padding:1px 5px;font-size:8px;font-weight:700;' +
+      'background:linear-gradient(135deg,#ec4899,#7c3aed);color:white;border-radius:6px;' +
+      'vertical-align:middle;letter-spacing:0.5px;">NEW</span>';
+  }
+  btn.innerHTML = inner;
+
+  /* Hover tooltip */
+  const desc = EFFECT_DESCRIPTIONS[id] || effectNames[id] || id;
+  btn.title = desc;
+
+  btn.onclick = () => selectEffect(id);
+  return btn;
 }
 
 // === Per-Band Effects ===
@@ -4897,46 +5151,93 @@ function setStrobeSafetyFromUI() {
   }, 70);
 }
 
-/* ===== Performance Pads ===== */
+/* ===== Performance Pads (v1.3.1: banks + edit + labels + colors + drag) ===== */
 const PAD_HOTKEYS = ['1','2','3','4','5','6','7','8','9','q','w','e','r','t','z','u','i','o','p','a','s','d','f','g'];
-const PAD_STORAGE_KEY = 'vjlink_pads_v2';
-const PAD_PREFS_KEY = 'vjlink_pad_prefs_v1';
-let perfPads = []; /* [{ effect, params, palette }] x padCount */
-let padCount = 12; /* configurable: 4 / 8 / 12 / 16 / 24 */
-let padSize = 'md'; /* sm / md / lg / xl */
+const PAD_STORAGE_KEY = 'vjlink_pads_v3';   /* bumped: now stores banks */
+const PAD_PREFS_KEY = 'vjlink_pad_prefs_v2';
+const PAD_COLORS = [
+  null,        /* default = palette accent */
+  '#ef4444',   /* red */
+  '#f59e0b',   /* orange */
+  '#eab308',   /* amber */
+  '#84cc16',   /* lime */
+  '#10b981',   /* green */
+  '#06b6d4',   /* cyan */
+  '#3b82f6',   /* blue */
+  '#8b5cf6',   /* purple */
+  '#ec4899',   /* pink */
+  '#94a3b8',   /* slate */
+  '#ffffff',   /* white */
+];
+
+let padBanks = { A: [], B: [], C: [] };
+let activeBank = 'A';
+let padCount = 12;
+let padSize = 'md';
+let padEditMode = false;
+let lastTriggeredPad = -1;
+let dragSrcIdx = -1;
+let editingPadIdx = -1;
+let editingPadColor = null;
+
+/* perfPads is a mirror of padBanks[activeBank] — re-aliased on bank switch */
+let perfPads = [];
+
+function _migrateOldPads() {
+  /* Migrate v2 single-array storage to v3 bank storage */
+  try {
+    const oldRaw = localStorage.getItem('vjlink_pads_v2');
+    if (oldRaw && !localStorage.getItem(PAD_STORAGE_KEY)) {
+      const old = JSON.parse(oldRaw);
+      if (Array.isArray(old)) {
+        padBanks.A = old;
+        savePerfPads();
+      }
+    }
+  } catch (e) {}
+}
 
 function loadPerfPads() {
-  /* Restore preferences first */
+  /* Prefs */
   try {
     const prefs = JSON.parse(localStorage.getItem(PAD_PREFS_KEY) || '{}');
-    if (typeof prefs.count === 'number' && [4,8,12,16,24].includes(prefs.count))
-      padCount = prefs.count;
-    if (typeof prefs.size === 'string' && ['sm','md','lg','xl'].includes(prefs.size))
-      padSize = prefs.size;
+    if (typeof prefs.count === 'number' && [4,8,12,16,24].includes(prefs.count)) padCount = prefs.count;
+    if (typeof prefs.size === 'string' && ['sm','md','lg','xl'].includes(prefs.size)) padSize = prefs.size;
+    if (typeof prefs.bank === 'string' && ['A','B','C'].includes(prefs.bank)) activeBank = prefs.bank;
   } catch (e) {}
 
+  _migrateOldPads();
+
   try {
-    perfPads = JSON.parse(localStorage.getItem(PAD_STORAGE_KEY) || 'null') || [];
-  } catch (e) { perfPads = []; }
-  /* Ensure correct length without losing data */
-  while (perfPads.length < padCount) perfPads.push(null);
+    const raw = localStorage.getItem(PAD_STORAGE_KEY);
+    if (raw) padBanks = JSON.parse(raw) || { A: [], B: [], C: [] };
+  } catch (e) { padBanks = { A: [], B: [], C: [] }; }
+  /* Ensure each bank exists and has padCount slots */
+  ['A','B','C'].forEach(b => {
+    if (!Array.isArray(padBanks[b])) padBanks[b] = [];
+    while (padBanks[b].length < padCount) padBanks[b].push(null);
+  });
+  perfPads = padBanks[activeBank];
 }
 
 function savePerfPads() {
-  try { localStorage.setItem(PAD_STORAGE_KEY, JSON.stringify(perfPads)); }
-  catch (e) {}
+  try { localStorage.setItem(PAD_STORAGE_KEY, JSON.stringify(padBanks)); } catch (e) {}
 }
 
 function savePadPrefs() {
-  try { localStorage.setItem(PAD_PREFS_KEY, JSON.stringify({ count: padCount, size: padSize })); }
-  catch (e) {}
+  try {
+    localStorage.setItem(PAD_PREFS_KEY, JSON.stringify({
+      count: padCount, size: padSize, bank: activeBank,
+    }));
+  } catch (e) {}
 }
 
 function setPadCount(n) {
   if (![4,8,12,16,24].includes(n)) return;
   padCount = n;
-  while (perfPads.length < padCount) perfPads.push(null);
-  /* Don't truncate stored data — keep it in case user grows pad count again */
+  ['A','B','C'].forEach(b => {
+    while (padBanks[b].length < padCount) padBanks[b].push(null);
+  });
   savePadPrefs();
   savePerfPads();
   renderPerfPads();
@@ -4949,12 +5250,35 @@ function setPadSize(size) {
   renderPerfPads();
 }
 
+function setPadBank(b) {
+  if (!['A','B','C'].includes(b)) return;
+  activeBank = b;
+  perfPads = padBanks[activeBank];
+  savePadPrefs();
+  /* Update bank button highlight */
+  document.querySelectorAll('.pad-bank-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.bank === b);
+  });
+  renderPerfPads();
+}
+
+function togglePadEditMode() {
+  padEditMode = !padEditMode;
+  document.body.classList.toggle('pad-edit-mode', padEditMode);
+  const btn = document.getElementById('padEditBtn');
+  if (btn) {
+    btn.textContent = padEditMode ? '✏️ EDIT' : 'PLAY';
+  }
+  renderPerfPads();
+}
+
 function renderPerfPads() {
   const grid = document.getElementById('padGrid');
   if (!grid) return;
   grid.className = 'pad-grid size-' + padSize;
   grid.innerHTML = '';
-  /* Sync the dropdowns to current state */
+  perfPads = padBanks[activeBank];
+
   const cSel = document.getElementById('padCountSel');
   const sSel = document.getElementById('padSizeSel');
   if (cSel && cSel.value !== String(padCount)) cSel.value = String(padCount);
@@ -4964,54 +5288,146 @@ function renderPerfPads() {
     const pad = perfPads[i] || null;
     const div = document.createElement('button');
     div.className = 'perf-pad' + (pad ? ' assigned' : '');
+    if (i === lastTriggeredPad) div.classList.add('last-triggered');
     div.dataset.padIdx = i;
+    div.draggable = padEditMode;
+
+    /* Custom color */
+    if (pad && pad.color) {
+      div.dataset.padColor = '1';
+      div.style.setProperty('--pad-color', pad.color);
+    }
+
     const hk = (i < PAD_HOTKEYS.length) ? PAD_HOTKEYS[i].toUpperCase() : '';
-    let name = pad ? (effectNames[pad.effect] || pad.effect) : 'EMPTY';
-    /* Show chain stack count if pad has multi-slot chain */
+    const labelText = pad ? (pad.label || effectNames[pad.effect] || pad.effect) : 'EMPTY';
     const chainExtra = (pad && Array.isArray(pad.chain) && pad.chain.length > 1)
                        ? ` +${pad.chain.length - 1}` : '';
     div.innerHTML = `<span class="pad-key">${hk}${chainExtra}</span>
-      <span class="pad-name">${name}</span>`;
-    div.title = pad ? `Click to trigger | Right-click to clear` : 'Click to assign current effect';
-    div.onclick = () => triggerPad(i);
-    div.oncontextmenu = (e) => { e.preventDefault(); clearPad(i); };
+      <span class="pad-name">${labelText}</span>`;
+
+    div.title = padEditMode
+      ? (pad ? 'Click to edit | Drag to reorder' : 'Click to save current state')
+      : (pad ? 'Click to trigger pad ' + hk : 'Empty pad — switch to EDIT to assign');
+    div.onclick = () => onPadClick(i);
+    div.oncontextmenu = (e) => { e.preventDefault(); openPadEditModal(i); };
+
+    /* Drag-and-drop reorder (edit mode only) */
+    div.ondragstart = (e) => {
+      if (!padEditMode) { e.preventDefault(); return; }
+      dragSrcIdx = i;
+      e.dataTransfer.effectAllowed = 'move';
+    };
+    div.ondragover = (e) => {
+      if (!padEditMode || dragSrcIdx === i) return;
+      e.preventDefault();
+      div.classList.add('drag-over');
+    };
+    div.ondragleave = () => div.classList.remove('drag-over');
+    div.ondrop = (e) => {
+      e.preventDefault();
+      div.classList.remove('drag-over');
+      if (dragSrcIdx < 0 || dragSrcIdx === i) return;
+      /* Swap pads */
+      const tmp = perfPads[i];
+      perfPads[i] = perfPads[dragSrcIdx];
+      perfPads[dragSrcIdx] = tmp;
+      dragSrcIdx = -1;
+      savePerfPads();
+      renderPerfPads();
+    };
+
     grid.appendChild(div);
   }
 }
 
-async function triggerPad(idx) {
-  const pad = perfPads[idx];
-  const padEl = document.querySelectorAll('.perf-pad')[idx];
-  if (!pad) {
-    /* Empty pad: assign current active effect */
-    if (!activeEffect) return;
-    const params = {};
-    const effParams = effectParams[activeEffect] || [];
-    effParams.forEach(p => {
-      const slider = document.getElementById('paramSlider_' + p.name);
-      if (slider) params[p.name] = parseFloat(slider.value);
-    });
-    perfPads[idx] = { effect: activeEffect, params, palette: activePaletteId };
-    savePerfPads();
-    renderPerfPads();
+async function onPadClick(idx) {
+  if (padEditMode) {
+    /* Edit mode: empty = save current; filled = open edit modal */
+    if (!perfPads[idx]) {
+      savePadFromCurrent(idx);
+    } else {
+      openPadEditModal(idx);
+    }
     return;
   }
-  /* Assigned: trigger the snapshot */
+  /* Play mode: trigger */
+  triggerPad(idx);
+}
+
+function savePadFromCurrent(idx) {
+  if (!activeEffect) {
+    alert('Select an effect first to save it to the pad.');
+    return;
+  }
+  const params = {};
+  const effParams = effectParams[activeEffect] || [];
+  effParams.forEach(p => {
+    const slider = document.getElementById('paramSlider_' + p.name);
+    if (slider) params[p.name] = parseFloat(slider.value);
+  });
+  const logos = [];
+  for (let li = 0; li < 3; li++) {
+    const inp = document.getElementById(logoInputId(li));
+    logos[li] = inp ? inp.value : '';
+  }
+  const chainSnapshot = (typeof effectChain !== 'undefined')
+    ? effectChain.filter(s => s.effect).map(s => ({
+        effect: s.effect, blend: s.blend, alpha: s.alpha
+      })) : [];
+  perfPads[idx] = {
+    effect: activeEffect,
+    params,
+    palette: activePaletteId,
+    logos,
+    chain: chainSnapshot.length > 0 ? chainSnapshot : null,
+    label: '',  /* user can rename in edit modal */
+    color: null,
+  };
+  savePerfPads();
+  renderPerfPads();
+}
+
+async function triggerPad(idx) {
+  const pad = perfPads[idx];
+  if (!pad) return;
+  const padEl = document.querySelectorAll('.perf-pad')[idx];
   if (padEl) {
     padEl.classList.add('flashing');
     setTimeout(() => padEl.classList.remove('flashing'), 200);
   }
-  await sendRequest('SetEffect', { effect_id: pad.effect });
+  /* Mark as last triggered */
+  lastTriggeredPad = idx;
+  document.querySelectorAll('.perf-pad').forEach((el, j) => {
+    el.classList.toggle('last-triggered', j === idx);
+  });
+
+  /* Restore chain if multi-slot */
+  if (typeof effectChain !== 'undefined' && Array.isArray(pad.chain) && pad.chain.length > 0) {
+    effectChain = pad.chain.map(s => ({ effect: s.effect, blend: s.blend, alpha: s.alpha }));
+    while (effectChain.length < 1) effectChain.push({ effect: '', blend: 0, alpha: 1.0 });
+    if (typeof renderEffectChain === 'function') renderEffectChain();
+    if (typeof chainSync === 'function') await chainSync();
+    activeEffect = pad.chain[0].effect;
+  } else {
+    await sendRequest('SetEffect', { effect_id: pad.effect, quantize: activeQuantize || 0 });
+    activeEffect = pad.effect;
+  }
   if (typeof pad.palette === 'number') await setPalette(pad.palette);
-  /* Wait for backend to instantiate */
+  if (Array.isArray(pad.logos)) {
+    for (let li = 0; li < 3; li++) {
+      const v = pad.logos[li] || '';
+      const inp = document.getElementById(logoInputId(li));
+      if (inp) inp.value = v;
+      await sendRequest('SetLogo', { path: v, slot: li });
+    }
+    persistLogoPaths();
+  }
   await new Promise(r => setTimeout(r, 80));
   if (pad.params) {
     for (const [pname, pval] of Object.entries(pad.params)) {
       await sendRequest('SetParam', { param: pname, value: pval });
     }
   }
-  /* Sync UI */
-  activeEffect = pad.effect;
   renderEffects();
   renderParams();
 }
@@ -5023,9 +5439,112 @@ function clearPad(idx) {
   renderPerfPads();
 }
 
+/* ===== Pad Edit Modal ===== */
+
+function openPadEditModal(idx) {
+  if (!perfPads[idx]) {
+    if (padEditMode) savePadFromCurrent(idx);
+    return;
+  }
+  editingPadIdx = idx;
+  const pad = perfPads[idx];
+  editingPadColor = pad.color || null;
+  document.getElementById('padModalTitle').textContent =
+    'Edit Pad ' + (PAD_HOTKEYS[idx] ? PAD_HOTKEYS[idx].toUpperCase() : (idx + 1));
+  document.getElementById('padEditLabel').value = pad.label || '';
+
+  /* Color swatches */
+  const colorBox = document.getElementById('padEditColors');
+  colorBox.innerHTML = '';
+  PAD_COLORS.forEach((c, ci) => {
+    const sw = document.createElement('button');
+    sw.className = 'pad-color-swatch';
+    sw.style.background = c || 'linear-gradient(135deg, var(--accent), var(--accent2))';
+    if ((c || null) === editingPadColor) sw.classList.add('selected');
+    sw.title = c || 'Default (palette accent)';
+    sw.onclick = (e) => {
+      e.preventDefault();
+      editingPadColor = c;
+      colorBox.querySelectorAll('.pad-color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+    };
+    colorBox.appendChild(sw);
+  });
+
+  /* Info */
+  const info = document.getElementById('padEditInfo');
+  const effLabel = effectNames[pad.effect] || pad.effect;
+  const chainInfo = (Array.isArray(pad.chain) && pad.chain.length > 1)
+                    ? `${pad.chain.length}-slot chain` : 'single effect';
+  const palInfo = ['Default','Hardtechno','Rawstyle','Acid','Cyber','Mono'][pad.palette || 0] || '?';
+  const logoInfo = (Array.isArray(pad.logos) && pad.logos.some(l => l))
+                   ? `+ ${pad.logos.filter(l => l).length} logo(s)` : '';
+  info.innerHTML = `<strong>${effLabel}</strong><br>${chainInfo} • ${palInfo} palette ${logoInfo}`;
+
+  document.getElementById('padEditModal').style.display = 'flex';
+}
+
+function closePadEditModal() {
+  document.getElementById('padEditModal').style.display = 'none';
+  editingPadIdx = -1;
+}
+
+function padEditSave() {
+  if (editingPadIdx < 0 || !perfPads[editingPadIdx]) return;
+  perfPads[editingPadIdx].label = document.getElementById('padEditLabel').value || '';
+  perfPads[editingPadIdx].color = editingPadColor;
+  savePerfPads();
+  closePadEditModal();
+  renderPerfPads();
+}
+
+function padEditDuplicate() {
+  if (editingPadIdx < 0 || !perfPads[editingPadIdx]) return;
+  /* Find next empty slot */
+  let target = -1;
+  for (let i = editingPadIdx + 1; i < padCount; i++) {
+    if (!perfPads[i]) { target = i; break; }
+  }
+  if (target < 0) {
+    for (let i = 0; i < editingPadIdx; i++) {
+      if (!perfPads[i]) { target = i; break; }
+    }
+  }
+  if (target < 0) {
+    alert('No empty pad slot available. Increase pad count or clear one first.');
+    return;
+  }
+  const src = perfPads[editingPadIdx];
+  /* Apply current label/color from modal first */
+  src.label = document.getElementById('padEditLabel').value || src.label || '';
+  src.color = editingPadColor;
+  perfPads[target] = JSON.parse(JSON.stringify(src));
+  savePerfPads();
+  closePadEditModal();
+  renderPerfPads();
+}
+
+function padEditClear() {
+  if (editingPadIdx < 0) return;
+  if (!confirm('Clear this pad?')) return;
+  perfPads[editingPadIdx] = null;
+  savePerfPads();
+  closePadEditModal();
+  renderPerfPads();
+}
+
 /* Hotkey wiring for pads (only the first padCount hotkeys are active) */
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  /* Bank switching with Shift+A/B/C */
+  if (e.shiftKey && !e.ctrlKey && !e.altKey) {
+    const k = e.key.toUpperCase();
+    if (k === 'A' || k === 'B' || k === 'C') {
+      e.preventDefault();
+      setPadBank(k);
+      return;
+    }
+  }
   const key = e.key.toLowerCase();
   const idx = PAD_HOTKEYS.indexOf(key);
   if (idx >= 0 && idx < padCount) { e.preventDefault(); triggerPad(idx); return; }
@@ -5760,6 +6279,20 @@ function onMidiMessage(e) {
   }
 }
 
+/* ===== Quality Profile ===== */
+let activeQuality = 1; /* 0=low, 1=medium, 2=high */
+async function setQualityLevel(q) {
+  activeQuality = q;
+  ['qualBtn0','qualBtn1','qualBtn2'].forEach((id, i) => {
+    const b = document.getElementById(id);
+    if (b) {
+      b.style.background = (i === q) ? 'var(--accent)' : '';
+      b.style.color = (i === q) ? 'white' : '';
+    }
+  });
+  await sendRequest('SetQuality', { quality: q });
+}
+
 /* ===== OSC Output config ===== */
 let _oscDebounce = null;
 function updateOscConfig() {
@@ -6204,94 +6737,21 @@ if (_origRenderPads) {
   };
 }
 
-/* === Pads with Logos === */
-/* Override triggerPad and the assign-snapshot to include logo paths. */
-const _origTriggerPad = (typeof triggerPad === 'function') ? triggerPad : null;
-if (_origTriggerPad) {
-  triggerPad = async function(idx) {
-    const pad = perfPads[idx];
-    const padEl = document.querySelectorAll('.perf-pad')[idx];
-    if (!pad) {
-      /* Empty: assign current state INCLUDING logo paths */
-      if (!activeEffect) return;
-      const params = {};
-      const effParams = effectParams[activeEffect] || [];
-      effParams.forEach(p => {
-        const slider = document.getElementById('paramSlider_' + p.name);
-        if (slider) params[p.name] = parseFloat(slider.value);
-      });
-      const logos = [];
-      for (let li = 0; li < 3; li++) {
-        const inp = document.getElementById(logoInputId(li));
-        logos[li] = inp ? inp.value : '';
-      }
-      /* Snapshot full effect chain (multi-slot stack from v1.2) if any slot is filled */
-      const chainSnapshot = effectChain.filter(s => s.effect).map(s => ({
-        effect: s.effect, blend: s.blend, alpha: s.alpha
-      }));
-      perfPads[idx] = {
-        effect: activeEffect,
-        params,
-        palette: activePaletteId,
-        logos,
-        chain: chainSnapshot.length > 0 ? chainSnapshot : null,
-      };
-      savePerfPads();
-      renderPerfPads();
-      return;
-    }
-
-    /* Trigger snapshot */
-    if (padEl) {
-      padEl.classList.add('flashing');
-      setTimeout(() => padEl.classList.remove('flashing'), 200);
-    }
-
-    /* Restore chain (v1.3+) — overrides single-effect path if present */
-    if (Array.isArray(pad.chain) && pad.chain.length > 0) {
-      effectChain = pad.chain.map(s => ({
-        effect: s.effect, blend: s.blend, alpha: s.alpha
-      }));
-      while (effectChain.length < 1) effectChain.push({ effect: '', blend: 0, alpha: 1.0 });
-      renderEffectChain();
-      await chainSync();
-      activeEffect = pad.chain[0].effect;
-    } else {
-      await sendRequest('SetEffect', { effect_id: pad.effect });
-      activeEffect = pad.effect;
-    }
-
-    if (typeof pad.palette === 'number') await setPalette(pad.palette);
-    /* Restore logos if snapshot has them */
-    if (Array.isArray(pad.logos)) {
-      for (let li = 0; li < 3; li++) {
-        const v = pad.logos[li] || '';
-        const inp = document.getElementById(logoInputId(li));
-        if (inp) inp.value = v;
-        await sendRequest('SetLogo', { path: v, slot: li });
-      }
-      persistLogoPaths();
-    }
-    await new Promise(r => setTimeout(r, 80));
-    if (pad.params) {
-      for (const [pname, pval] of Object.entries(pad.params)) {
-        await sendRequest('SetParam', { param: pname, value: pval });
-      }
-    }
-    renderEffects();
-    renderParams();
-  };
-}
+/* (v1.1.0 triggerPad logo+chain hook removed in v1.3.1 — logic is now
+ *  inline in the rebuilt triggerPad implementation above.) */
 
 /* === Profile Bundle export/import === */
 
 function exportProfileBundle() {
   const bundle = {
-    version: '1.1.0',
+    version: '1.3.1',
     timestamp: Date.now(),
     settings: captureCurrentSettings(),
-    pads: perfPads,
-    pad_prefs: { count: padCount, size: padSize },
+    /* v1.3.1: full bank set */
+    pad_banks: padBanks,
+    /* legacy single-bank for backward compat with v1.1.x importers */
+    pads: padBanks[activeBank],
+    pad_prefs: { count: padCount, size: padSize, bank: activeBank },
   };
   const blob = new Blob([JSON.stringify(bundle, null, 2)],
                        { type: 'application/json' });
@@ -6312,18 +6772,28 @@ async function importProfileBundle(file) {
     const text = await file.text();
     const bundle = JSON.parse(text);
     if (bundle.settings) await applyProfile(bundle.settings);
-    if (Array.isArray(bundle.pads)) {
-      perfPads = bundle.pads;
-      while (perfPads.length < padCount) perfPads.push(null);
-      savePerfPads();
+    /* v1.3.1: pad_banks (all 3 banks); fallback to legacy single-array */
+    if (bundle.pad_banks && typeof bundle.pad_banks === 'object') {
+      ['A','B','C'].forEach(b => {
+        if (Array.isArray(bundle.pad_banks[b])) padBanks[b] = bundle.pad_banks[b];
+        while (padBanks[b].length < padCount) padBanks[b].push(null);
+      });
+    } else if (Array.isArray(bundle.pads)) {
+      padBanks[activeBank] = bundle.pads;
+      while (padBanks[activeBank].length < padCount) padBanks[activeBank].push(null);
     }
     if (bundle.pad_prefs) {
       if (typeof bundle.pad_prefs.count === 'number') padCount = bundle.pad_prefs.count;
       if (typeof bundle.pad_prefs.size === 'string') padSize = bundle.pad_prefs.size;
+      if (typeof bundle.pad_prefs.bank === 'string'
+          && ['A','B','C'].includes(bundle.pad_prefs.bank))
+        activeBank = bundle.pad_prefs.bank;
       savePadPrefs();
     }
-    renderPerfPads();
-    alert('Profile bundle imported.');
+    perfPads = padBanks[activeBank];
+    savePerfPads();
+    setPadBank(activeBank);
+    alert('Profile bundle imported (3 banks).');
   } catch (e) {
     alert('Import failed: ' + e.message);
   }

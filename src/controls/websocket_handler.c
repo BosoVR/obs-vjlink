@@ -362,6 +362,8 @@ static void handle_get_state(obs_data_t *request_data,
 	obs_data_set_int(response_data, "effect_quantize",
 	                 ctx->pending_effect_quantize);
 
+	obs_data_set_int(response_data, "quality", ctx->gpu_quality);
+
 	/* LFO values */
 	obs_data_t *lfo_data = obs_data_create();
 	for (int i = 0; i < VJLINK_NUM_LFOS; i++) {
@@ -836,6 +838,19 @@ static void handle_set_chain(obs_data_t *request_data,
 	obs_data_set_int(response_data, "chain_length", (int)n);
 }
 
+static void handle_set_quality(obs_data_t *request_data,
+                                obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	struct vjlink_context *ctx = vjlink_get_context();
+	int q = (int)obs_data_get_int(request_data, "quality");
+	if (q < 0) q = 0;
+	if (q > 2) q = 2;
+	ctx->gpu_quality = q;
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "quality", q);
+}
+
 static void handle_set_osc_config(obs_data_t *request_data,
                                    obs_data_t *response_data, void *priv)
 {
@@ -1029,6 +1044,8 @@ static void register_all_requests(void)
 	                        handle_set_chain, NULL);
 	vendor_request_register(g_vendor, "SetOscConfig",
 	                        handle_set_osc_config, NULL);
+	vendor_request_register(g_vendor, "SetQuality",
+	                        handle_set_quality, NULL);
 	vendor_request_register(g_vendor, "SetPalette",
 	                        handle_set_palette, NULL);
 	vendor_request_register(g_vendor, "SetMacros",
