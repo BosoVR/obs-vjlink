@@ -1780,6 +1780,14 @@
 
     <!-- ===== AUTO-VJ + VJ AI ===== -->
     <div class="pro-panel pro-only" style="margin-top:12px">
+      <!-- MASTER STOP ALL -->
+      <button id="stopAllAutoBtn" onclick="stopAllAuto()"
+              style="width:100%;padding:8px;margin-bottom:10px;
+                     background:#5a0a0a;color:#fff;border:2px solid #c30;
+                     border-radius:4px;font-weight:800;letter-spacing:1.5px;
+                     font-size:11px;cursor:pointer;text-transform:uppercase">
+        ⏹ STOP ALL AUTO
+      </button>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>Auto-VJ</span>
         <label style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0.4px;cursor:pointer">
@@ -1807,7 +1815,7 @@
       <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--text)">VJ AI</span>
-          <span id="aiStateLabel" style="font-size:9px;color:var(--text-dim);font-weight:600;letter-spacing:0.5px">OFF</span>
+          <span id="aiStateLabel" style="font-size:11px;font-weight:800;letter-spacing:0.8px;padding:3px 8px;border-radius:3px;background:#222;color:#888;text-transform:uppercase">OFF</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
           <button class="mini-btn" id="aiBtnOff" onclick="setAiMode('off')" style="font-size:9px">OFF</button>
@@ -3870,8 +3878,200 @@ function renderParams() {
     html += `</div>`;
   });
 
+  /* === Type Animator: Custom Words sub-panel === */
+  if (activeEffect === 'type_animator') {
+    html += renderCustomWordsPanel();
+  }
+
   container.innerHTML = html;
   renderParamTabs();
+
+  /* Hook up Type Animator custom-words handlers */
+  if (activeEffect === 'type_animator') {
+    initCustomWordsPanel();
+  }
+}
+
+/* === TYPE ANIMATOR CUSTOM WORDS ===
+ * User maintains a list of custom words. JS rotates through them on beat,
+ * encoding each word as 12 letter-index uniforms (text_char_0..11).
+ *  letter index: 0=blank, 1-26=A-Z, 27=space, 28-37=0-9 */
+const CUSTOM_WORDS_KEY = 'vjlink_custom_words_v1';
+let customWordsState = {
+  enabled: false,
+  words: ['MY CLUB', 'TONIGHT', 'NEON', 'BASS DROP'],
+  rotateMode: 1,  /* 0=manual 1=4beats 2=8beats 3=bar 4=2bars */
+  currentIndex: 0,
+  lastSwitchBeat: 0,
+};
+
+function loadCustomWordsState() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_WORDS_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      customWordsState.enabled = !!data.enabled;
+      customWordsState.words = Array.isArray(data.words) ? data.words.slice(0, 8) : customWordsState.words;
+      customWordsState.rotateMode = (typeof data.rotateMode === 'number') ? data.rotateMode : 1;
+    }
+  } catch (e) {}
+}
+function saveCustomWordsState() {
+  try {
+    localStorage.setItem(CUSTOM_WORDS_KEY, JSON.stringify({
+      enabled: customWordsState.enabled,
+      words: customWordsState.words,
+      rotateMode: customWordsState.rotateMode,
+    }));
+  } catch (e) {}
+}
+loadCustomWordsState();
+
+function charToIndex(ch) {
+  ch = ch.toUpperCase();
+  const c = ch.charCodeAt(0);
+  if (c >= 65 && c <= 90) return c - 64;     /* A-Z = 1-26 */
+  if (ch === ' ')         return 27;
+  if (c >= 48 && c <= 57) return 28 + (c - 48); /* 0-9 = 28-37 */
+  return 0;
+}
+
+/* Sanitize input: uppercase A-Z + space + 0-9 only, max 12 chars per word */
+function sanitizeWord(w) {
+  return (w || '').toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .slice(0, 12);
+}
+
+/* Send the 12 char-index uniforms for the active custom word */
+async function pushCustomWordToShader(word) {
+  if (!connected) return;
+  const w = sanitizeWord(word);
+  for (let i = 0; i < 12; i++) {
+    const ch = i < w.length ? w[i] : '';
+    const idx = ch ? charToIndex(ch) : 0;
+    sendRequest('SetParam', { param: 'text_char_' + i, value: idx });
+  }
+}
+
+function renderCustomWordsPanel() {
+  const wordsText = customWordsState.words.join('\n');
+  return `
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--accent)">CUSTOM WORDS</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;color:var(--text-dim)">
+        <input type="checkbox" id="cwEnabled" ${customWordsState.enabled ? 'checked' : ''}>
+        <span>Use Custom Words</span>
+      </label>
+    </div>
+    <textarea id="cwTextarea" rows="6"
+              placeholder="One word per line — A-Z, 0-9, space, max 12 chars each, max 8 words"
+              style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);
+                     color:var(--text);border-radius:4px;font-size:12px;font-family:monospace;
+                     resize:vertical">${wordsText.replace(/</g,'&lt;')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <select id="cwRotate" style="flex:1;padding:5px 8px;background:var(--surface2);
+                                    border:1px solid var(--border);color:var(--text);
+                                    border-radius:4px;font-size:11px">
+        <option value="0" ${customWordsState.rotateMode===0?'selected':''}>Manual (no rotation)</option>
+        <option value="1" ${customWordsState.rotateMode===1?'selected':''}>Rotate every 4 beats</option>
+        <option value="2" ${customWordsState.rotateMode===2?'selected':''}>Rotate every 8 beats</option>
+        <option value="3" ${customWordsState.rotateMode===3?'selected':''}>Rotate every bar (4 beats)</option>
+        <option value="4" ${customWordsState.rotateMode===4?'selected':''}>Rotate every 2 bars</option>
+      </select>
+      <button id="cwNextBtn" style="padding:5px 10px;background:var(--surface2);
+                                     border:1px solid var(--border);color:var(--text);
+                                     border-radius:4px;font-size:11px;cursor:pointer">
+        ▶ Next Word
+      </button>
+    </div>
+    <div id="cwStatus" style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.4px">
+      Active: <span id="cwActiveWord" style="color:var(--accent);font-weight:700">—</span>
+    </div>
+    <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.4">
+      Set Text dropdown to <strong>CUSTOM</strong> above to use these words. JS rotates them by beat.
+    </div>
+  </div>`;
+}
+
+function initCustomWordsPanel() {
+  const enabledEl = document.getElementById('cwEnabled');
+  const textareaEl = document.getElementById('cwTextarea');
+  const rotateEl = document.getElementById('cwRotate');
+  const nextBtn = document.getElementById('cwNextBtn');
+
+  if (enabledEl) {
+    enabledEl.onchange = () => {
+      customWordsState.enabled = enabledEl.checked;
+      saveCustomWordsState();
+      if (customWordsState.enabled) {
+        applyCurrentCustomWord();
+      }
+    };
+  }
+  if (textareaEl) {
+    textareaEl.oninput = () => {
+      customWordsState.words = textareaEl.value.split('\n')
+        .map(sanitizeWord).filter(w => w.length > 0).slice(0, 8);
+      if (customWordsState.currentIndex >= customWordsState.words.length) {
+        customWordsState.currentIndex = 0;
+      }
+      saveCustomWordsState();
+      if (customWordsState.enabled) applyCurrentCustomWord();
+    };
+  }
+  if (rotateEl) {
+    rotateEl.onchange = () => {
+      customWordsState.rotateMode = parseInt(rotateEl.value);
+      customWordsState.lastSwitchBeat = -1;
+      saveCustomWordsState();
+    };
+  }
+  if (nextBtn) {
+    nextBtn.onclick = () => {
+      if (!customWordsState.words.length) return;
+      customWordsState.currentIndex =
+        (customWordsState.currentIndex + 1) % customWordsState.words.length;
+      applyCurrentCustomWord();
+    };
+  }
+
+  /* Apply the current word once on render */
+  if (customWordsState.enabled) applyCurrentCustomWord();
+}
+
+function applyCurrentCustomWord() {
+  if (!customWordsState.words.length) return;
+  const w = customWordsState.words[customWordsState.currentIndex] || '';
+  pushCustomWordToShader(w);
+  const labelEl = document.getElementById('cwActiveWord');
+  if (labelEl) labelEl.textContent = w || '(empty)';
+}
+
+/* Called from updateState — rotates word on beat if enabled */
+function tickCustomWords(state) {
+  if (!customWordsState.enabled) return;
+  if (activeEffect !== 'type_animator') return;
+  if (!customWordsState.words.length) return;
+  if (customWordsState.rotateMode === 0) return;  /* manual */
+
+  const beat = Math.floor(state.beat_count || 0);
+  const interval = customWordsState.rotateMode === 1 ? 4
+                 : customWordsState.rotateMode === 2 ? 8
+                 : customWordsState.rotateMode === 3 ? 4
+                 : 8;  /* mode 4 = 2 bars */
+
+  if (customWordsState.lastSwitchBeat < 0) {
+    customWordsState.lastSwitchBeat = beat;
+    return;
+  }
+  if (beat - customWordsState.lastSwitchBeat >= interval) {
+    customWordsState.lastSwitchBeat = beat;
+    customWordsState.currentIndex =
+      (customWordsState.currentIndex + 1) % customWordsState.words.length;
+    applyCurrentCustomWord();
+  }
 }
 
 function renderParamBandAmount(paramName, parentEl) {
@@ -5738,7 +5938,8 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'pulse_strength', label: 'Pulse Strength', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'concrete_grain', label: 'Grain', min: 0, max: 1, step: 0.05, default: 0.6 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
-    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 3, step: 1, default: 1, options: ['Continuous','1/4','1/8','1/16'] },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 1, options: ['Continuous','1/4','1/8'] },
+    { name: 'bg_disable', label: 'Hide Concrete BG', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.industrial_strobe_tunnel = [
     { name: 'tunnel_speed', label: 'Tunnel Speed', min: 0.1, max: 5, step: 0.1, default: 1.5 },
@@ -5757,9 +5958,10 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   ];
   effectParams.mono_outline = [
     { name: 'edge_thickness', label: 'Edge Thickness', min: 0.0005, max: 0.01, step: 0.0005, default: 0.0025 },
-    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.18 },
+    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.12 },
     { name: 'invert_on_beat', label: 'Invert on Beat', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
     { name: 'style_mode', label: 'Style', min: 0, max: 3, step: 1, default: 0, options: ['Outline','Cel-Shaded','Inverse','Color Bleed'] },
+    { name: 'kernel_size', label: 'Kernel', min: 0, max: 1, step: 1, default: 0, options: ['3x3 (fast)','5x5 (cleaner)'] },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 1, step: 1, default: 0, options: ['Continuous','1/4'] },
   ];
@@ -5839,11 +6041,12 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ];
   effectParams.vaporwave_sunset = [
-    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 3, step: 0.05, default: 0.6 },
-    { name: 'sun_size', label: 'Sun Size', min: 0.1, max: 0.6, step: 0.01, default: 0.32 },
+    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 3, step: 0.05, default: 0.7 },
+    { name: 'sun_size', label: 'Sun Size', min: 0.15, max: 0.6, step: 0.01, default: 0.42 },
     { name: 'grid_density', label: 'Grid Density', min: 4, max: 32, step: 1, default: 14 },
-    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.5 },
+    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.55 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'bg_disable', label: 'Hide Sky/Sun/Mtns', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.demoscene_plasma = [
     { name: 'plasma_speed', label: 'Speed', min: 0, max: 3, step: 0.05, default: 1.0 },
@@ -5857,20 +6060,23 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'drip_amount', label: 'Drip Amount', min: 0, max: 1, step: 0.05, default: 0.5 },
     { name: 'glyph_density', label: 'Glyph Density', min: 4, max: 24, step: 1, default: 12 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'bg_disable', label: 'Hide Smoke BG', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.holographic_foil = [
-    { name: 'foil_intensity', label: 'Foil Intensity', min: 0, max: 1, step: 0.05, default: 0.6 },
-    { name: 'shift_speed', label: 'Shift Speed', min: 0, max: 3, step: 0.05, default: 0.5 },
-    { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.5 },
+    { name: 'foil_intensity', label: 'Foil Intensity', min: 0, max: 1, step: 0.05, default: 0.75 },
+    { name: 'shift_speed', label: 'Shift Speed', min: 0, max: 3, step: 0.05, default: 0.6 },
+    { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.55 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'bg_disable', label: 'Hide Base (standalone)', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.cyber_grid = [
-    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 5, step: 0.05, default: 1.4 },
+    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 5, step: 0.05, default: 1.6 },
     { name: 'grid_density', label: 'Grid Density', min: 6, max: 40, step: 1, default: 18 },
-    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.45 },
+    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.50 },
     { name: 'horizon_glow', label: 'Horizon Glow', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 1, options: ['Continuous','1/4','1/8'] },
+    { name: 'bg_disable', label: 'Hide Stars/Glow', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
 
   /* === v1.1.0 NEW EFFECTS === */
@@ -5893,11 +6099,12 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   }
 
   effectParams.type_animator = [
-    { name: 'text_choice', label: 'Text', min: 0, max: 5, step: 1, default: 0, options: ['RAVE','BERGHAIN','HARDTECHNO','ACID','DROP','TECHNO'] },
+    { name: 'text_choice', label: 'Text', min: 0, max: 6, step: 1, default: 0, options: ['RAVE','BERGHAIN','HARDTECHNO','ACID','DROP','TECHNO','CUSTOM'] },
     { name: 'text_size', label: 'Size', min: 0.05, max: 0.5, step: 0.01, default: 0.2 },
     { name: 'change_rate', label: 'Change Rate', min: 0, max: 2, step: 1, default: 0, options: ['Off','On Bar','On Beat'] },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
-    { name: 'background_amount', label: 'Background', min: 0, max: 1, step: 0.05, default: 0.3 },
+    { name: 'background_amount', label: 'Background Amount', min: 0, max: 1, step: 0.05, default: 0.3 },
+    { name: 'bg_disable', label: 'Hide Background', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.wireframe_city = [
     { name: 'fly_speed', label: 'Fly Speed', min: 0.1, max: 5, step: 0.05, default: 1.2 },
@@ -5939,12 +6146,12 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     effectProGroups.pro_main.effects.push('iridescent_mesh', 'liquid_sim');
   }
   effectParams.iridescent_mesh = [
-    { name: 'surface_scale', label: 'Surface Scale', min: 0.5, max: 5, step: 0.05, default: 1.5 },
+    { name: 'surface_scale', label: 'Surface Scale', min: 0.5, max: 5, step: 0.05, default: 2.5 },
     { name: 'ripple_speed', label: 'Ripple Speed', min: 0, max: 3, step: 0.05, default: 0.6 },
     { name: 'fresnel_strength', label: 'Fresnel', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.7 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
-    { name: 'bg_mode', label: 'Background', min: 0, max: 2, step: 1, default: 0, options: ['Iridescent','Black','Transparent'] },
+    { name: 'bg_disable', label: 'Hide Background', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
   effectParams.liquid_sim = [
     { name: 'viscosity', label: 'Viscosity', min: 0.5, max: 3, step: 0.05, default: 1.4 },
@@ -5952,6 +6159,7 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'caustic_strength', label: 'Caustics', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 0, options: ['Continuous','1/4','1/8'] },
+    { name: 'bg_disable', label: 'Hide Liquid Fill', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
 
   /* Feedback gets beat_sync */
@@ -6456,10 +6664,41 @@ function setAiMode(mode) {
                          : '';
     btn.style.color = mode === 'off' ? '' : 'white';
   }
+  /* Updated badge with color coding */
   const lbl = document.getElementById('aiStateLabel');
-  if (lbl) lbl.textContent = mode.toUpperCase();
+  if (lbl) {
+    lbl.textContent = mode.toUpperCase();
+    if (mode === 'off') {
+      lbl.style.background = '#222'; lbl.style.color = '#888';
+    } else if (mode === 'learning') {
+      lbl.style.background = '#1a4d1a'; lbl.style.color = '#9f9';
+    } else if (mode === 'playing') {
+      lbl.style.background = '#4d1a4d'; lbl.style.color = '#f9f';
+    }
+  }
 }
 setAiMode('off');
+
+/* Master STOP ALL: turns off both Auto-VJ and VJ AI in one click */
+function stopAllAuto() {
+  /* AI off */
+  setAiMode('off');
+  /* Auto-VJ off */
+  autoVjOn = false;
+  const onEl = document.getElementById('autoVjOn');
+  if (onEl) onEl.checked = false;
+  /* Clear any pending beat-quantize switches if available */
+  if (typeof pendingEffect !== 'undefined') pendingEffect = null;
+  if (typeof pendingPalette !== 'undefined') pendingPalette = null;
+  if (typeof renderQuantizePending === 'function') renderQuantizePending();
+  /* Visual flash on the button */
+  const btn = document.getElementById('stopAllAutoBtn');
+  if (btn) {
+    const orig = btn.style.background;
+    btn.style.background = '#c30';
+    setTimeout(() => { btn.style.background = orig; }, 220);
+  }
+}
 
 function aiResetData() {
   if (!confirm('Wipe all learned VJ data?')) return;
@@ -6649,6 +6888,7 @@ if (_origUpdateState_v110) {
       tickAutoVj(state);
     }
     tickVjAi(state);
+    tickCustomWords(state);
   };
 }
 

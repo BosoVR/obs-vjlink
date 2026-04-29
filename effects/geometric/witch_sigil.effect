@@ -20,6 +20,7 @@ uniform float spin_speed;         /* -3 - 3, default 0.3 */
 uniform float drip_amount;        /* 0 - 1, default 0.5 */
 uniform float glyph_density;      /* 4 - 24, default 12 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float bg_disable;         /* 0=show smoke base, 1=only sigil lines on black */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -91,10 +92,17 @@ float4 PSWitchSigil(VertInOut vert_in) : TARGET
 
     float3 accent = palette_witch((int)palette_id);
 
-    /* Dark base with subtle smoke */
-    float3 col = float3(0.025, 0.015, 0.025);
-    float smoke = hash21(uv * resolution * 0.005 + floor(time * 2.0));
-    col += smoke * 0.025;
+    bool bg_off = (bg_disable > 0.5);
+
+    /* Dark base with subtle smoke (or pure black if bg disabled) */
+    float3 col;
+    if (bg_off) {
+        col = float3(0.0, 0.0, 0.0);
+    } else {
+        col = float3(0.025, 0.015, 0.025);
+        float smoke = hash21(uv * resolution * 0.005 + floor(time * 2.0));
+        col += smoke * 0.025;
+    }
 
     /* Spinning local frame */
     float spin = time * spin_speed * 0.5;

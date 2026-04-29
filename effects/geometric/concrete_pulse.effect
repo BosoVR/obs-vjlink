@@ -23,6 +23,7 @@ uniform float pulse_strength;    /* 0-2, default 1.0 */
 uniform float concrete_grain;    /* 0-1, default 0.6 */
 uniform float audio_drive;       /* 0-2, default 1.0 */
 uniform float beat_sync;         /* 0=continuous 1=1/4 2=1/8 */
+uniform float bg_disable;        /* 0=show concrete surface, 1=only cracks+shockwave */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -80,22 +81,29 @@ float4 PSConcretePulse(VertInOut vert_in) : TARGET
 
     float drive = audio_drive * (0.5 + bass + kick_onset);
 
-    /* === Concrete base (FBM + grain) === */
-    float2 grain_p = uv * resolution * 0.002;
-    float surface = fbm(grain_p * 6.0);
-    surface = surface * 0.7 + 0.3;
+    bool bg_off = (bg_disable > 0.5);
 
-    float dirt = fbm(uv * 8.0 + time * 0.02) * 0.15;
-    float fine_grain = hash21(uv * resolution * 0.5) * 0.06 * concrete_grain;
+    /* === Concrete base (FBM + grain) — only when bg enabled === */
+    float3 col;
+    if (bg_off) {
+        col = float3(0.0, 0.0, 0.0);
+    } else {
+        float2 grain_p = uv * resolution * 0.002;
+        float surface = fbm(grain_p * 6.0);
+        surface = surface * 0.7 + 0.3;
 
-    float3 col = float3(0.04, 0.04, 0.045) + surface * 0.07 + dirt + fine_grain;
+        float dirt = fbm(uv * 8.0 + time * 0.02) * 0.15;
+        float fine_grain = hash21(uv * resolution * 0.5) * 0.06 * concrete_grain;
 
-    /* === Concrete blocks subtle grid === */
-    float2 block_uv = uv * float2(8.0 * aspect, 6.0);
-    float2 bf = frac(block_uv);
-    float block_edge = smoothstep(0.0, 0.02, min(bf.x, bf.y)) *
-                       smoothstep(0.0, 0.02, min(1.0 - bf.x, 1.0 - bf.y));
-    col *= 0.7 + block_edge * 0.3;
+        col = float3(0.04, 0.04, 0.045) + surface * 0.07 + dirt + fine_grain;
+
+        /* Concrete blocks subtle grid */
+        float2 block_uv = uv * float2(8.0 * aspect, 6.0);
+        float2 bf = frac(block_uv);
+        float block_edge = smoothstep(0.0, 0.02, min(bf.x, bf.y)) *
+                           smoothstep(0.0, 0.02, min(1.0 - bf.x, 1.0 - bf.y));
+        col *= 0.7 + block_edge * 0.3;
+    }
 
     /* === Cracks radiating from center (bass-driven) === */
     float crack_count = clamp(crack_density, 1.0, 12.0);

@@ -19,11 +19,12 @@ uniform float     has_input_source;
 uniform float     band_activation;
 
 uniform float edge_thickness;     /* 0.0005-0.01, default 0.0025 */
-uniform float threshold;          /* 0-1, default 0.18 */
+uniform float threshold;          /* 0-1, default 0.12 */
 uniform float invert_on_beat;     /* 0=off 1=on */
 uniform float audio_drive;        /* 0-2, default 1.0 */
 uniform float beat_sync;          /* 0=continuous 1=1/4 */
-uniform float style_mode;         /* 0=Outline 1=Outline+Posterize 2=Inverse 3=Color Bleed */
+uniform float style_mode;         /* 0=Outline 1=Cel-Shaded 2=Inverse 3=Color Bleed */
+uniform float kernel_size;        /* 0=3x3 fast, 1=5x5 thicker cleaner edges */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -114,12 +115,25 @@ float4 PSMonoOutline(VertInOut vert_in) : TARGET
     }
 
     float2 px = 1.0 / resolution;
+    bool use_5x5 = (kernel_size > 0.5);
 
-    /* Multi-radius Sobel: combine fine + coarse edges for a thicker look */
+    /* Multi-radius Sobel: combine fine + coarse edges for a thicker look.
+     * 5x5 mode samples wider for cleaner thick edges. */
     float thick_mul = 1.0 + drive * 1.4 + kick_onset * 0.6;
     float edge_fine = sobel_lum(uv, px);
-    float edge_coarse = sobel_lum(uv, px * 2.0);
-    float edge = max(edge_fine, edge_coarse * 0.7);
+    float edge_coarse = sobel_lum(uv, px * (use_5x5 ? 2.5 : 2.0));
+    float edge = max(edge_fine, edge_coarse * 0.75);
+    if (use_5x5) {
+        /* Add a third sample for very thick smooth edges */
+        float edge_wide = sobel_lum(uv, px * 4.0);
+        edge = max(edge, edge_wide * 0.6);
+        /* Slight smoothing: blend with a small box-filter average to reduce jaggies */
+        float e_avg = (sobel_lum(uv + px * float2(0.5, 0.5), px)
+                     + sobel_lum(uv + px * float2(-0.5, 0.5), px)
+                     + sobel_lum(uv + px * float2(0.5, -0.5), px)
+                     + sobel_lum(uv + px * float2(-0.5, -0.5), px)) * 0.25;
+        edge = lerp(edge, max(edge, e_avg), 0.4);
+    }
 
     /* Threshold & smoothstep softening */
     float thresh = threshold * (1.0 - kick_onset * 0.35);

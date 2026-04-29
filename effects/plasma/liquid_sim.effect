@@ -21,6 +21,7 @@ uniform float surface_height;     /* 0.2 - 1, default 0.6 */
 uniform float caustic_strength;   /* 0 - 2, default 1.0 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float beat_sync;          /* 0=off 1=1/4 2=1/8 */
+uniform float bg_disable;         /* 0=full liquid fill, 1=alpha follows caustic+ridge mask */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -145,7 +146,16 @@ float4 PSLiquidSim(VertInOut vert_in) : TARGET
     col = lerp(float3(lum, lum, lum), col, 1.25);
     col = saturate(col);
 
-    float a_out = max(max(col.r, col.g), col.b);
+    /* Alpha: when bg disabled, follow ridge/caustic/thin_glow mask only
+     * (so the full-screen liquid base becomes invisible, only highlights remain). */
+    float a_out;
+    if (bg_disable > 0.5) {
+        float fg_mask = saturate(ridge * 0.7 + thin_glow + caustic * 1.2);
+        col *= fg_mask;
+        a_out = max(max(col.r, col.g), col.b);
+    } else {
+        a_out = max(max(col.r, col.g), col.b);
+    }
     return float4(col, a_out);
 }
 

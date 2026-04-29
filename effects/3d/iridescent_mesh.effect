@@ -17,12 +17,12 @@ uniform float     kick_onset;
 uniform float     onset_strength;
 uniform float     palette_id;
 
-uniform float surface_scale;      /* 0.5 - 5, default 1.5 */
+uniform float surface_scale;      /* 0.5 - 5, default 2.5 */
 uniform float ripple_speed;       /* 0 - 3, default 0.6 */
 uniform float fresnel_strength;   /* 0 - 2, default 1.0 */
 uniform float metallic;           /* 0 - 1, default 0.7 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
-uniform float bg_mode;            /* 0=Iridescent (default) 1=Black 2=Transparent */
+uniform float bg_disable;         /* 0=full iridescent surface, 1=only highlights+sparkles */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -97,60 +97,55 @@ float4 PSIridescentMesh(VertInOut vert_in) : TARGET
     float view_t = h_center * 1.4 + fresnel * 1.2 + time * 0.04 + bass * 0.3;
     float3 col_film = iridescent(view_t, (int)palette_id);
 
-    /* Spec highlight aligned to a moving "light" direction */
+    /* Spec highlight aligned to a moving "light" direction
+     * — higher exponent for tighter, brighter highlight peaks */
     float3 light = normalize(float3(sin(time * 0.3) * 0.4,
                                     cos(time * 0.4) * 0.4,
                                     1.0));
-    float spec = pow(max(dot(reflect(-light, normal), -view), 0.0), 24.0);
+    float spec = pow(max(dot(reflect(-light, normal), -view), 0.0), 32.0);
+    /* Add a 2nd specular bloom around the peak for chrome look */
+    float spec_bloom = pow(max(dot(reflect(-light, normal), -view), 0.0), 8.0);
 
-    int bgm = (int)bg_mode;
+    bool bg_off = (bg_disable > 0.5);
 
-    /* Specular intensity drives "highlight mask" for non-iridescent BG modes */
-    float highlight_mask = saturate(spec * 1.5 + fresnel * 0.5);
+    /* Highlight mask = spec + fresnel rim — used when bg disabled */
+    float highlight_mask = saturate(spec * 1.6 + spec_bloom * 0.4 + fresnel * 0.5);
 
     /* Compose: iridescent body + specular highlights */
     float3 col;
-    if (bgm == 0) {
-        /* Default: full iridescent surface */
+    if (!bg_off) {
+        /* Full iridescent surface */
         col = col_film * (0.4 + fresnel * fresnel_strength * 0.7);
-        col += float3(1.0, 1.0, 1.0) * spec * 0.6;
+        col += float3(1.0, 1.0, 1.0) * spec * 0.7;
+        col += float3(1.0, 1.0, 1.0) * spec_bloom * 0.18;
         col *= 1.0 - metallic * 0.3;
         col += col_film * metallic * 0.3 * fresnel;
     } else {
-        /* Black/Transparent BG: only highlights + thin specular */
+        /* No bg: only the colored highlight regions + specular */
         col = col_film * highlight_mask * fresnel_strength;
-        col += float3(1.0, 1.0, 1.0) * spec * 0.85;
+        col += float3(1.0, 1.0, 1.0) * spec * 0.95;
+        col += float3(1.0, 1.0, 1.0) * spec_bloom * 0.20;
     }
 
     /* Audio: pulse on kick brightens whole surface */
     col *= 1.0 + kick_onset * 0.3 + beat_4 * bass * 0.2;
 
-    /* Treble adds extra sparkle */
-    float sparkle = step(0.985 - treble * 0.04, hash21(p * resolution * 0.3 + floor(time * 8.0)));
-    col += float3(1.0, 1.0, 1.0) * sparkle * (0.4 + treble);
+    /* Treble adds extra sparkle (more sparkles than before) */
+    float sparkle = step(0.978 - treble * 0.05, hash21(p * resolution * 0.3 + floor(time * 8.0)));
+    col += float3(1.0, 1.0, 1.0) * sparkle * (0.5 + treble);
 
     /* Onset highlight */
     col += col_film * onset_strength * 0.15;
 
-    /* Vignette only on default mode */
-    if (bgm == 0) col *= smoothstep(2.4, 0.5, length(p));
+    /* Vignette only when bg enabled */
+    if (!bg_off) col *= smoothstep(2.4, 0.5, length(p));
 
     /* HDR */
     col = col / (1.0 + col * 0.4);
     col = saturate(col);
 
-    /* Alpha handling per BG mode */
-    float a_out;
-    if (bgm == 2) {
-        /* Transparent: alpha = highlight luminance */
-        a_out = max(max(col.r, col.g), col.b);
-    } else if (bgm == 1) {
-        /* Black: opaque */
-        a_out = 1.0;
-    } else {
-        /* Default iridescent: max channel for compositor luma alpha */
-        a_out = max(max(col.r, col.g), col.b);
-    }
+    /* Alpha = max channel (works for both bg modes via compositor luma_alpha) */
+    float a_out = max(max(col.r, col.g), col.b);
     return float4(col, a_out);
 }
 

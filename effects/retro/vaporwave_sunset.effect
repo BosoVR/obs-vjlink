@@ -1,8 +1,10 @@
 /*
- * VJLink - Vaporwave Sunset (Synthwave)
- * Authentic 80s Synthwave: huge sun with horizontal slit cuts, deep
- * pink/purple gradient sky, perspective wireframe grid + mountain
- * silhouettes. Beat-driven sun glow + grid pulse.
+ * VJLink - Vaporwave Sunset (True Synthwave)
+ * Iconic 80s "Retrosun": large circular sun with horizontal slits across
+ * full disk, gradient yellow→magenta. Deep purple→pink 3-stop sky.
+ * Triangular wireframe mountains. Magenta H + Cyan V "laser grid".
+ *
+ * Reference: Synthwave Aesthetics Wiki, "Outrun" Wikipedia.
  */
 
 uniform float4x4 ViewProj;
@@ -17,11 +19,12 @@ uniform float     kick_onset;
 uniform float     onset_strength;
 uniform float     palette_id;
 
-uniform float scroll_speed;       /* 0 - 3, default 0.6 */
-uniform float sun_size;           /* 0.1 - 0.6, default 0.32 */
+uniform float scroll_speed;       /* 0 - 3, default 0.7 */
+uniform float sun_size;           /* 0.15 - 0.6, default 0.42 */
 uniform float grid_density;       /* 4 - 32, default 14 */
 uniform float horizon_y;          /* 0.3 - 0.7, default 0.55 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float bg_disable;         /* 0=full scene, 1=only grid (no sky/sun/mountains) */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -37,42 +40,48 @@ VertInOut VSDefault(VertInOut vert_in)
 float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
 float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
 
-/* Synthwave palettes — iconic 80s gradient stacks */
-void palette_vapor(int pid,
+/* Synthwave palette: 3-stop sky + sun gradient + dual-color grid (H/V) */
+void palette_synth(int pid,
     out float3 sky_top, out float3 sky_mid, out float3 sky_bot,
-    out float3 sun_top, out float3 sun_bot,
-    out float3 grid_col, out float3 mtn_col)
+    out float3 sun_top, out float3 sun_mid, out float3 sun_bot,
+    out float3 grid_h, out float3 grid_v, out float3 mtn_col)
 {
     if (pid == 1) {
         /* Hardtechno: blood red sunset */
-        sky_top = float3(0.04, 0.0, 0.08);
-        sky_mid = float3(0.45, 0.0, 0.10);
-        sky_bot = float3(1.0, 0.10, 0.05);
+        sky_top = float3(0.04, 0.0, 0.10);
+        sky_mid = float3(0.45, 0.02, 0.12);
+        sky_bot = float3(1.0, 0.10, 0.10);
         sun_top = float3(1.0, 0.95, 0.55);
-        sun_bot = float3(1.0, 0.05, 0.05);
-        grid_col = float3(1.0, 0.10, 0.10);
-        mtn_col = float3(0.30, 0.0, 0.05);
+        sun_mid = float3(1.0, 0.45, 0.10);
+        sun_bot = float3(1.0, 0.05, 0.10);
+        grid_h = float3(1.0, 0.10, 0.10);
+        grid_v = float3(1.0, 0.55, 0.20);
+        mtn_col = float3(0.30, 0.0, 0.06);
         return;
     }
     if (pid == 2) {
-        /* Rawstyle: blazing orange */
+        /* Rawstyle: amber sunset */
         sky_top = float3(0.06, 0.0, 0.10);
-        sky_mid = float3(0.55, 0.05, 0.08);
-        sky_bot = float3(1.0, 0.50, 0.05);
+        sky_mid = float3(0.55, 0.10, 0.05);
+        sky_bot = float3(1.0, 0.55, 0.10);
         sun_top = float3(1.0, 0.95, 0.55);
-        sun_bot = float3(1.0, 0.30, 0.0);
-        grid_col = float3(1.0, 0.55, 0.10);
-        mtn_col = float3(0.35, 0.05, 0.05);
+        sun_mid = float3(1.0, 0.65, 0.20);
+        sun_bot = float3(1.0, 0.30, 0.05);
+        grid_h = float3(1.0, 0.55, 0.10);
+        grid_v = float3(1.0, 0.85, 0.20);
+        mtn_col = float3(0.35, 0.10, 0.05);
         return;
     }
     if (pid == 3) {
-        /* Acid: alien green sunset */
+        /* Acid: green sunset */
         sky_top = float3(0.0, 0.04, 0.05);
         sky_mid = float3(0.10, 0.30, 0.05);
         sky_bot = float3(0.65, 1.0, 0.10);
         sun_top = float3(0.95, 1.0, 0.65);
+        sun_mid = float3(0.70, 1.0, 0.30);
         sun_bot = float3(0.45, 0.95, 0.05);
-        grid_col = float3(0.65, 1.0, 0.10);
+        grid_h = float3(0.65, 1.0, 0.10);
+        grid_v = float3(0.30, 1.0, 0.40);
         mtn_col = float3(0.05, 0.20, 0.02);
         return;
     }
@@ -82,8 +91,10 @@ void palette_vapor(int pid,
         sky_mid = float3(0.35, 0.05, 0.55);
         sky_bot = float3(1.0, 0.20, 0.85);
         sun_top = float3(1.0, 0.95, 0.55);
+        sun_mid = float3(1.0, 0.55, 0.85);
         sun_bot = float3(0.10, 0.85, 1.0);
-        grid_col = float3(1.0, 0.20, 0.85);
+        grid_h = float3(1.0, 0.20, 0.85);
+        grid_v = float3(0.10, 0.85, 1.0);
         mtn_col = float3(0.10, 0.0, 0.30);
         return;
     }
@@ -93,19 +104,45 @@ void palette_vapor(int pid,
         sky_mid = float3(0.30, 0.30, 0.30);
         sky_bot = float3(0.85, 0.85, 0.85);
         sun_top = float3(1.0, 1.0, 1.0);
+        sun_mid = float3(0.8, 0.8, 0.8);
         sun_bot = float3(0.5, 0.5, 0.5);
-        grid_col = float3(0.95, 0.95, 0.95);
+        grid_h = float3(0.95, 0.95, 0.95);
+        grid_v = float3(0.75, 0.75, 0.75);
         mtn_col = float3(0.10, 0.10, 0.10);
         return;
     }
-    /* DEFAULT — classic Synthwave/Outrun: deep purple → magenta → pink */
-    sky_top = float3(0.04, 0.0, 0.18);
-    sky_mid = float3(0.40, 0.05, 0.45);
+    /* DEFAULT — classic Synthwave / Outrun:
+     * deep-purple sky → magenta middle → hot-pink near horizon,
+     * yellow-orange-magenta sun, magenta H + cyan V grid */
+    sky_top = float3(0.04, 0.0, 0.20);
+    sky_mid = float3(0.40, 0.05, 0.50);
     sky_bot = float3(1.0, 0.25, 0.55);
     sun_top = float3(1.0, 0.95, 0.55);
+    sun_mid = float3(1.0, 0.50, 0.45);
     sun_bot = float3(1.0, 0.10, 0.55);
-    grid_col = float3(1.0, 0.20, 0.85);
+    grid_h = float3(1.0, 0.20, 0.85);
+    grid_v = float3(0.10, 0.85, 1.0);
     mtn_col = float3(0.10, 0.0, 0.25);
+}
+
+/* Triangular mountain silhouette: returns 1 if pixel is inside a mountain */
+float mountainSilhouette(float x_aspect, float horizon, float y, float seed_t)
+{
+    /* 5 triangle peaks across the screen */
+    float result = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float fi = (float)i;
+        float pcx = -1.5 + fi * 0.6 + sin(seed_t + fi * 1.7) * 0.04;
+        float pw = 0.30 + hash11(fi + 12.3) * 0.18;
+        float ph = 0.06 + hash11(fi + 4.7) * 0.07;
+        float dx = abs(x_aspect - pcx) / pw;
+        if (dx > 1.0) continue;
+        float peak_y = horizon - (1.0 - dx) * ph;
+        if (y >= peak_y && y < horizon + 0.001) {
+            result = 1.0;
+        }
+    }
+    return result;
 }
 
 float4 PSVaporwaveSunset(VertInOut vert_in) : TARGET
@@ -117,141 +154,181 @@ float4 PSVaporwaveSunset(VertInOut vert_in) : TARGET
     float treble = bands.w;
     float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
+    bool bg_off = (bg_disable > 0.5);
 
-    float3 sky_top, sky_mid, sky_bot, sun_top, sun_bot, grid_col, mtn_col;
-    palette_vapor((int)palette_id, sky_top, sky_mid, sky_bot, sun_top, sun_bot, grid_col, mtn_col);
+    float3 sky_top, sky_mid, sky_bot, sun_top, sun_mid, sun_bot, grid_h, grid_v, mtn_col;
+    palette_synth((int)palette_id,
+        sky_top, sky_mid, sky_bot, sun_top, sun_mid, sun_bot, grid_h, grid_v, mtn_col);
 
-    float horizon = clamp(horizon_y, 0.25, 0.75);
+    float horizon = clamp(horizon_y, 0.3, 0.75);
     float3 col;
+    float x_aspect = (uv.x - 0.5) * aspect;
 
+    /* === SKY (above horizon) — only when bg enabled === */
     if (uv.y < horizon) {
-        /* === SKY: 3-stop gradient (top → mid → bot) === */
-        float t = uv.y / horizon;
-        float3 sky;
-        if (t < 0.5) {
-            float ti = t * 2.0;
-            sky = lerp(sky_top, sky_mid, pow(ti, 1.4));
+        if (bg_off) {
+            col = float3(0.0, 0.0, 0.0);
         } else {
-            float ti = (t - 0.5) * 2.0;
-            sky = lerp(sky_mid, sky_bot, pow(ti, 1.6));
-        }
-        col = sky;
-
-        /* Stars (only in upper third of sky) */
-        if (uv.y < horizon * 0.5) {
-            float star_h = hash21(floor(uv * 250.0));
-            if (star_h > 0.9965) {
-                float twinkle = 0.6 + sin(time * 3.5 + star_h * 50.0) * 0.4;
-                col += float3(1.0, 0.9, 1.0) * twinkle * (1.0 - uv.y / (horizon * 0.5));
+            /* 3-stop sky gradient (deep-purple → magenta → hot-pink) */
+            float t = uv.y / horizon;
+            float3 sky;
+            if (t < 0.5) {
+                float ti = t * 2.0;
+                sky = lerp(sky_top, sky_mid, pow(ti, 1.4));
+            } else {
+                float ti = (t - 0.5) * 2.0;
+                sky = lerp(sky_mid, sky_bot, pow(ti, 1.6));
             }
+            col = sky;
+
+            /* Stars (top 35% only, sparse) */
+            if (uv.y < horizon * 0.4) {
+                float star_h = hash21(floor(uv * 280.0));
+                if (star_h > 0.9968) {
+                    float twinkle = 0.6 + sin(time * 3.5 + star_h * 50.0) * 0.4;
+                    col += float3(1.0, 0.9, 1.0) * twinkle * (1.0 - uv.y / (horizon * 0.4));
+                }
+            }
+
+            /* === RETROSUN: large circle with horizontal slits across full disk === */
+            float2 sun_c = float2(0.5, horizon - 0.04);
+            float2 sd = float2(uv.x - sun_c.x, uv.y - sun_c.y);
+            sd.x *= aspect;
+            float sun_dist = length(sd);
+            float sr = max(sun_size, 0.15);
+
+            if (sun_dist < sr) {
+                /* Vertical 3-stop gradient through sun: yellow top → orange mid → magenta bottom */
+                float sun_t = (uv.y - (sun_c.y - sr)) / (sr * 2.0);
+                sun_t = saturate(sun_t);
+                float3 sun_grad;
+                if (sun_t < 0.5) {
+                    float ti = sun_t * 2.0;
+                    sun_grad = lerp(sun_top, sun_mid, pow(ti, 0.9));
+                } else {
+                    float ti = (sun_t - 0.5) * 2.0;
+                    sun_grad = lerp(sun_mid, sun_bot, pow(ti, 0.9));
+                }
+
+                /* Iconic horizontal SLITS — full disk coverage,
+                 * progressively thicker toward bottom (retro look). */
+                float slit_pos = sd.y / sr;  /* -1 (top) to +1 (bottom) */
+                float slit_density = 18.0 + saturate(slit_pos) * 18.0;
+                float slit_y = sd.y * slit_density;
+                float slit_phase = frac(slit_y + 0.5);
+                float slit_thick = lerp(0.18, 0.55, saturate(slit_pos * 0.6 + 0.5));
+                float slit_mask = step(slit_phase, slit_thick);
+
+                /* Slit cuts the sun showing sky behind */
+                col = lerp(sun_grad, sky, slit_mask);
+
+                /* Sun edge anti-alias */
+                float edge = smoothstep(sr - 0.005, sr, sun_dist);
+                col = lerp(col, sky, edge);
+            }
+            /* Sun outer bloom halo */
+            col += sun_bot * exp(-(sun_dist - sr * 0.8) * 5.5)
+                   * (0.5 + bass * 0.6) * (1.0 + beat_4 * 0.3);
+            col += sun_top * exp(-(sun_dist - sr * 0.8) * 2.5) * 0.20;
         }
-
-        /* === BIG SYNTHWAVE SUN with horizontal slits === */
-        float2 sun_c = float2(0.5, horizon - 0.02);
-        float2 sd = float2(uv.x - sun_c.x, uv.y - sun_c.y);
-        sd.x *= aspect;
-        float sun_dist = length(sd);
-        float sr = max(sun_size, 0.1);
-
-        if (sun_dist < sr) {
-            /* Vertical gradient through sun: yellow top → magenta bottom */
-            float sun_t = (uv.y - (sun_c.y - sr)) / (sr * 2.0);
-            sun_t = saturate(sun_t);
-            float3 sun_grad = lerp(sun_top, sun_bot, pow(sun_t, 0.85));
-
-            /* Iconic horizontal SLITS: more slits in lower half (grow toward bottom) */
-            float slit_pos = sd.y / sr;  /* -1 (top) to +1 (bottom) */
-            float slit_density = 14.0 + saturate(slit_pos) * 22.0;
-            float slit_y = (sd.y * slit_density) + 0.5;
-            float slit_phase = frac(slit_y);
-            float slit_thick = lerp(0.05, 0.42, saturate(slit_pos * 0.9 + 0.4));
-            float slit_mask = step(slit_phase, slit_thick);
-
-            /* Slit cuts the sun (showing sky behind) */
-            col = lerp(sun_grad, sky, slit_mask);
-
-            /* Sun edge anti-alias */
-            float edge = smoothstep(sr - 0.005, sr, sun_dist);
-            col = lerp(col, sky, edge);
-        }
-        /* Sun outer bloom halo */
-        col += sun_bot * exp(-(sun_dist - sr * 0.85) * 6.0) * (0.45 + bass * 0.55) * (1.0 + beat_4 * 0.4);
-        col += sun_top * exp(-(sun_dist - sr * 0.85) * 3.0) * 0.18;
-
     } else {
-        /* === GROUND with neon perspective grid === */
-        float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01);
-        col = lerp(float3(0.05, 0.0, 0.10), float3(0.0, 0.0, 0.0), gy);
+        /* === GROUND (below horizon) === */
+        col = bg_off ? float3(0.0, 0.0, 0.0) : float3(0.05, 0.0, 0.10);
 
-        /* Perspective scaling */
+        float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01);
         float persp = 1.0 / max(1.0 - gy, 0.005);
 
-        /* Wireframe mountains BEHIND grid (just at horizon) */
-        float mtn_y = horizon
-            + (sin(uv.x * 7.0 + 1.3) * 0.045
-            + sin(uv.x * 16.5 + 4.7) * 0.022
-            + sin(uv.x * 32.0 + 0.8) * 0.010
-            + 0.018);
-        float mtn_mask = step(uv.y, mtn_y);
-        col = lerp(col, mtn_col, mtn_mask);
-        /* Mountain edge glow */
-        float mtn_edge = 1.0 - smoothstep(0.0, 0.0035, abs(uv.y - mtn_y));
-        col += grid_col * mtn_edge * 0.55 * mtn_mask;
+        /* Dark gradient toward bottom */
+        if (!bg_off) {
+            col = lerp(col, float3(0.0, 0.0, 0.0), gy);
+        }
 
-        /* Grid: lines glow brighter via neon-tube falloff */
-        float scroll = time * scroll_speed * (1.0 + bass * 0.6);
+        /* === MOUNTAINS BEHIND grid (only if bg enabled, and only just above ground) === */
+        /* (mountains drawn by checking pixels just BEFORE horizon — render in sky branch
+         * means we'd need to redo. Instead: detect "is this pixel a mountain seen
+         * from above" by checking if uv.y is just above horizon and a mountain peak is here.
+         * We do this in the sky branch normally, but since uv.y >= horizon here, skip.) */
 
-        /* Vertical lines (converging to vanishing point) */
-        float vx = (uv.x - 0.5) * aspect;
-        float vx_p = vx * persp;
+        /* === LASER GRID === */
+
+        /* Vertical (cyan) lines — converge to vanishing point */
+        float vx_p = x_aspect * persp;
         float v_count = grid_density;
         float v_pos = vx_p * v_count;
         float v_dist = abs(v_pos - floor(v_pos + 0.5)) / v_count;
-        float v_w_core = 0.001 / persp;
-        float v_w_glow = 0.014 / persp;
-        float v_line = exp(-v_dist * v_dist / max(v_w_core, 0.00001))
-                     + exp(-v_dist / max(v_w_glow, 0.00001)) * 0.5;
+        float v_w_core = 0.0008 / persp;
+        float v_w_glow = 0.011 / persp;
+        float v_line = exp(-v_dist * v_dist / max(v_w_core * v_w_core, 1e-7))
+                     + exp(-v_dist / max(v_w_glow, 1e-5)) * 0.55;
         v_line = saturate(v_line);
 
-        /* Horizontal lines (scroll toward camera) */
-        float hp = sqrt(gy + 0.001) * 10.0 + scroll;
-        float h_dist = abs(hp - floor(hp + 0.5)) / 10.0;
-        float h_w_core = 0.0008 + kick_onset * 0.001;
-        float h_w_glow = 0.012 + bass * 0.012;
-        float h_line = exp(-h_dist * h_dist / max(h_w_core, 0.00001))
-                     + exp(-h_dist / max(h_w_glow, 0.00001)) * 0.5;
+        /* Horizontal (magenta) lines — scroll toward camera */
+        float scroll = time * scroll_speed * (1.0 + bass * 0.5);
+        float hp = sqrt(gy + 0.001) * 11.0 + scroll;
+        float h_dist = abs(hp - floor(hp + 0.5)) / 11.0;
+        float h_w_core = 0.0007 + kick_onset * 0.0009;
+        float h_w_glow = 0.011 + bass * 0.011;
+        float h_line = exp(-h_dist * h_dist / max(h_w_core * h_w_core, 1e-7))
+                     + exp(-h_dist / max(h_w_glow, 1e-5)) * 0.55;
         h_line = saturate(h_line);
 
-        /* Mountain mask cuts grid behind mountains */
-        float grid = max(v_line, h_line);
-        grid *= 1.0 - mtn_mask;
-        grid *= smoothstep(0.0, 0.2, gy);
+        float horizon_fade = smoothstep(0.0, 0.18, gy);
+        col += grid_v * v_line * (0.7 + drive * 0.4) * horizon_fade;
+        col += grid_h * h_line * (0.75 + drive * 0.45) * horizon_fade;
 
-        col += grid_col * grid * (0.7 + drive * 0.4);
+        /* Add white core "tube" highlight on top of color glow */
+        col += float3(1.0, 1.0, 1.0) * exp(-v_dist * v_dist / max(v_w_core * 0.4, 1e-7))
+               * 0.6 * horizon_fade;
+        col += float3(1.0, 1.0, 1.0) * exp(-h_dist * h_dist / max(h_w_core * 0.4, 1e-7))
+               * 0.6 * horizon_fade;
 
-        /* Beat-pulse: every 4th h-line glows brighter */
-        int hp_id = (int)floor(hp);
+        /* Beat pulse: every 4th h-line glows brighter */
+        int hp_id = (int)floor(hp + 0.5);
         bool h_pulse = (hp_id % 4) == 0;
-        if (h_pulse) col += grid_col * h_line * beat_4 * bass * 1.4;
+        if (h_pulse) col += grid_h * h_line * beat_4 * bass * 1.4 * horizon_fade;
 
-        /* Horizon glow */
-        float h_glow = exp(-gy * 7.0) * 0.55;
-        col += sun_bot * h_glow * (0.7 + bass * 0.5);
+        /* Horizon glow line (just above grid) */
+        if (!bg_off) {
+            float horizon_d = abs(uv.y - horizon);
+            float h_glow = exp(-horizon_d * 60.0) * 0.7;
+            col += sun_bot * h_glow * (0.7 + bass * 0.5);
+        }
 
-        /* Distance fade out at very bottom */
-        col *= smoothstep(1.0, 0.6, gy * 0.5);
+        /* Distance fade at very bottom */
+        col *= smoothstep(1.0, 0.7, gy * 0.5);
     }
 
-    /* Onset color flash on whole image */
+    /* === MOUNTAINS in sky just above horizon (bg-mode only) === */
+    if (!bg_off && uv.y < horizon) {
+        float mtn = mountainSilhouette(x_aspect, horizon, uv.y, time * 0.06);
+        if (mtn > 0.5) {
+            col = mtn_col;
+            /* Cyan edge glow on mountain top */
+            float edge_y = uv.y;
+            /* Approximate edge: where mountain ends (closer to peak) */
+            for (int i = 0; i < 6; i++) {
+                float fi = (float)i;
+                float pcx = -1.5 + fi * 0.6 + sin(time * 0.06 + fi * 1.7) * 0.04;
+                float pw = 0.30 + hash11(fi + 12.3) * 0.18;
+                float ph = 0.06 + hash11(fi + 4.7) * 0.07;
+                float dx = abs(x_aspect - pcx) / pw;
+                if (dx > 1.0) continue;
+                float peak_y = horizon - (1.0 - dx) * ph;
+                float edge_d = abs(uv.y - peak_y);
+                if (edge_d < 0.003) {
+                    col = lerp(col, grid_v, 1.0 - edge_d / 0.003);
+                }
+            }
+        }
+    }
+
+    /* === Onset color flash === */
     col += sun_top * onset_strength * 0.10;
 
-    /* Subtle film grain */
-    col += (hash21(uv * resolution + floor(time * 6.0)) - 0.5) * 0.012;
-
-    /* HDR + saturation boost (synthwave look) */
-    col = col / (1.0 + col * 0.35);
+    /* HDR + saturation boost — Synthwave wants saturation */
+    col = col / (1.0 + col * 0.32);
     float lum = dot(col, float3(0.299, 0.587, 0.114));
-    col = lerp(float3(lum, lum, lum), col, 1.25);
+    col = lerp(float3(lum, lum, lum), col, 1.30);
     col = saturate(col);
 
     float a_out = max(max(col.r, col.g), col.b);

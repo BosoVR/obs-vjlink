@@ -1,7 +1,11 @@
 /*
  * VJLink - Type Animator
  * Audio-reactive bold blocky typography for Hardtechno drops.
- * Uses procedural 5x7 letter SDFs to spell preset words on beat.
+ * 5x7 bitmap font supports A-Z (1-26), Space (27), 0-9 (28-37).
+ *
+ * text_choice 0-5 = preset words (RAVE/BERGHAIN/HARDTECHNO/ACID/DROP/TECHNO).
+ * text_choice 6 = CUSTOM, reads from text_char_0 .. text_char_11 uniforms.
+ * Web UI rotates through user's word list and updates char uniforms.
  */
 
 uniform float4x4 ViewProj;
@@ -19,11 +23,27 @@ uniform float     kick_onset;
 uniform float     onset_strength;
 uniform float     palette_id;
 
-uniform float text_choice;        /* 0=RAVE 1=BERGHAIN 2=HARDTECHNO 3=ACID 4=DROP 5=TECHNO */
-uniform float text_size;          /* 0.05 - 0.5, default 0.2 */
-uniform float change_rate;        /* 0=continuous 1=on bar 2=on beat */
+uniform float text_choice;        /* 0=RAVE 1=BERGHAIN 2=HARDTECHNO 3=ACID 4=DROP 5=TECHNO 6=CUSTOM */
+uniform float text_size;          /* 0.05 - 0.5, default 0.20 */
+uniform float change_rate;        /* 0=continuous 1=on bar 2=on beat (only for presets) */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float background_amount;  /* 0 - 1, default 0.3 */
+uniform float bg_disable;         /* 0=show bg, 1=only text on transparent */
+
+/* CUSTOM-text per-char indices (used when text_choice == 6).
+ * Each is 0=blank, 1-26=A-Z, 27=space, 28-37=0-9. */
+uniform float text_char_0;
+uniform float text_char_1;
+uniform float text_char_2;
+uniform float text_char_3;
+uniform float text_char_4;
+uniform float text_char_5;
+uniform float text_char_6;
+uniform float text_char_7;
+uniform float text_char_8;
+uniform float text_char_9;
+uniform float text_char_10;
+uniform float text_char_11;
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -48,100 +68,195 @@ float3 palette_type(int pid) {
     return float3(0.95, 0.10, 0.55);
 }
 
-/* Glyph row table — flat function (letter, row) -> 5-bit pattern.
- * Each letter is a 5x7 grid encoded as 7 row-ints (5 bits each).
- * Letters: 1=A 2=B 3=C 4=D 5=E 6=G 7=H 8=I 9=M 10=N 11=O 12=P 13=R 14=T 15=V */
+/* === 5x7 BITMAP FONT TABLE ===
+ * Returns 5-bit row pattern (0-31) for given (letter, row).
+ * letter: 1-26 = A-Z, 27 = space, 28-37 = 0-9. */
 int glyphRow(int letter, int row)
 {
-    /* A */
-    if (letter == 1) {
+    /* === A-Z === */
+    if (letter == 1) {  /* A */
         if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 31; if (row == 4) return 17; if (row == 5) return 17;
         return 17;
     }
-    /* B */
-    if (letter == 2) {
+    if (letter == 2) {  /* B */
         if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 30; if (row == 4) return 17; if (row == 5) return 17;
         return 30;
     }
-    /* C */
-    if (letter == 3) {
-        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 16;
-        if (row == 3) return 16; if (row == 4) return 16; if (row == 5) return 17;
-        return 14;
+    if (letter == 3) {  /* C */
+        if (row == 0) return 15; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 16; if (row == 4) return 16; if (row == 5) return 16;
+        return 15;
     }
-    /* D */
-    if (letter == 4) {
+    if (letter == 4) {  /* D */
         if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17;
         return 30;
     }
-    /* E */
-    if (letter == 5) {
+    if (letter == 5) {  /* E */
         if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16;
         if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16;
         return 31;
     }
-    /* G */
-    if (letter == 6) {
+    if (letter == 6) {  /* F */
+        if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16;
+        return 16;
+    }
+    if (letter == 7) {  /* G */
         if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 16;
         if (row == 3) return 23; if (row == 4) return 17; if (row == 5) return 17;
         return 14;
     }
-    /* H */
-    if (letter == 7) {
+    if (letter == 8) {  /* H */
         if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 31; if (row == 4) return 17; if (row == 5) return 17;
         return 17;
     }
-    /* I */
-    if (letter == 8) {
+    if (letter == 9) {  /* I */
         if (row == 0) return 14; if (row == 1) return 4;  if (row == 2) return 4;
         if (row == 3) return 4;  if (row == 4) return 4;  if (row == 5) return 4;
         return 14;
     }
-    /* M */
-    if (letter == 9) {
+    if (letter == 10) { /* J */
+        if (row == 0) return 7;  if (row == 1) return 1;  if (row == 2) return 1;
+        if (row == 3) return 1;  if (row == 4) return 17; if (row == 5) return 17;
+        return 14;
+    }
+    if (letter == 11) { /* K */
+        if (row == 0) return 17; if (row == 1) return 18; if (row == 2) return 20;
+        if (row == 3) return 24; if (row == 4) return 20; if (row == 5) return 18;
+        return 17;
+    }
+    if (letter == 12) { /* L */
+        if (row == 0) return 16; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 16; if (row == 4) return 16; if (row == 5) return 16;
+        return 31;
+    }
+    if (letter == 13) { /* M */
         if (row == 0) return 17; if (row == 1) return 27; if (row == 2) return 21;
         if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17;
         return 17;
     }
-    /* N */
-    if (letter == 10) {
+    if (letter == 14) { /* N */
         if (row == 0) return 17; if (row == 1) return 25; if (row == 2) return 21;
         if (row == 3) return 19; if (row == 4) return 17; if (row == 5) return 17;
         return 17;
     }
-    /* O */
-    if (letter == 11) {
+    if (letter == 15) { /* O */
         if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17;
         return 14;
     }
-    /* P */
-    if (letter == 12) {
+    if (letter == 16) { /* P */
         if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16;
         return 16;
     }
-    /* R */
-    if (letter == 13) {
+    if (letter == 17) { /* Q */
+        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17;
+        if (row == 3) return 17; if (row == 4) return 21; if (row == 5) return 18;
+        return 13;
+    }
+    if (letter == 18) { /* R */
         if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 30; if (row == 4) return 20; if (row == 5) return 18;
         return 17;
     }
-    /* T */
-    if (letter == 14) {
-        if (row == 0) return 31; if (row == 1) return 4; if (row == 2) return 4;
-        if (row == 3) return 4;  if (row == 4) return 4; if (row == 5) return 4;
+    if (letter == 19) { /* S */
+        if (row == 0) return 15; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 14; if (row == 4) return 1;  if (row == 5) return 1;
+        return 30;
+    }
+    if (letter == 20) { /* T */
+        if (row == 0) return 31; if (row == 1) return 4;  if (row == 2) return 4;
+        if (row == 3) return 4;  if (row == 4) return 4;  if (row == 5) return 4;
         return 4;
     }
-    /* V */
-    if (letter == 15) {
+    if (letter == 21) { /* U */
+        if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17;
+        if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17;
+        return 14;
+    }
+    if (letter == 22) { /* V */
         if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17;
         if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 10;
         return 4;
+    }
+    if (letter == 23) { /* W */
+        if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17;
+        if (row == 3) return 21; if (row == 4) return 21; if (row == 5) return 27;
+        return 17;
+    }
+    if (letter == 24) { /* X */
+        if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 10;
+        if (row == 3) return 4;  if (row == 4) return 10; if (row == 5) return 17;
+        return 17;
+    }
+    if (letter == 25) { /* Y */
+        if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 10;
+        if (row == 3) return 4;  if (row == 4) return 4;  if (row == 5) return 4;
+        return 4;
+    }
+    if (letter == 26) { /* Z */
+        if (row == 0) return 31; if (row == 1) return 1;  if (row == 2) return 2;
+        if (row == 3) return 4;  if (row == 4) return 8;  if (row == 5) return 16;
+        return 31;
+    }
+    /* === Space === */
+    if (letter == 27) return 0;
+
+    /* === 0-9 === */
+    if (letter == 28) { /* 0 */
+        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 19;
+        if (row == 3) return 21; if (row == 4) return 25; if (row == 5) return 17;
+        return 14;
+    }
+    if (letter == 29) { /* 1 */
+        if (row == 0) return 4;  if (row == 1) return 12; if (row == 2) return 4;
+        if (row == 3) return 4;  if (row == 4) return 4;  if (row == 5) return 4;
+        return 14;
+    }
+    if (letter == 30) { /* 2 */
+        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 1;
+        if (row == 3) return 2;  if (row == 4) return 4;  if (row == 5) return 8;
+        return 31;
+    }
+    if (letter == 31) { /* 3 */
+        if (row == 0) return 30; if (row == 1) return 1;  if (row == 2) return 1;
+        if (row == 3) return 14; if (row == 4) return 1;  if (row == 5) return 1;
+        return 30;
+    }
+    if (letter == 32) { /* 4 */
+        if (row == 0) return 18; if (row == 1) return 18; if (row == 2) return 18;
+        if (row == 3) return 31; if (row == 4) return 2;  if (row == 5) return 2;
+        return 2;
+    }
+    if (letter == 33) { /* 5 */
+        if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 30; if (row == 4) return 1;  if (row == 5) return 1;
+        return 30;
+    }
+    if (letter == 34) { /* 6 */
+        if (row == 0) return 14; if (row == 1) return 16; if (row == 2) return 16;
+        if (row == 3) return 30; if (row == 4) return 17; if (row == 5) return 17;
+        return 14;
+    }
+    if (letter == 35) { /* 7 */
+        if (row == 0) return 31; if (row == 1) return 1;  if (row == 2) return 2;
+        if (row == 3) return 4;  if (row == 4) return 8;  if (row == 5) return 16;
+        return 16;
+    }
+    if (letter == 36) { /* 8 */
+        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17;
+        if (row == 3) return 14; if (row == 4) return 17; if (row == 5) return 17;
+        return 14;
+    }
+    if (letter == 37) { /* 9 */
+        if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17;
+        if (row == 3) return 15; if (row == 4) return 1;  if (row == 5) return 1;
+        return 14;
     }
     return 0;
 }
@@ -151,84 +266,97 @@ float glyphBit(int letter, int cx, int cy)
 {
     if (cx < 0 || cx >= 5 || cy < 0 || cy >= 7 || letter <= 0) return 0.0;
     int row = glyphRow(letter, cy);
-    /* Manual bit extraction to avoid HLSL bit-op issues:
+    /* Manual bit extraction without bit-ops (for shader compat):
      * bit at column cx (left=0) is bit (4 - cx). */
     int sh = 4 - cx;
     int v = row;
-    if (sh > 0) {
-        /* Divide by 2^sh */
-        if (sh == 1) v = v / 2;
-        else if (sh == 2) v = v / 4;
-        else if (sh == 3) v = v / 8;
-        else if (sh == 4) v = v / 16;
-    }
-    /* mod 2 */
+    if (sh == 1) v = v / 2;
+    else if (sh == 2) v = v / 4;
+    else if (sh == 3) v = v / 8;
+    else if (sh == 4) v = v / 16;
     int half = v / 2;
-    int bit = v - half * 2;
-    return (float)bit;
+    return (float)(v - half * 2);
 }
 
-/* Returns letter index for word (choice, char_pos). 0 = no letter. */
+/* Custom-text char index lookup (text_char_0..11) */
+int customCharAt(int pos)
+{
+    if (pos == 0)  return (int)text_char_0;
+    if (pos == 1)  return (int)text_char_1;
+    if (pos == 2)  return (int)text_char_2;
+    if (pos == 3)  return (int)text_char_3;
+    if (pos == 4)  return (int)text_char_4;
+    if (pos == 5)  return (int)text_char_5;
+    if (pos == 6)  return (int)text_char_6;
+    if (pos == 7)  return (int)text_char_7;
+    if (pos == 8)  return (int)text_char_8;
+    if (pos == 9)  return (int)text_char_9;
+    if (pos == 10) return (int)text_char_10;
+    if (pos == 11) return (int)text_char_11;
+    return 0;
+}
+
+/* Preset word letter (1-based pos, returns 0 if past word end) */
 int wordLetter(int choice, int pos)
 {
-    /* 0 = RAVE (4 chars): R A V E */
+    /* 0 = RAVE: R A V E */
     if (choice == 0) {
-        if (pos == 0) return 13;
+        if (pos == 0) return 18;
         if (pos == 1) return 1;
-        if (pos == 2) return 15;
+        if (pos == 2) return 22;
         if (pos == 3) return 5;
         return 0;
     }
-    /* 1 = BERGHAIN (8 chars): B E R G H A I N */
+    /* 1 = BERGHAIN: B E R G H A I N */
     if (choice == 1) {
         if (pos == 0) return 2;
         if (pos == 1) return 5;
-        if (pos == 2) return 13;
-        if (pos == 3) return 6;
-        if (pos == 4) return 7;
+        if (pos == 2) return 18;
+        if (pos == 3) return 7;
+        if (pos == 4) return 8;
         if (pos == 5) return 1;
-        if (pos == 6) return 8;
-        if (pos == 7) return 10;
+        if (pos == 6) return 9;
+        if (pos == 7) return 14;
         return 0;
     }
-    /* 2 = HARDTECHNO (10 chars): H A R D T E C H N O */
+    /* 2 = HARDTECHNO: H A R D T E C H N O */
     if (choice == 2) {
-        if (pos == 0) return 7;
+        if (pos == 0) return 8;
         if (pos == 1) return 1;
-        if (pos == 2) return 13;
+        if (pos == 2) return 18;
         if (pos == 3) return 4;
-        if (pos == 4) return 14;
+        if (pos == 4) return 20;
         if (pos == 5) return 5;
         if (pos == 6) return 3;
-        if (pos == 7) return 7;
-        if (pos == 8) return 10;
-        if (pos == 9) return 11;
+        if (pos == 7) return 8;
+        if (pos == 8) return 14;
+        if (pos == 9) return 15;
         return 0;
     }
-    /* 3 = ACID (4 chars): A C I D */
+    /* 3 = ACID: A C I D */
     if (choice == 3) {
         if (pos == 0) return 1;
         if (pos == 1) return 3;
-        if (pos == 2) return 8;
+        if (pos == 2) return 9;
         if (pos == 3) return 4;
         return 0;
     }
-    /* 4 = DROP (4 chars): D R O P */
+    /* 4 = DROP: D R O P */
     if (choice == 4) {
         if (pos == 0) return 4;
-        if (pos == 1) return 13;
-        if (pos == 2) return 11;
-        if (pos == 3) return 12;
+        if (pos == 1) return 18;
+        if (pos == 2) return 15;
+        if (pos == 3) return 16;
         return 0;
     }
-    /* 5 = TECHNO (6 chars): T E C H N O */
+    /* 5 = TECHNO: T E C H N O */
     if (choice == 5) {
-        if (pos == 0) return 14;
+        if (pos == 0) return 20;
         if (pos == 1) return 5;
         if (pos == 2) return 3;
-        if (pos == 3) return 7;
-        if (pos == 4) return 10;
-        if (pos == 5) return 11;
+        if (pos == 3) return 8;
+        if (pos == 4) return 14;
+        if (pos == 5) return 15;
         return 0;
     }
     return 0;
@@ -245,6 +373,19 @@ int wordLength(int choice)
     return 0;
 }
 
+/* Custom text length: count non-zero chars in text_char_0..11 (counting trailing space=27 too,
+ * stops at first 0 = blank/end-of-word). */
+int customLength()
+{
+    int len = 0;
+    if (customCharAt(0) > 0) len = 1; else return 0;
+    for (int i = 1; i < 12; i++) {
+        if (customCharAt(i) > 0) len = i + 1;
+        else break;
+    }
+    return len;
+}
+
 float4 PSTypeAnimator(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
@@ -254,30 +395,34 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
 
     float bass = bands.x;
     float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    bool bg_off = (bg_disable > 0.5);
 
-    /* Choose word based on change_rate */
     int word_idx = (int)text_choice;
-    int cr = (int)change_rate;
-    if (cr == 1) {
-        word_idx = ((int)(beat_count * 0.25) + (int)text_choice) % 6;
-    } else if (cr == 2) {
-        word_idx = ((int)beat_count + (int)text_choice) % 6;
+    int len;
+    bool is_custom = (word_idx == 6);
+
+    if (is_custom) {
+        len = customLength();
+    } else {
+        /* Optional rotation through preset words (ignored in custom mode — JS rotates) */
+        int cr = (int)change_rate;
+        if (cr == 1) {
+            word_idx = ((int)(beat_count * 0.25) + (int)text_choice) % 6;
+        } else if (cr == 2) {
+            word_idx = ((int)beat_count + (int)text_choice) % 6;
+        }
+        len = wordLength(word_idx);
     }
 
-    int len = wordLength(word_idx);
-
-    /* Layout */
     float ts = clamp(text_size, 0.04, 0.5);
     float scale_pulse = 1.0 + kick_onset * 0.18;
     ts *= scale_pulse;
 
     float char_w = ts;
-    float total_w = char_w * (float)len;
+    float total_w = char_w * (float)max(len, 1);
     float start_x = -total_w * 0.5 + char_w * 0.5;
 
     float text_mask = 0.0;
-
-    /* Static-bound loop: max 12 chars */
     for (int li = 0; li < 12; li++) {
         if (li >= len) break;
         float cx_center = start_x + (float)li * char_w;
@@ -287,24 +432,30 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
         int cy = 6 - (int)((lp.y + 0.7) * 5.0);
         cy = clamp(cy, 0, 6);
         cx = clamp(cx, 0, 4);
-        int letter = wordLetter(word_idx, li);
+        int letter = is_custom ? customCharAt(li) : wordLetter(word_idx, li);
         text_mask = max(text_mask, glyphBit(letter, cx, cy));
     }
 
     /* Color */
     float3 accent = palette_type((int)palette_id);
-    float3 col = float3(0.02, 0.02, 0.025);
+    float3 col;
 
-    /* Audio-driven background */
-    if (background_amount > 0.001) {
-        float diag = sin((p.x + p.y) * 8.0 + time * 2.0 * (1.0 + bass));
-        float bg_bars = step(0.7, diag);
-        col += accent * bg_bars * 0.08 * background_amount;
+    if (bg_off) {
+        col = float3(0.0, 0.0, 0.0);
+    } else {
+        col = float3(0.02, 0.02, 0.025);
 
-        float2 rg_id = floor(uv * float2(12.0, 8.0));
-        float rg_h = hash21(rg_id + floor(time * 4.0));
-        float rg = step(0.92 - bass * 0.1, rg_h);
-        col += accent * rg * 0.05 * background_amount;
+        /* Audio-driven background (only when bg enabled) */
+        if (background_amount > 0.001) {
+            float diag = sin((p.x + p.y) * 8.0 + time * 2.0 * (1.0 + bass));
+            float bg_bars = step(0.7, diag);
+            col += accent * bg_bars * 0.08 * background_amount;
+
+            float2 rg_id = floor(uv * float2(12.0, 8.0));
+            float rg_h = hash21(rg_id + floor(time * 4.0));
+            float rg = step(0.92 - bass * 0.1, rg_h);
+            col += accent * rg * 0.05 * background_amount;
+        }
     }
 
     /* Text */
@@ -314,11 +465,16 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
     col += accent * text_mask * kick_onset * 0.5;
     col += float3(1.0, 1.0, 1.0) * onset_strength * text_mask * 0.4;
 
-    /* Vignette */
-    col *= smoothstep(2.4, 0.5, length(p));
+    /* Vignette only with bg */
+    if (!bg_off) col *= smoothstep(2.4, 0.5, length(p));
 
     col = saturate(col);
-    float a_out = max(text_mask, max(max(col.r, col.g), col.b) * 0.6);
+    float a_out;
+    if (bg_off) {
+        a_out = text_mask;  /* Pure transparent: only text visible */
+    } else {
+        a_out = max(text_mask, max(max(col.r, col.g), col.b) * 0.6);
+    }
     return float4(col, a_out);
 }
 
