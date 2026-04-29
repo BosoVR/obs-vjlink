@@ -1547,7 +1547,7 @@
       </div>
     </div>
 
-    <!-- ===== AUTO-VJ ===== -->
+    <!-- ===== AUTO-VJ + VJ AI ===== -->
     <div class="pro-panel pro-only" style="margin-top:12px">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>Auto-VJ</span>
@@ -1569,7 +1569,41 @@
         </div>
       </div>
       <div style="font-size:10px;color:var(--text-dim);margin-top:4px;letter-spacing:0.4px">
-        Auto-cycles through palette-aware generators on a timer. Skipped while audio energy is below the gate.
+        Auto-cycles through generators on a timer. Skipped while audio energy is below the gate.
+      </div>
+
+      <!-- VJ AI -->
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--text)">VJ AI</span>
+          <span id="aiStateLabel" style="font-size:9px;color:var(--text-dim);font-weight:600;letter-spacing:0.5px">OFF</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+          <button class="mini-btn" id="aiBtnOff" onclick="setAiMode('off')" style="font-size:9px">OFF</button>
+          <button class="mini-btn" id="aiBtnLearn" onclick="setAiMode('learning')" style="font-size:9px">LEARN</button>
+          <button class="mini-btn" id="aiBtnPlay" onclick="setAiMode('playing')" style="font-size:9px">PLAY</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-size:10px">
+          <div class="pro-stat" style="padding:4px 6px">
+            <div class="pro-stat-label">Samples</div>
+            <div class="pro-stat-value" id="aiSamples" style="font-size:13px">0</div>
+          </div>
+          <div class="pro-stat" style="padding:4px 6px">
+            <div class="pro-stat-label">Confidence</div>
+            <div class="pro-stat-value" id="aiConfidence" style="font-size:13px">—</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:6px">
+          <button class="mini-btn" onclick="aiResetData()" title="Wipe learned data" style="font-size:9px;color:var(--red);border-color:var(--red)">Reset</button>
+          <button class="mini-btn" onclick="aiExportData()" style="font-size:9px">Export</button>
+          <button class="mini-btn" onclick="document.getElementById('aiImportFile').click()" style="font-size:9px">Import</button>
+        </div>
+        <input type="file" id="aiImportFile" accept=".vjlai,.json" style="display:none"
+          onchange="aiImportData(this.files[0])">
+        <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+          <strong>LEARN</strong>: records your effect/palette choices per audio bucket.
+          <br><strong>PLAY</strong>: replays your style — picks effects that match the current audio.
+        </div>
       </div>
     </div>
 
@@ -5275,6 +5309,260 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   ];
 })();
 
+/* ============================================================
+ *  VJ AI — statistical learning of user style.
+ *
+ *  Strategy: bucket the audio state (BPM, energy, treble) into
+ *  ~64 cells. For each bucket track which effects + palettes the
+ *  user picked while LEARN mode was on. In PLAY mode, when an
+ *  effect change is needed, look up the most-likely effect for
+ *  the current bucket and switch to it.
+ *
+ *  Pure clientside JS, persisted in localStorage. ~ O(1) cost.
+ * ============================================================ */
+
+const VJ_AI = {
+  mode: 'off', // 'off' | 'learning' | 'playing'
+  storageKey: 'vjlink_ai_v1',
+
+  // Map: bucket-key -> { effect_id: count, ... }
+  effectCounts: {},
+  paletteCounts: {},
+  lastSwitchAt: 0,
+  totalSamples: 0,
+  lastSampledEffect: null,
+  lastSampledPalette: null,
+
+  load() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      this.effectCounts = data.effectCounts || {};
+      this.paletteCounts = data.paletteCounts || {};
+      this.totalSamples = data.totalSamples || 0;
+    } catch (e) {}
+  },
+
+  save() {
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify({
+        effectCounts: this.effectCounts,
+        paletteCounts: this.paletteCounts,
+        totalSamples: this.totalSamples,
+      }));
+    } catch (e) {}
+  },
+
+  /* Compute audio bucket from current state. ~64 buckets total. */
+  bucketKey(state) {
+    /* BPM band: <120, 120-140, 140-160, >160 */
+    const bpm = state.bpm || 128;
+    let bb = 0;
+    if (bpm < 120) bb = 0;
+    else if (bpm < 140) bb = 1;
+    else if (bpm < 160) bb = 2;
+    else bb = 3;
+    /* Bass energy: 0..1 -> 4 levels */
+    const ee = Math.min(3, Math.floor((state.band_bass || 0) * 4));
+    /* Treble energy */
+    const tt = Math.min(3, Math.floor((state.band_treble || 0) * 4));
+    return `${bb}-${ee}-${tt}`;
+  },
+
+  /* Sample current state — call periodically while LEARN is on */
+  sample(state) {
+    if (this.mode !== 'learning') return;
+    if (!activeEffect) return;
+    const bucket = this.bucketKey(state);
+
+    /* Only count when something changed (avoid bloating) */
+    const changed = (activeEffect !== this.lastSampledEffect)
+                 || (activePaletteId !== this.lastSampledPalette);
+    if (!changed) return;
+    this.lastSampledEffect = activeEffect;
+    this.lastSampledPalette = activePaletteId;
+
+    this.effectCounts[bucket] ||= {};
+    this.effectCounts[bucket][activeEffect] = (this.effectCounts[bucket][activeEffect] || 0) + 1;
+
+    this.paletteCounts[bucket] ||= {};
+    const palKey = String(activePaletteId);
+    this.paletteCounts[bucket][palKey] = (this.paletteCounts[bucket][palKey] || 0) + 1;
+
+    this.totalSamples++;
+    this.save();
+  },
+
+  /* Pick a likely effect for current bucket. Weighted random. */
+  pickEffect(state) {
+    const bucket = this.bucketKey(state);
+    const counts = this.effectCounts[bucket];
+    if (!counts) return null;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (total === 0) return null;
+    let r = Math.random() * total;
+    for (const [eff, c] of Object.entries(counts)) {
+      r -= c;
+      if (r <= 0) return eff;
+    }
+    return null;
+  },
+
+  pickPalette(state) {
+    const bucket = this.bucketKey(state);
+    const counts = this.paletteCounts[bucket];
+    if (!counts) return null;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (total === 0) return null;
+    let r = Math.random() * total;
+    for (const [pid, c] of Object.entries(counts)) {
+      r -= c;
+      if (r <= 0) return parseInt(pid);
+    }
+    return null;
+  },
+
+  /* Confidence: how many samples for current bucket? */
+  confidence(state) {
+    const bucket = this.bucketKey(state);
+    const counts = this.effectCounts[bucket];
+    if (!counts) return { samples: 0, label: 'low' };
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    let label = 'low';
+    if (total >= 20) label = 'high';
+    else if (total >= 6) label = 'med';
+    return { samples: total, label };
+  },
+
+  reset() {
+    this.effectCounts = {};
+    this.paletteCounts = {};
+    this.totalSamples = 0;
+    this.lastSampledEffect = null;
+    this.lastSampledPalette = null;
+    this.save();
+  },
+};
+VJ_AI.load();
+
+function setAiMode(mode) {
+  VJ_AI.mode = mode;
+  VJ_AI.lastSwitchAt = Date.now();
+  document.querySelectorAll('#aiBtnOff, #aiBtnLearn, #aiBtnPlay').forEach(b => {
+    b.classList.remove('active');
+    b.style.background = '';
+    b.style.color = '';
+  });
+  const map = { off: 'aiBtnOff', learning: 'aiBtnLearn', playing: 'aiBtnPlay' };
+  const btn = document.getElementById(map[mode]);
+  if (btn) {
+    btn.classList.add('active');
+    btn.style.background = mode === 'learning' ? 'var(--green)'
+                         : mode === 'playing' ? 'var(--accent)'
+                         : '';
+    btn.style.color = mode === 'off' ? '' : 'white';
+  }
+  const lbl = document.getElementById('aiStateLabel');
+  if (lbl) lbl.textContent = mode.toUpperCase();
+}
+setAiMode('off');
+
+function aiResetData() {
+  if (!confirm('Wipe all learned VJ data?')) return;
+  VJ_AI.reset();
+  updateAiStats(null);
+}
+
+function aiExportData() {
+  const data = {
+    version: '1.1.1',
+    timestamp: Date.now(),
+    effectCounts: VJ_AI.effectCounts,
+    paletteCounts: VJ_AI.paletteCounts,
+    totalSamples: VJ_AI.totalSamples,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)],
+                       { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.download = 'vjlink-ai-' + ts + '.vjlai';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function aiImportData(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    VJ_AI.effectCounts = data.effectCounts || {};
+    VJ_AI.paletteCounts = data.paletteCounts || {};
+    VJ_AI.totalSamples = data.totalSamples || 0;
+    VJ_AI.save();
+    alert('VJ AI data imported. ' + VJ_AI.totalSamples + ' samples loaded.');
+    updateAiStats(null);
+  } catch (e) {
+    alert('Import failed: ' + e.message);
+  }
+}
+
+function updateAiStats(state) {
+  const sEl = document.getElementById('aiSamples');
+  const cEl = document.getElementById('aiConfidence');
+  if (sEl) sEl.textContent = VJ_AI.totalSamples;
+  if (cEl && state) {
+    const conf = VJ_AI.confidence(state);
+    cEl.textContent = conf.samples + ' / ' + conf.label;
+  }
+}
+
+/* AI tick: in PLAY mode, periodically pick an effect for the
+ * current audio bucket. Uses Auto-VJ's cycle timer + energy gate. */
+async function tickVjAi(state) {
+  if (VJ_AI.mode === 'learning') {
+    VJ_AI.sample(state);
+  } else if (VJ_AI.mode === 'playing') {
+    /* Reuse Auto-VJ cycle/gate sliders for AI play timing */
+    const cycleEl = document.getElementById('autoVjCycle');
+    const gateEl = document.getElementById('autoVjEnergy');
+    const cycleSec = cycleEl ? parseFloat(cycleEl.value) : 12;
+    const gate = gateEl ? parseFloat(gateEl.value) / 100 : 0.3;
+
+    const energy = Math.max(state.band_bass || 0, state.band_lowmid || 0,
+                            state.band_highmid || 0, state.band_treble || 0);
+    if (energy < gate) {
+      updateAiStats(state);
+      return;
+    }
+    const now = Date.now();
+    if (now - VJ_AI.lastSwitchAt < cycleSec * 1000) {
+      updateAiStats(state);
+      return;
+    }
+    VJ_AI.lastSwitchAt = now;
+
+    const picked = VJ_AI.pickEffect(state);
+    const pickedPal = VJ_AI.pickPalette(state);
+
+    if (picked && picked !== activeEffect) {
+      activeEffect = picked;
+      await sendRequest('SetEffect', { effect_id: picked });
+      renderEffects();
+      renderParams();
+    }
+    if (pickedPal != null && pickedPal !== activePaletteId) {
+      await setPalette(pickedPal);
+    }
+  }
+  updateAiStats(state);
+}
+
+
 /* === v1.1.0: Auto-VJ + Diagnostics + Profile Bundle === */
 
 let autoVjOn = false;
@@ -5355,13 +5643,17 @@ function updateDiagnostics(state) {
   }
 }
 
-/* Wrap updateState to drive diagnostics + auto-vj */
+/* Wrap updateState to drive diagnostics + auto-vj + VJ AI */
 const _origUpdateState_v110 = (typeof updateState === 'function') ? updateState : null;
 if (_origUpdateState_v110) {
   updateState = function(state) {
     _origUpdateState_v110(state);
     updateDiagnostics(state);
-    tickAutoVj(state);
+    /* Auto-VJ runs only when AI is OFF (so they don't fight) */
+    if (VJ_AI.mode === 'off') {
+      tickAutoVj(state);
+    }
+    tickVjAi(state);
   };
 }
 
