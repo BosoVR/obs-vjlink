@@ -1,8 +1,7 @@
 /*
- * VJLink - Pixel Sort / Data Streak
- * Aggressive directional pixel stretching with color separation.
- * When standalone: generates abstract data-flow patterns.
- * When filter: dramatic luminance-based streak effect on input.
+ * VJLink - Pixel Sort (Pro v3)
+ * Filter: aggressive directional pixel stretching with palette-aware
+ * chroma. Standalone: data-streak pattern using palette colors.
  */
 
 uniform float4x4 ViewProj;
@@ -13,61 +12,53 @@ uniform float     time;
 uniform float4    bands;
 uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     snare_onset;
 uniform float     onset_strength;
 uniform float     rms;
+uniform float     palette_id;
 
-uniform float sort_threshold;  /* brightness threshold (default 0.5) */
-uniform float sort_direction;  /* 0=vertical, 1=horizontal (default 0.0) */
-uniform float sort_length;     /* max sort distance (default 0.3) */
-uniform float sort_intensity;  /* effect strength (default 0.8) */
-uniform float has_input_source; /* 1.0 when used as filter on a source */
+uniform float sort_threshold;     /* 0 - 1, default 0.5 */
+uniform float sort_direction;     /* 0=vert 1=horiz */
+uniform float sort_length;        /* 0.01 - 1, default 0.3 */
+uniform float sort_intensity;     /* 0 - 1, default 0.85 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
+uniform float has_input_source;
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float luminance(float3 c)
-{
-    return dot(c, float3(0.299, 0.587, 0.114));
+float luminance(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_sort(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.5) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.4); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
-float hash21(float2 p)
-{
-    p = frac(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return frac(p.x * p.y);
-}
-
-float hash11(float p)
-{
-    p = frac(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return frac(p);
-}
-
-/* Generate standalone data-streak pattern */
-float3 dataStreakPattern(float2 uv, float bass, float treble, float beat)
+float3 standalonePattern(float2 uv, float bass, float treble, float beat,
+                         float drive, int pid)
 {
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= resolution.x / max(resolution.y, 1.0);
 
-    float3 col = float3(0.0, 0.0, 0.0);
+    float3 col = float3(0.01, 0.01, 0.02);
 
     /* Vertical data streams */
     float col_id = floor(uv.x * (60.0 + bass * 40.0));
@@ -75,52 +66,45 @@ float3 dataStreakPattern(float2 uv, float bass, float treble, float beat)
     float col_speed = col_hash * 3.0 + 1.0;
     float col_brightness = hash11(col_id + 100.0);
 
-    /* Stream activity based on audio */
-    float stream_active = step(0.4 - bass * 0.3, col_hash);
+    float stream_active = step(0.4 - drive * 0.18, col_hash);
     float stream_y = frac(uv.y * 2.0 + time * col_speed);
-
-    /* Streak trail */
     float streak = exp(-stream_y * (3.0 + treble * 5.0)) * stream_active;
 
-    /* Color per stream */
     float hue = frac(col_hash * 0.7 + time * 0.05);
-    float3 stream_col;
-    stream_col.r = saturate(abs(hue * 6.0 - 3.0) - 1.0);
-    stream_col.g = saturate(2.0 - abs(hue * 6.0 - 2.0));
-    stream_col.b = saturate(2.0 - abs(hue * 6.0 - 4.0));
-
+    float3 stream_col = palette_sort(pid, hue);
     col += stream_col * streak * col_brightness;
 
-    /* Horizontal interference bands */
+    /* Horizontal interference bars */
     float band_y = floor(uv.y * 30.0 + time * 2.0);
     float band_hash = hash11(band_y);
     float band_active = step(0.8 - bass * 0.2, band_hash);
-
-    /* Sort-like stretching: horizontal bars of color */
     float bar_x = frac(uv.x + band_hash * 0.5 + time * band_hash);
-    float bar = smoothstep(0.0, 0.01, bar_x) * smoothstep(band_hash, band_hash - 0.01, bar_x);
-    float3 bar_col = float3(1.0, 0.4, 0.1) * band_active * bar * 0.5;
-    col += bar_col;
+    float bar = smoothstep(0.0, 0.01, bar_x) *
+                smoothstep(band_hash, band_hash - 0.01, bar_x);
+    col += palette_sort(pid, frac(band_hash + 0.3)) * band_active * bar * 0.5;
 
-    /* Data blocks that appear on beats */
-    float block_size = 0.08;
-    float2 block_id = floor(uv / block_size);
-    float block_hash = hash21(block_id + floor(time * 3.0));
-    if (block_hash > 0.9 - beat * 0.2) {
-        float block_lum = hash21(block_id * 2.0 + 1.0);
-        col += float3(block_lum, block_lum * 0.8, block_lum * 0.6) * 0.4;
+    /* Sparse data blocks */
+    float bsz = 0.08;
+    float2 bid = floor(uv / bsz);
+    float bh = hash21(bid + floor(time * 3.0));
+    if (bh > 0.9 - beat * 0.15) {
+        float block_lum = hash21(bid * 2.0 + 1.0);
+        col += palette_sort(pid, block_lum) * 0.4;
     }
 
-    /* Bright sort lines (vertical bright streaks) */
-    float sort_line_id = floor(uv.x * 200.0);
-    float sort_hash = hash11(sort_line_id + floor(time * 6.0));
-    if (sort_hash > 0.98) {
-        float sort_brightness = (1.0 - abs(uv.y - sort_hash)) * 2.0;
-        col += float3(1.0, 0.9, 0.8) * max(sort_brightness, 0.0) * treble;
+    /* Bright vertical sort lines on treble */
+    float sl_id = floor(uv.x * 200.0);
+    float sl_h = hash11(sl_id + floor(time * 6.0));
+    if (sl_h > 0.98) {
+        float sb = (1.0 - abs(uv.y - sl_h)) * 2.0;
+        col += float3(1.0, 0.9, 0.85) * max(sb, 0.0) * treble;
     }
 
-    /* Beat flash */
-    col += float3(0.8, 0.3, 1.0) * beat * bass * 0.3;
+    /* Beat tint */
+    col += palette_sort(pid, time * 0.1) * beat * bass * 0.22;
+
+    /* Onset white wash */
+    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.10;
 
     return col;
 }
@@ -131,32 +115,36 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
 
     float bass = max(bands.x, bands_raw.x);
     float treble = max(bands.w, bands_raw.w);
-    float transient = saturate(max(onset_strength, bass - bands.y * 0.35));
+    float transient = saturate(max(onset_strength, max(kick_onset, snare_onset)));
+    float drive = audio_drive * (0.5 + bass + transient * 0.6);
+    int pid = (int)palette_id;
 
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat;
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 2.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 3.0)
+                              : pow(1.0 - beat_1_8, 3.0));
 
-    /* Check if we're in filter mode (explicitly set by C code) */
     bool has_input = (has_input_source > 0.5);
 
     if (!has_input) {
-        float3 pattern = dataStreakPattern(uv, bass, treble, beat);
-        return float4(pattern, 1.0);
+        float3 col = standalonePattern(uv, bass, treble, beat_q, drive, pid);
+        col = saturate(col);
+        float a_out = max(max(col.r, col.g), col.b);
+        return float4(col, a_out);
     }
 
-    /* === Filter mode: aggressive pixel sorting === */
-    float threshold = sort_threshold - bass * 0.24 - transient * 0.14;
+    /* === Filter mode === */
+    float threshold = sort_threshold - bass * 0.24 - transient * 0.16;
     float direction = saturate(sort_direction);
-    float max_len = max(sort_length, 0.01) + bass * 0.12 + transient * 0.12;
+    float max_len = max(sort_length, 0.01) + bass * 0.12 + transient * 0.14;
     float intens = saturate(sort_intensity * (1.0 + transient * 0.35 + rms * 0.15));
 
-    /* Beat burst extends sort dramatically */
-    max_len += beat * 0.30 * bass + transient * 0.18;
+    max_len += beat_q * 0.30 * bass + transient * 0.18;
 
     float4 original = image.Sample(texSampler, uv);
     float lum = luminance(original.rgb);
 
-    /* Below threshold: pass through with slight darkening */
     if (lum < threshold) {
         return float4(original.rgb * (0.85 + lum * 0.15), original.a);
     }
@@ -166,18 +154,14 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
     float2 res_safe = max(resolution, float2(1.0, 1.0));
     float2 sort_dir;
     if (direction < 0.5) {
-        sort_dir = float2(sin(angle_offset) / res_safe.x,
-                          1.0 / res_safe.y);
+        sort_dir = float2(sin(angle_offset) / res_safe.x, 1.0 / res_safe.y);
     } else {
-        sort_dir = float2(1.0 / res_safe.x,
-                          sin(angle_offset) / res_safe.y);
+        sort_dir = float2(1.0 / res_safe.x, sin(angle_offset) / res_safe.y);
     }
 
-    /* Region-based sort variation */
     float region_hash = hash21(floor(uv * 15.0));
     float local_len = max_len * (0.3 + region_hash * 0.7);
 
-    /* Aggressive multi-sample sort with color bleeding */
     float4 sorted_color = original;
     float max_lum = lum;
     float3 color_accum = original.rgb;
@@ -187,53 +171,46 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
 
     for (int i = 1; i <= 48; i++) {
         if (i > steps) break;
-
         float t = float(i) / float(steps);
         float2 sample_uv = uv + sort_dir * float(i);
-
         if (sample_uv.x < 0.0 || sample_uv.x > 1.0 ||
-            sample_uv.y < 0.0 || sample_uv.y > 1.0)
-            break;
-
+            sample_uv.y < 0.0 || sample_uv.y > 1.0) break;
         float4 s = image.Sample(texSampler, sample_uv);
         float sl = luminance(s.rgb);
-
-        if (sl < threshold)
-            break;
-
-        /* Color streak: accumulate with distance falloff */
+        if (sl < threshold) break;
         float w = exp(-t * 2.0);
         color_accum += s.rgb * w;
         weight_accum += w;
-
-        if (sl > max_lum) {
-            max_lum = sl;
-            sorted_color = s;
-        }
+        if (sl > max_lum) { max_lum = sl; sorted_color = s; }
     }
 
-    /* Blend: sorted brightest + averaged streak */
     float3 avg_streak = color_accum / weight_accum;
     float3 result = lerp(sorted_color.rgb, avg_streak, 0.4);
 
-    /* Chromatic separation on sorted pixels */
+    /* Chromatic separation */
     float chroma_shift = (bass + transient) * 0.003;
     float r_shift = image.Sample(texSampler, uv + sort_dir * 2.0 + float2(chroma_shift, 0.0)).r;
     float b_shift = image.Sample(texSampler, uv + sort_dir * 2.0 - float2(chroma_shift, 0.0)).b;
     result.r = lerp(result.r, r_shift, 0.2 * intens);
     result.b = lerp(result.b, b_shift, 0.2 * intens);
 
-    /* Brightness boost for sorted regions */
+    /* Brightness boost on sorted regions */
     result *= 1.0 + (max_lum - lum) * 0.5;
+
+    /* Palette tint on sorted streaks (skip on Mono) */
+    if (pid != 5) {
+        float result_lum = luminance(result);
+        float3 tint = palette_sort(pid, result_lum);
+        result = lerp(result, result * (0.55 + tint * 1.0),
+                      0.18 + drive * 0.12);
+    }
 
     return float4(lerp(original.rgb, result, intens), original.a);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSPixelSort(vert_in);
+        pixel_shader = PSPixelSort(vert_in);
     }
 }

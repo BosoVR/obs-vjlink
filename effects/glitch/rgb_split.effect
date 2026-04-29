@@ -1,124 +1,121 @@
 /*
- * VJLink - RGB Split / Chromatic Glitch
- * When used as filter: chromatic aberration on input.
- * When used standalone (no input): generates neon glitch patterns.
- * Audio drives split amount, beat triggers directional bursts.
+ * VJLink - RGB Split (Pro v3)
+ * Filter: chromatic aberration on input, palette-aware accent.
+ * Standalone: generates abstract neon glitch art with palette tint.
  */
 
 uniform float4x4 ViewProj;
-uniform texture2d image;       /* input source texture */
+uniform texture2d image;
 uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
 
-uniform float split_amount;    /* base split distance (default 0.01) */
-uniform float split_angle;     /* split direction angle (default 0.0) */
-uniform float audio_drive;     /* audio influence (default 2.0) */
-uniform float aberration_type; /* 0=linear, 1=radial (default 0.0) */
-uniform float has_input_source; /* 1.0 when used as filter on a source */
+uniform float split_amount;       /* 0 - 0.1, default 0.008 */
+uniform float split_angle;        /* 0 - 6.28, default 0 */
+uniform float audio_drive;        /* 0 - 5, default 1.5 */
+uniform float aberration_type;    /* 0=linear, 1=radial */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
+uniform float has_input_source;
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float hash21(float2 p)
-{
-    p = frac(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return frac(p.x * p.y);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+/* Palette accent — used to tint the chromatic split + glitch overlays.
+ * Returns 2 colors: warm accent and cold accent for opposite channels. */
+void palette_split(int pid, out float3 warm, out float3 cold) {
+    if (pid == 1) {
+        warm = float3(1.0, 0.10, 0.10); cold = float3(0.5, 0.0, 0.0); return;
+    }
+    if (pid == 2) {
+        warm = float3(1.0, 0.55, 0.10); cold = float3(0.6, 0.15, 0.0); return;
+    }
+    if (pid == 3) {
+        warm = float3(0.7, 1.0, 0.10); cold = float3(0.05, 0.6, 0.05); return;
+    }
+    if (pid == 4) {
+        warm = float3(1.0, 0.20, 0.85); cold = float3(0.05, 0.85, 1.0); return;
+    }
+    if (pid == 5) {
+        warm = float3(1.0, 1.0, 1.0); cold = float3(0.5, 0.5, 0.5); return;
+    }
+    /* Default: classic RGB-style red/blue */
+    warm = float3(1.0, 0.15, 0.4); cold = float3(0.15, 0.4, 1.0);
 }
 
-float hash11(float p)
+float3 standalonePattern(float2 uv, float bass, float treble, float beat,
+                         float drive, int pid)
 {
-    p = frac(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return frac(p);
-}
+    float3 warm, cold;
+    palette_split(pid, warm, cold);
 
-/* Generate glitch pattern when no input texture is available */
-float3 glitchPattern(float2 uv, float bass, float treble, float beat)
-{
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+
+    /* Horizontal tear bands */
+    float band_y = floor(uv.y * (24.0 + bass * 30.0));
+    float band_hash = hash11(band_y + floor(time * 7.0));
+    float band_active = step(0.78 - bass * 0.25 - kick_onset * 0.15, band_hash);
+    float band_offset = (band_hash - 0.5) * 0.25 * band_active;
+
+    /* Vertical RGB-shift slabs */
+    float r_pattern = step(0.55, hash21(floor((uv + float2(band_offset, 0.0))
+                                       * float2(28.0 + bass * 18.0, 6.0)) + floor(time * 6.0)));
+    float b_pattern = step(0.55, hash21(floor((uv - float2(band_offset, 0.0))
+                                       * float2(22.0 + treble * 16.0, 6.0)) + floor(time * 4.0)));
+
+    /* Diagonal data streaks */
+    float diag = frac((p.x + p.y) * 6.0 + time * 2.5);
+    float data_line = smoothstep(0.0, 0.012, diag) * smoothstep(0.06, 0.045, diag);
+    float data_hash = hash21(floor(float2((p.x + p.y) * 6.0, time * 2.5)));
 
     float3 col = float3(0.0, 0.0, 0.0);
+    col += warm * r_pattern * (0.4 + bass * 0.6);
+    col += cold * b_pattern * (0.4 + treble * 0.6);
+    col += warm * data_line * data_hash * 0.5;
 
-    /* Horizontal glitch bands */
-    float band_y = floor(uv.y * (20.0 + bass * 30.0));
-    float band_hash = hash11(band_y + floor(time * 8.0));
-    float band_active = step(0.7 - bass * 0.3, band_hash);
-    float band_offset = (band_hash - 0.5) * 0.3 * band_active;
+    /* Scanlines */
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    col *= 0.85 + scan * 0.15;
 
-    /* Glitch block grid */
-    float block_size = 0.05 + treble * 0.1;
-    float2 block_id = floor((uv + float2(band_offset, 0.0)) / block_size);
-    float block_hash = hash21(block_id + floor(time * 4.0));
-
-    /* RGB separation per block */
-    float2 uv_r = uv + float2(band_offset * 1.5, 0.0);
-    float2 uv_b = uv - float2(band_offset * 1.2, 0.0);
-
-    /* Neon ln_v pattern */
-    float line_y = frac(uv.y * 100.0 + time * 5.0);
-    float scanline = smoothstep(0.0, 0.02, line_y) * smoothstep(0.1, 0.08, line_y);
-
-    /* Diagonal data streams */
-    float diag = frac((p.x + p.y) * 8.0 + time * 3.0);
-    float data_line = smoothstep(0.0, 0.01, diag) * smoothstep(0.05, 0.04, diag);
-    float data_hash = hash21(floor(float2((p.x + p.y) * 8.0, time * 3.0)));
-
-    /* Color channels with different patterns */
-    float r_pattern = step(0.5, hash21(floor(uv_r * (30.0 + bass * 20.0))
-                     + floor(time * 6.0)));
-    float g_pattern = data_line * data_hash;
-    float b_pattern = step(0.6, hash21(floor(uv_b * (25.0 + treble * 15.0))
-                     + floor(time * 5.0)));
-
-    /* Neon colors */
-    col.r = r_pattern * (0.5 + band_active * 0.5) * (0.3 + bass * 0.7);
-    col.g = g_pattern * 0.8 + scanline * 0.3 * treble;
-    col.b = b_pattern * (0.4 + band_active * 0.6) * (0.2 + treble * 0.8);
-
-    /* Large glitch blocks with solid color */
-    float big_block_size = 0.15 + beat * 0.1;
-    float2 big_id = floor(uv / big_block_size + float2(time * 0.5, 0.0));
+    /* Big glitch blocks */
+    float bbsz = 0.16 + beat * 0.08;
+    float2 big_id = floor(uv / bbsz + float2(time * 0.4, 0.0));
     float big_hash = hash21(big_id + floor(time * 2.0));
-    if (big_hash > 0.85 - bass * 0.15) {
-        float hue = frac(big_hash * 3.0 + time * 0.2);
-        float3 block_col;
-        block_col.r = saturate(abs(hue * 6.0 - 3.0) - 1.0);
-        block_col.g = saturate(2.0 - abs(hue * 6.0 - 2.0));
-        block_col.b = saturate(2.0 - abs(hue * 6.0 - 4.0));
-        col = lerp(col, block_col * 0.8, 0.7);
+    if (big_hash > 0.86 - drive * 0.10) {
+        float pick = hash11(big_id.x * 17.3 + big_id.y * 31.7);
+        float3 block_col = lerp(warm, cold, pick);
+        col = lerp(col, block_col * 0.85, 0.65);
     }
 
-    /* Horizontal tear lines */
-    float tear_y = floor(uv.y * 200.0);
-    float tear_hash = hash11(tear_y + floor(time * 12.0));
-    if (tear_hash > 0.97) {
-        col += float3(1.0, 1.0, 1.0) * 0.5;
+    /* Onset white tear */
+    if (onset_strength > 0.25) {
+        float tear_y = floor(uv.y * 220.0);
+        float tear_hash = hash11(tear_y + floor(time * 14.0));
+        if (tear_hash > 0.96) col += float3(1.0, 1.0, 1.0) * 0.55 * onset_strength;
     }
 
-    /* Beat flash: full screen RGB separation burst */
-    col += float3(1.0, 0.2, 0.1) * beat * bass * 0.4;
+    /* Beat full-screen tint */
+    col += warm * beat * bass * 0.18;
 
     return col;
 }
@@ -127,40 +124,42 @@ float4 PSRgbSplit(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float split = max(split_amount, 0.0);
-    float drive = max(audio_drive, 0.0);
-    float type_val = saturate(aberration_type);
-
     float bass = bands.x;
+    float bass_raw = bands_raw.x;
     float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6);
+    int pid = (int)palette_id;
 
-    /* Beat burst */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
+                              : pow(1.0 - beat_1_8, 4.0));
 
-    /* Check if we're in filter mode (explicitly set by C code) */
     bool has_input = (has_input_source > 0.5);
 
     if (!has_input) {
-        /* Standalone mode: generate glitch art */
-        float3 glitch = glitchPattern(uv, bass, treble, beat);
-        return float4(glitch, 1.0);
+        float3 col = standalonePattern(uv, bass, treble, beat_q, drive, pid);
+        col = saturate(col);
+        float a_out = max(max(col.r, col.g), col.b);
+        return float4(col, a_out);
     }
 
-    /* Filter mode: chromatic aberration on input */
+    /* Filter mode: chromatic aberration */
+    float split = max(split_amount, 0.0);
     float audio_split = split + bass * split * drive;
-    audio_split += beat * split * 3.0 * bass;
+    audio_split += beat_q * split * 3.0 * bass + kick_onset * split * 2.5;
 
-    /* Glitch jitter: random horizontal offset on bass hits */
+    /* Snare-driven horizontal jitter */
     float jitter = 0.0;
-    float jitter_band = floor(uv.y * 40.0);
-    float jitter_hash = hash11(jitter_band + floor(time * 8.0));
-    if (jitter_hash > 0.92 - bass * 0.1) {
-        jitter = (jitter_hash - 0.5) * 0.02 * bass;
+    if (snare_onset > 0.15) {
+        float jitter_band = floor(uv.y * 40.0);
+        float jh = hash11(jitter_band + floor(time * 9.0));
+        if (jh > 0.88) jitter = (jh - 0.5) * 0.02 * snare_onset;
     }
 
     float2 offset;
-    if (type_val < 0.5) {
+    if (aberration_type < 0.5) {
         float angle = split_angle + bands.z * 0.5;
         offset = float2(cos(angle), sin(angle)) * audio_split;
     } else {
@@ -168,7 +167,6 @@ float4 PSRgbSplit(VertInOut vert_in) : TARGET
         offset = normalize(center + float2(0.001, 0.001)) * audio_split;
     }
 
-    /* Sample each channel with different offsets + jitter */
     float r = image.Sample(texSampler, uv + offset + float2(jitter, 0.0)).r;
     float g = image.Sample(texSampler, uv + float2(jitter * 0.5, 0.0)).g;
     float b = image.Sample(texSampler, uv - offset + float2(-jitter, 0.0)).b;
@@ -176,21 +174,31 @@ float4 PSRgbSplit(VertInOut vert_in) : TARGET
 
     float3 col = float3(r, g, b);
 
-    /* Scanline overlay for filter mode too */
+    /* Palette tint: subtle warm/cold gradient based on luminance.
+     * Mono palette skips this so monochrome content stays clean. */
+    if (pid != 5) {
+        float3 warm, cold;
+        palette_split(pid, warm, cold);
+        float lum = dot(col, float3(0.299, 0.587, 0.114));
+        float3 tint = lerp(cold, warm, lum);
+        col = lerp(col, col * (0.55 + tint * 1.0), 0.18 + drive * 0.15);
+    }
+
+    /* Scanline overlay (subtle) */
     float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
-    scan = pow(scan, 4.0) * 0.08 * treble;
-    col -= scan;
+    col -= scan * 0.06 * treble;
+
+    /* Onset whitewash */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.05;
 
     col = col / (1.0 + col * 0.45);
     col = saturate(col);
     return float4(col, a_ch);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSRgbSplit(vert_in);
+        pixel_shader = PSRgbSplit(vert_in);
     }
 }

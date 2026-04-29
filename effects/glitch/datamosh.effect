@@ -1,143 +1,131 @@
 /*
- * VJLink - Datamosh / Compression Glitch
- * Simulates video codec artifacts: block displacement, I-frame loss,
- * color channel corruption. Standalone: generates abstract moshed visuals.
+ * VJLink - Datamosh (Pro v3)
+ * Filter: codec-corruption simulation on input.
+ * Standalone: generates compressed/moshed visuals.
+ * Palette-aware accent on glitched blocks. Kick-driven I-frame drops.
  */
 
 uniform float4x4 ViewProj;
-uniform texture2d image;       /* current frame */
-uniform texture2d prev_tex;    /* previous frame */
+uniform texture2d image;
+uniform texture2d prev_tex;
 uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
 uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     snare_onset;
 uniform float     onset_strength;
+uniform float     palette_id;
 
-uniform float block_size;      /* glitch block size (default 16.0) */
-uniform float intensity;       /* effect strength (default 0.5) */
-uniform float displacement;    /* pixel shift amount (default 0.05) */
-uniform float noise_amount;    /* digital noise (default 0.3) */
-uniform float has_input_source; /* 1.0 when used as filter on a source */
+uniform float block_size;         /* 4 - 64, default 16 */
+uniform float intensity;          /* 0 - 1, default 0.5 */
+uniform float displacement;       /* 0 - 0.2, default 0.05 */
+uniform float noise_amount;       /* 0 - 1, default 0.3 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
+uniform float has_input_source;
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float hash21(float2 p)
-{
-    p = frac(p * float2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return frac(p.x * p.y);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+void palette_mosh(int pid, out float3 a, out float3 b, out float3 c) {
+    if (pid == 1) { a = float3(1.0, 0.10, 0.10); b = float3(0.5, 0.0, 0.0); c = float3(1.0, 0.6, 0.3); return; }
+    if (pid == 2) { a = float3(1.0, 0.55, 0.10); b = float3(0.7, 0.2, 0.0); c = float3(1.0, 0.95, 0.4); return; }
+    if (pid == 3) { a = float3(0.7, 1.0, 0.10); b = float3(0.05, 0.6, 0.05); c = float3(0.9, 1.0, 0.6); return; }
+    if (pid == 4) { a = float3(1.0, 0.20, 0.85); b = float3(0.05, 0.85, 1.0); c = float3(0.6, 0.3, 1.0); return; }
+    if (pid == 5) { a = float3(1.0, 1.0, 1.0); b = float3(0.4, 0.4, 0.4); c = float3(0.7, 0.7, 0.7); return; }
+    /* Default: classic VHS magenta/cyan */
+    a = float3(1.0, 0.15, 0.6); b = float3(0.1, 0.4, 1.0); c = float3(1.0, 0.85, 0.3);
 }
 
-float hash11(float p)
+float3 standalonePattern(float2 uv, float bass, float treble, float beat,
+                         float drive, int pid)
 {
-    p = frac(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return frac(p);
-}
+    float3 col_a, col_b, col_c;
+    palette_mosh(pid, col_a, col_b, col_c);
 
-float noise2d(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + float2(1.0, 0.0));
-    float c = hash21(i + float2(0.0, 1.0));
-    float d = hash21(i + float2(1.0, 1.0));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
+    float3 col = float3(0.02, 0.02, 0.025);
 
-/* Standalone moshed visual generation */
-float3 moshPattern(float2 uv, float bass, float treble, float beat)
-{
-    float3 col = float3(0.0, 0.0, 0.0);
-
-    /* Macro blocks - large corrupted regions */
-    float macro_size = 0.08 + bass * 0.06;
+    /* Macro blocks: large corrupted regions, picked randomly */
+    float macro_size = 0.08 + bass * 0.04;
     float2 macro_id = floor(uv / macro_size);
     float macro_hash = hash21(macro_id + floor(time * 2.0));
-    float macro_active = step(0.5 - bass * 0.3, macro_hash);
+    float macro_active = step(0.55 - drive * 0.15, macro_hash);
 
-    /* Block displacement simulation */
+    /* Block displacement */
     float2 disp_uv = uv;
     if (macro_active > 0.5) {
-        float2 shift;
-        shift.x = (hash21(macro_id + float2(time * 0.5, 0.0)) - 0.5) * 0.15;
-        shift.y = (hash21(macro_id + float2(0.0, time * 0.5)) - 0.5) * 0.1;
-        disp_uv += shift * (1.0 + bass);
+        float2 shift = float2(
+            (hash21(macro_id + float2(time * 0.5, 0.0)) - 0.5) * 0.15,
+            (hash21(macro_id + float2(0.0, time * 0.5)) - 0.5) * 0.10
+        ) * (1.0 + bass);
+        disp_uv += shift;
     }
 
-    /* Color gradient base (simulating corrupted P-frame residual) */
+    /* Layered noise = "P-frame residual" */
     float2 grad_p = disp_uv * 8.0 + time * 0.3;
-    float n1 = noise2d(grad_p);
-    float n2 = noise2d(grad_p * 1.5 + float2(5.0, 3.0) + time * 0.2);
-    float n3 = noise2d(grad_p * 0.7 + float2(8.0, 1.0) - time * 0.15);
+    float n1 = hash21(floor(grad_p));
+    float n2 = hash21(floor(grad_p * 1.6 + float2(5.0, 3.0)));
 
-    /* RGB channels from different noise layers (channel corruption) */
-    col.r = n1 * (0.3 + bass * 0.7);
-    col.g = n2 * (0.2 + treble * 0.5);
-    col.b = n3 * (0.4 + bands.y * 0.6);
+    /* Mix palette colors based on noise + bass */
+    col += col_a * n1 * (0.35 + bass * 0.5);
+    col += col_b * n2 * (0.30 + treble * 0.5);
 
-    /* DCT block artifacts: 8x8 grid pattern */
-    float2 dct_uv = frac(uv * resolution / 8.0);
-    float dct_edge = step(0.95, max(dct_uv.x, dct_uv.y));
-    col += float3(0.1, 0.15, 0.12) * dct_edge * macro_active;
+    /* DCT 8x8 grid edges */
+    float2 dct = frac(uv * resolution / 8.0);
+    float dct_edge = step(0.92, max(dct.x, dct.y));
+    col += col_c * dct_edge * macro_active * 0.5;
 
-    /* I-frame remnants: sharp color blocks */
-    float small_block = 0.03;
-    float2 small_id = floor(disp_uv / small_block);
-    float small_hash = hash21(small_id + floor(time * 5.0));
-    if (small_hash > 0.92) {
-        float hue = frac(small_hash * 7.0);
-        float3 block_col;
-        block_col.r = saturate(abs(hue * 6.0 - 3.0) - 1.0);
-        block_col.g = saturate(2.0 - abs(hue * 6.0 - 2.0));
-        block_col.b = saturate(2.0 - abs(hue * 6.0 - 4.0));
-        col = block_col * 0.7;
+    /* I-frame remnants: sharp colored sub-blocks */
+    float small_block = 0.03 + treble * 0.02;
+    float2 sm_id = floor(disp_uv / small_block);
+    float sm_h = hash21(sm_id + floor(time * 5.0));
+    if (sm_h > 0.92 - drive * 0.05) {
+        float pick = hash11(sm_id.x * 17.3 + sm_id.y * 31.7);
+        float3 bc = (pick < 0.33) ? col_a : (pick < 0.66 ? col_b : col_c);
+        col = lerp(col, bc * 0.85, 0.75);
     }
 
-    /* Motion vector arrows (visible corruption lines) */
+    /* Motion-vector streaks */
     float mv_y = floor(uv.y * 60.0);
-    float mv_hash = hash11(mv_y + floor(time * 4.0));
-    float mv_active = step(0.85 - bass * 0.15, mv_hash);
-    float mv_streak = smoothstep(0.0, 0.005, frac(uv.x + mv_hash * 2.0 + time * mv_hash * 3.0))
-                    * smoothstep(mv_hash * 0.5, mv_hash * 0.5 - 0.005,
-                                 frac(uv.x + mv_hash * 2.0 + time * mv_hash * 3.0));
-    col += float3(0.8, 0.9, 1.0) * mv_streak * mv_active * 0.5;
+    float mv_h = hash11(mv_y + floor(time * 4.0));
+    float mv_active = step(0.85 - bass * 0.12, mv_h);
+    float mv_x = frac(uv.x + mv_h * 2.0 + time * mv_h * 3.0);
+    float mv_streak = smoothstep(0.0, 0.005, mv_x) *
+                      smoothstep(mv_h * 0.5, mv_h * 0.5 - 0.005, mv_x);
+    col += col_c * mv_streak * mv_active * 0.5;
 
-    /* Beat: sudden block shift (I-frame drop simulation) */
-    if (beat > 0.5) {
-        float2 beat_id = floor(uv / 0.12);
-        float beat_hash = hash21(beat_id);
-        if (beat_hash > 0.6) {
-            col.rgb = col.gbr; /* channel swap */
-            col *= 1.5;
+    /* Beat: I-frame drop = channel swap */
+    if (beat > 0.55) {
+        float2 b_id = floor(uv / 0.12);
+        float bh = hash21(b_id);
+        if (bh > 0.6) {
+            col.rgb = col.gbr;
+            col *= 1.4;
         }
     }
 
     /* Compression noise */
-    float comp_noise = hash21(uv * resolution + time * 100.0);
-    col += (comp_noise - 0.5) * 0.05 * treble;
+    float cn = hash21(uv * resolution + time * 100.0);
+    col += (cn - 0.5) * 0.06 * treble;
+
+    /* Onset whitewash */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.08;
 
     return saturate(col);
 }
@@ -148,70 +136,86 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
 
     float bass = bands.x;
     float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    int pid = (int)palette_id;
 
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat;
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 2.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 3.0)
+                              : pow(1.0 - beat_1_8, 3.0));
 
-    /* Check if we're in filter mode (explicitly set by C code) */
     bool has_input = (has_input_source > 0.5);
 
     if (!has_input) {
-        float3 mosh = moshPattern(uv, bass, treble, beat);
-        return float4(mosh, 1.0);
+        float3 col = standalonePattern(uv, bass, treble, beat_q, drive, pid);
+        col = saturate(col);
+        float a_out = max(max(col.r, col.g), col.b);
+        return float4(col, a_out);
     }
 
-    /* === Filter mode: frame-difference datamosh === */
+    /* === Filter mode === */
     float blk = max(block_size, 4.0);
-    float transient = max(onset_strength, max(bands_raw.x, bands_raw.y));
-    float intens = saturate(intensity) + bass * 0.22 + transient * 0.28;
-    float disp = displacement + bass * 0.025 + transient * 0.018;
-    float noise_amt = noise_amount;
+    float transient = max(onset_strength, max(kick_onset, snare_onset));
+    float intens = saturate(intensity) + bass * 0.22 + transient * 0.30;
+    float disp = displacement + bass * 0.025 + transient * 0.020;
+    float noise_amt = max(noise_amount, 0.0);
 
     /* Block grid */
     float2 block_uv = floor(uv * resolution / blk) * blk / resolution;
     float block_hash = hash21(block_uv + floor(time * 3.0));
 
-    /* Frame difference for motion detection */
+    /* Frame diff */
     float4 curr = image.Sample(texSampler, uv);
     float4 prev = prev_tex.Sample(texSampler, uv);
     float diff = length(curr.rgb - prev.rgb);
 
-    /* Displacement on beat / high motion */
     float2 displaced_uv = uv;
+    bool moshed = (block_hash < intens && (diff > 0.08 || beat_q > 0.5 || transient > 0.4));
 
-    if (block_hash < intens && (diff > 0.08 || beat > 0.5 || transient > 0.45)) {
-        float2 shift;
-        shift.x = (hash21(block_uv + float2(time, 0.0)) - 0.5) * disp;
-        shift.y = (hash21(block_uv + float2(0.0, time)) - 0.5) * disp;
+    if (moshed) {
+        float2 shift = float2(
+            hash21(block_uv + float2(time, 0.0)) - 0.5,
+            hash21(block_uv + float2(0.0, time)) - 0.5
+        ) * disp;
         shift.x += bands.y * 0.02 * sign(shift.x);
         shift.y += bands.z * 0.01 * sign(shift.y);
         displaced_uv += shift;
     }
 
-    float base_alpha = image.Sample(texSampler, uv).a;
+    float base_alpha = curr.a;
 
-    /* Sample with displacement */
+    /* Use prev frame on strong beats — that's the actual "datamosh" feel */
     float4 color;
-    if (block_hash < intens * 0.5 && (beat > 0.3 || transient > 0.55)) {
+    if (block_hash < intens * 0.5 && (beat_q > 0.4 || transient > 0.5)) {
         color = prev_tex.Sample(texSampler, displaced_uv);
     } else {
         color = image.Sample(texSampler, displaced_uv);
     }
 
-    /* Digital noise */
-    float noise = hash21(uv * resolution + float2(time * 1000.0, 0.0));
-    if (noise < noise_amt * treble * 0.18 * (0.3 + intens)) {
-        color.rgb = lerp(color.rgb, float3(noise, noise, noise), 0.75);
+    /* Digital noise blocks */
+    float n_h = hash21(uv * resolution + float2(time * 1000.0, 0.0));
+    if (n_h < noise_amt * treble * 0.18 * (0.3 + intens)) {
+        color.rgb = lerp(color.rgb, float3(n_h, n_h, n_h), 0.75);
     }
 
-    /* Channel swap in glitched blocks */
-    if (block_hash > 0.8 && block_hash < 0.8 + intens * 0.15) {
+    /* Channel swap on rare blocks */
+    if (block_hash > 0.82 && block_hash < 0.82 + intens * 0.15) {
         color.rgb = color.gbr;
     }
 
-    /* Chromatic shift on displaced blocks */
-    if (block_hash < intens) {
-        float chroma = bass * 0.003;
+    /* Palette tint on moshed blocks */
+    if (pid != 5 && moshed) {
+        float3 col_a, col_b, col_c;
+        palette_mosh(pid, col_a, col_b, col_c);
+        float lum = dot(color.rgb, float3(0.299, 0.587, 0.114));
+        float3 tint = (lum < 0.5) ? col_b : col_a;
+        color.rgb = lerp(color.rgb, color.rgb * (0.6 + tint * 1.0), 0.22 + drive * 0.15);
+    }
+
+    /* Chromatic shift on moshed blocks */
+    if (moshed) {
+        float chroma = bass * 0.003 + kick_onset * 0.002;
         color.r = image.Sample(texSampler, displaced_uv + float2(chroma, 0.0)).r;
         color.b = image.Sample(texSampler, displaced_uv - float2(chroma, 0.0)).b;
     }
@@ -219,11 +223,9 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
     return float4(saturate(color.rgb), base_alpha);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSDatamosh(vert_in);
+        pixel_shader = PSDatamosh(vert_in);
     }
 }
