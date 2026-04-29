@@ -1629,6 +1629,36 @@
         Use OBS' built-in <strong>Source Record</strong> on the <code>VJLink Compositor</code> source. Right-click → <em>Filters</em> → add <em>Source Record</em>.
         OBS handles encoding (HEVC/AV1/H.264) at higher quality than any in-plugin export could.
       </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:8px;line-height:1.5">
+        <strong>Spout/Syphon output</strong>: not built in. If you want to send the compositor to another VJ app, install the third-party <code>obs-spout2</code> plugin and add a Spout filter on the Compositor source.
+      </div>
+    </div>
+
+    <!-- ===== OSC ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>OSC Output</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0.4px;cursor:pointer">
+          <input type="checkbox" id="oscOn" onchange="updateOscConfig()" style="cursor:pointer">
+          <span>Active</span>
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin-top:8px">
+        <input type="text" id="oscHost" value="127.0.0.1" placeholder="Host"
+          onchange="updateOscConfig()"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px">
+        <input type="number" id="oscPort" value="7000" min="1024" max="65535" placeholder="Port"
+          onchange="updateOscConfig()"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px">
+        <input type="number" id="oscRate" value="30" min="1" max="120" placeholder="Hz"
+          onchange="updateOscConfig()"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px">
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        Sends BPM, beat, bands, onsets, palette, macros via UDP OSC.
+        Use in TouchDesigner / Notch / Resolume.
+        Addresses: <code>/vjlink/bpm /beat /bands /onsets /palette /macros</code>
+      </div>
     </div>
 
     <!-- ===== AUTO-VJ + VJ AI ===== -->
@@ -4936,8 +4966,11 @@ function renderPerfPads() {
     div.className = 'perf-pad' + (pad ? ' assigned' : '');
     div.dataset.padIdx = i;
     const hk = (i < PAD_HOTKEYS.length) ? PAD_HOTKEYS[i].toUpperCase() : '';
-    const name = pad ? (effectNames[pad.effect] || pad.effect) : 'EMPTY';
-    div.innerHTML = `<span class="pad-key">${hk}</span>
+    let name = pad ? (effectNames[pad.effect] || pad.effect) : 'EMPTY';
+    /* Show chain stack count if pad has multi-slot chain */
+    const chainExtra = (pad && Array.isArray(pad.chain) && pad.chain.length > 1)
+                       ? ` +${pad.chain.length - 1}` : '';
+    div.innerHTML = `<span class="pad-key">${hk}${chainExtra}</span>
       <span class="pad-name">${name}</span>`;
     div.title = pad ? `Click to trigger | Right-click to clear` : 'Click to assign current effect';
     div.onclick = () => triggerPad(i);
@@ -5381,6 +5414,53 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'palette_tint', label: 'Palette Tint', min: 0, max: 1, step: 0.05, default: 0.0 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ];
+  /* === v1.3.0 NEW EFFECTS === */
+  if (effectCategories['3d']) {
+    if (!effectCategories['3d'].effects.includes('iridescent_mesh'))
+      effectCategories['3d'].effects.push('iridescent_mesh');
+  }
+  if (effectCategories.postprocess) {
+    if (!effectCategories.postprocess.effects.includes('volumetric_light'))
+      effectCategories.postprocess.effects.push('volumetric_light');
+  }
+  if (effectCategories.plasma) {
+    if (!effectCategories.plasma.effects.includes('liquid_sim'))
+      effectCategories.plasma.effects.push('liquid_sim');
+  }
+  effectNames.iridescent_mesh = 'Iridescent Mesh';
+  effectNames.volumetric_light = 'Volumetric Light Pro';
+  effectNames.liquid_sim = 'Liquid Sim';
+  if (typeof NEW_EFFECTS !== 'undefined') {
+    NEW_EFFECTS.add('iridescent_mesh');
+    NEW_EFFECTS.add('volumetric_light');
+    NEW_EFFECTS.add('liquid_sim');
+  }
+  if (typeof effectProGroups !== 'undefined') {
+    effectProGroups.pro_main.effects.push('iridescent_mesh', 'volumetric_light', 'liquid_sim');
+  }
+  effectParams.iridescent_mesh = [
+    { name: 'surface_scale', label: 'Surface Scale', min: 0.5, max: 5, step: 0.05, default: 1.5 },
+    { name: 'ripple_speed', label: 'Ripple Speed', min: 0, max: 3, step: 0.05, default: 0.6 },
+    { name: 'fresnel_strength', label: 'Fresnel', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.7 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.volumetric_light = [
+    { name: 'light_x', label: 'Light X', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'light_y', label: 'Light Y', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { name: 'fog_density', label: 'Fog Density', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'ray_density', label: 'Quality (raymarch steps)', min: 16, max: 96, step: 4, default: 48 },
+    { name: 'scatter', label: 'Scatter', min: 0, max: 1, step: 0.05, default: 0.6 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.liquid_sim = [
+    { name: 'viscosity', label: 'Viscosity', min: 0.5, max: 3, step: 0.05, default: 1.4 },
+    { name: 'surface_height', label: 'Surface Height', min: 0.2, max: 1, step: 0.05, default: 0.6 },
+    { name: 'caustic_strength', label: 'Caustics', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 0, options: ['Continuous','1/4','1/8'] },
+  ];
+
   /* Feedback gets beat_sync */
   effectParams.feedback = [
     { name: 'fb_decay', label: 'Decay', min: 0, max: 0.5, step: 0.01, default: 0.05 },
@@ -5678,6 +5758,19 @@ function onMidiMessage(e) {
   } else if (binding.type === 'quantize') {
     setQuantize(binding.target);
   }
+}
+
+/* ===== OSC Output config ===== */
+let _oscDebounce = null;
+function updateOscConfig() {
+  const enabled = document.getElementById('oscOn').checked;
+  const host = document.getElementById('oscHost').value || '127.0.0.1';
+  const port = parseInt(document.getElementById('oscPort').value || '7000');
+  const rate = parseInt(document.getElementById('oscRate').value || '30');
+  if (_oscDebounce) clearTimeout(_oscDebounce);
+  _oscDebounce = setTimeout(() => {
+    sendRequest('SetOscConfig', { enabled, host, port, rate_hz: rate });
+  }, 100);
 }
 
 /* ===== Hot-reload + Shader Errors ===== */
@@ -6132,11 +6225,16 @@ if (_origTriggerPad) {
         const inp = document.getElementById(logoInputId(li));
         logos[li] = inp ? inp.value : '';
       }
+      /* Snapshot full effect chain (multi-slot stack from v1.2) if any slot is filled */
+      const chainSnapshot = effectChain.filter(s => s.effect).map(s => ({
+        effect: s.effect, blend: s.blend, alpha: s.alpha
+      }));
       perfPads[idx] = {
         effect: activeEffect,
         params,
         palette: activePaletteId,
         logos,
+        chain: chainSnapshot.length > 0 ? chainSnapshot : null,
       };
       savePerfPads();
       renderPerfPads();
@@ -6148,7 +6246,21 @@ if (_origTriggerPad) {
       padEl.classList.add('flashing');
       setTimeout(() => padEl.classList.remove('flashing'), 200);
     }
-    await sendRequest('SetEffect', { effect_id: pad.effect });
+
+    /* Restore chain (v1.3+) — overrides single-effect path if present */
+    if (Array.isArray(pad.chain) && pad.chain.length > 0) {
+      effectChain = pad.chain.map(s => ({
+        effect: s.effect, blend: s.blend, alpha: s.alpha
+      }));
+      while (effectChain.length < 1) effectChain.push({ effect: '', blend: 0, alpha: 1.0 });
+      renderEffectChain();
+      await chainSync();
+      activeEffect = pad.chain[0].effect;
+    } else {
+      await sendRequest('SetEffect', { effect_id: pad.effect });
+      activeEffect = pad.effect;
+    }
+
     if (typeof pad.palette === 'number') await setPalette(pad.palette);
     /* Restore logos if snapshot has them */
     if (Array.isArray(pad.logos)) {
@@ -6166,7 +6278,6 @@ if (_origTriggerPad) {
         await sendRequest('SetParam', { param: pname, value: pval });
       }
     }
-    activeEffect = pad.effect;
     renderEffects();
     renderParams();
   };

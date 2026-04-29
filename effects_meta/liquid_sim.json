@@ -1,0 +1,17 @@
+{
+  "id": "liquid_sim",
+  "name": "Liquid Sim",
+  "category": "plasma",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "main_visual",
+  "genre": ["dnb", "liquid", "techno"],
+  "description": "Form-aware liquid: depth, caustics, surface ripples, sub-surface glow.",
+  "params": [
+    { "name": "viscosity", "label": "Viscosity", "type": "float", "default": 1.4, "min": 0.5, "max": 3.0, "step": 0.05 },
+    { "name": "surface_height", "label": "Surface Height", "type": "float", "default": 0.6, "min": 0.2, "max": 1.0, "step": 0.05 },
+    { "name": "caustic_strength", "label": "Caustics", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_sync", "label": "Beat Sync", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 }
+  ]
+}

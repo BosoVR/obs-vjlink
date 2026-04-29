@@ -4,6 +4,7 @@
 #include "presets/preset_manager.h"
 #include "rendering/band_effects.h"
 #include "controls/source_trigger.h"
+#include "controls/osc_sender.h"
 #include "rendering/media_layer.h"
 #include <obs-module.h>
 #include <string.h>
@@ -835,6 +836,25 @@ static void handle_set_chain(obs_data_t *request_data,
 	obs_data_set_int(response_data, "chain_length", (int)n);
 }
 
+static void handle_set_osc_config(obs_data_t *request_data,
+                                   obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	bool enabled = obs_data_get_bool(request_data, "enabled");
+	const char *host = obs_data_get_string(request_data, "host");
+	int port = (int)obs_data_get_int(request_data, "port");
+	int rate = (int)obs_data_get_int(request_data, "rate_hz");
+	if (port <= 0) port = 7000;
+	if (rate <= 0) rate = 30;
+	vjlink_osc_configure(enabled, (host && host[0]) ? host : "127.0.0.1",
+	                     port, rate);
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_bool(response_data, "enabled", enabled);
+	obs_data_set_string(response_data, "host", host && host[0] ? host : "127.0.0.1");
+	obs_data_set_int(response_data, "port", port);
+	obs_data_set_int(response_data, "rate_hz", rate);
+}
+
 static void handle_set_palette(obs_data_t *request_data,
                                 obs_data_t *response_data, void *priv)
 {
@@ -1007,6 +1027,8 @@ static void register_all_requests(void)
 	                        handle_set_audio_controls, NULL);
 	vendor_request_register(g_vendor, "SetChain",
 	                        handle_set_chain, NULL);
+	vendor_request_register(g_vendor, "SetOscConfig",
+	                        handle_set_osc_config, NULL);
 	vendor_request_register(g_vendor, "SetPalette",
 	                        handle_set_palette, NULL);
 	vendor_request_register(g_vendor, "SetMacros",

@@ -1,0 +1,139 @@
+/*
+ * VJLink - Iridescent Mesh
+ * Procedural mesh-like surface with view-angle iridescent shimmer.
+ * No real 3D — uses pseudo-normals from FBM gradient. Gives the
+ * illusion of an oil-on-metal surface tilted in light.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float surface_scale;      /* 0.5 - 5, default 1.5 */
+uniform float ripple_speed;       /* 0 - 3, default 0.6 */
+uniform float fresnel_strength;   /* 0 - 2, default 1.0 */
+uniform float metallic;           /* 0 - 1, default 0.7 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
+}
+
+/* Iridescent palette: rainbow shift */
+float3 iridescent(float t, int pid) {
+    float3 rainbow = 0.5 + 0.5 * cos(6.28318 * (float3(1.0, 1.0, 1.0) * t + float3(0.0, 0.33, 0.67)));
+    if (pid == 1) return lerp(rainbow, rainbow * float3(1.5, 0.4, 0.5), 0.45);
+    if (pid == 2) return lerp(rainbow, rainbow * float3(1.5, 0.85, 0.4), 0.45);
+    if (pid == 3) return lerp(rainbow, rainbow * float3(0.55, 1.5, 0.4), 0.45);
+    if (pid == 4) return lerp(rainbow, rainbow * float3(0.5, 0.85, 1.5), 0.35);
+    if (pid == 5) {
+        float v = 0.5 + 0.5 * cos(6.28318 * t);
+        return float3(v, v, v);
+    }
+    return rainbow;
+}
+
+float4 PSIridescentMesh(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    float t = time * ripple_speed * 0.3;
+    float scale = max(surface_scale, 0.3);
+
+    /* Surface height field via FBM */
+    float h_center = fbm(p * scale + float2(t, 0.0));
+    float h_x = fbm(p * scale + float2(t + 0.01, 0.0));
+    float h_y = fbm(p * scale + float2(t, 0.01));
+
+    /* Pseudo-normal from gradient */
+    float2 grad = float2(h_x - h_center, h_y - h_center) * 100.0;
+    float3 normal = normalize(float3(-grad.x, -grad.y, 1.0));
+
+    /* Pseudo view direction (camera at +z, slight wobble on bass) */
+    float3 view = normalize(float3(p.x * 0.15 + bass * 0.1, p.y * 0.15, 1.0));
+
+    /* Fresnel: more iridescent at grazing angles */
+    float fresnel = 1.0 - max(dot(normal, view), 0.0);
+    fresnel = pow(saturate(fresnel), 2.5);
+
+    /* View-angle "thin film interference" — color shifts with angle + height */
+    float view_t = h_center * 1.4 + fresnel * 1.2 + time * 0.04 + bass * 0.3;
+    float3 col_film = iridescent(view_t, (int)palette_id);
+
+    /* Spec highlight aligned to a moving "light" direction */
+    float3 light = normalize(float3(sin(time * 0.3) * 0.4,
+                                    cos(time * 0.4) * 0.4,
+                                    1.0));
+    float spec = pow(max(dot(reflect(-light, normal), -view), 0.0), 24.0);
+
+    /* Compose: iridescent body + specular highlights */
+    float3 col = col_film * (0.4 + fresnel * fresnel_strength * 0.7);
+    col += float3(1.0, 1.0, 1.0) * spec * 0.6;
+
+    /* Metallic darkening — pure metal absorbs more diffuse */
+    col *= 1.0 - metallic * 0.3;
+    col += col_film * metallic * 0.3 * fresnel;
+
+    /* Audio: pulse on kick brightens whole surface */
+    col *= 1.0 + kick_onset * 0.3 + beat_4 * bass * 0.2;
+
+    /* Treble adds extra sparkle */
+    float sparkle = step(0.985 - treble * 0.04, hash21(p * resolution * 0.3 + floor(time * 8.0)));
+    col += float3(1.0, 1.0, 1.0) * sparkle * (0.4 + treble);
+
+    /* Onset highlight */
+    col += col_film * onset_strength * 0.15;
+
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, length(p));
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSIridescentMesh(vert_in);
+    }
+}

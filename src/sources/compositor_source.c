@@ -3,6 +3,7 @@
 #include "rendering/compositor.h"
 #include "rendering/effect_system.h"
 #include "rendering/media_layer.h"
+#include "controls/osc_sender.h"
 #include "controls/source_trigger.h"
 #include "audio/audio_texture.h"
 #include "ui/properties_builder.h"
@@ -404,6 +405,7 @@ static void vjlink_compositor_tick(void *data, float seconds)
 {
 	UNUSED_PARAMETER(data);
 	vjlink_tick_time(seconds);
+	vjlink_osc_tick();
 }
 
 static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)

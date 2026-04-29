@@ -73,6 +73,7 @@ set(VJLINK_SOURCES
     src/controls/source_trigger.c
     src/controls/http_server.c
     src/controls/tools_menu.c
+    src/controls/osc_sender.c
     # Presets
     src/presets/preset_manager.c
     src/presets/param_animator.c

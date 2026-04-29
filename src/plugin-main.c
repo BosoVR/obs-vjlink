@@ -7,6 +7,7 @@
 #include "controls/websocket_handler.h"
 #include "controls/http_server.h"
 #include "controls/tools_menu.h"
+#include "controls/osc_sender.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-vjlink", "en-US")
@@ -103,6 +104,7 @@ void obs_module_post_load(void)
 void obs_module_unload(void)
 {
 	blog(LOG_INFO, "[VJLink] Unloading plugin");
+	vjlink_osc_shutdown();
 	vjlink_tools_menu_shutdown();
 	vjlink_http_server_stop();
 	vjlink_websocket_shutdown();
