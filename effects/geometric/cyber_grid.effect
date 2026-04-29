@@ -1,7 +1,7 @@
 /*
- * VJLink - Cyber Grid
- * 80s vector horizon: glowing perspective grid running to vanishing point.
- * Beat-locked grid pulse, palette-aware grid color.
+ * VJLink - Cyber Grid (Neon Wave)
+ * Glowing neon-tube perspective grid with audio-reactive horizon waveform.
+ * Hot neon glow, beat-synced pulse, sun on horizon. True 80s neon arcade.
  */
 
 uniform float4x4 ViewProj;
@@ -35,31 +35,47 @@ VertInOut VSDefault(VertInOut vert_in)
 }
 
 float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
 
-void palette_cyber(int pid, out float3 grid_col, out float3 sky_top, out float3 sky_bot, out float3 sun_col) {
+/* Neon Wave palettes: hot dual-color neon (line + glow + accent) */
+void palette_neon(int pid, out float3 line_a, out float3 line_b, out float3 sun, out float3 sky_top, out float3 sky_bot)
+{
     if (pid == 1) {
-        grid_col = float3(1.0, 0.10, 0.10); sky_top = float3(0.05, 0.0, 0.0);
-        sky_bot = float3(0.4, 0.05, 0.05); sun_col = float3(1.0, 0.2, 0.1); return;
+        /* Hardtechno: blood red + orange glow */
+        line_a = float3(1.0, 0.05, 0.10); line_b = float3(1.0, 0.45, 0.05);
+        sun = float3(1.0, 0.25, 0.05); sky_top = float3(0.05, 0.0, 0.05); sky_bot = float3(0.25, 0.0, 0.05); return;
     }
     if (pid == 2) {
-        grid_col = float3(1.0, 0.55, 0.10); sky_top = float3(0.1, 0.02, 0.0);
-        sky_bot = float3(0.7, 0.25, 0.05); sun_col = float3(1.0, 0.5, 0.05); return;
+        /* Rawstyle: orange + amber */
+        line_a = float3(1.0, 0.55, 0.05); line_b = float3(1.0, 0.85, 0.10);
+        sun = float3(1.0, 0.50, 0.05); sky_top = float3(0.06, 0.02, 0.0); sky_bot = float3(0.30, 0.10, 0.02); return;
     }
     if (pid == 3) {
-        grid_col = float3(0.7, 1.0, 0.10); sky_top = float3(0.02, 0.05, 0.0);
-        sky_bot = float3(0.2, 0.5, 0.05); sun_col = float3(0.7, 1.0, 0.1); return;
+        /* Acid: green + lime */
+        line_a = float3(0.55, 1.0, 0.05); line_b = float3(0.95, 1.0, 0.20);
+        sun = float3(0.7, 1.0, 0.10); sky_top = float3(0.0, 0.05, 0.0); sky_bot = float3(0.05, 0.20, 0.02); return;
     }
     if (pid == 4) {
-        grid_col = float3(0.10, 0.85, 1.0); sky_top = float3(0.0, 0.02, 0.08);
-        sky_bot = float3(0.05, 0.2, 0.5); sun_col = float3(1.0, 0.2, 0.85); return;
+        /* Cyber: cyan + magenta */
+        line_a = float3(0.10, 0.85, 1.0); line_b = float3(1.0, 0.20, 0.95);
+        sun = float3(0.95, 0.20, 0.85); sky_top = float3(0.02, 0.0, 0.10); sky_bot = float3(0.05, 0.02, 0.30); return;
     }
     if (pid == 5) {
-        grid_col = float3(1.0, 1.0, 1.0); sky_top = float3(0.0, 0.0, 0.0);
-        sky_bot = float3(0.3, 0.3, 0.3); sun_col = float3(1.0, 1.0, 1.0); return;
+        /* Mono */
+        line_a = float3(1.0, 1.0, 1.0); line_b = float3(0.85, 0.85, 0.85);
+        sun = float3(1.0, 1.0, 1.0); sky_top = float3(0.0, 0.0, 0.0); sky_bot = float3(0.18, 0.18, 0.18); return;
     }
-    /* Default cyberpunk: hot pink + cyan */
-    grid_col = float3(1.0, 0.20, 0.85); sky_top = float3(0.05, 0.0, 0.15);
-    sky_bot = float3(0.3, 0.05, 0.45); sun_col = float3(0.10, 0.85, 1.0);
+    /* Default: classic Outrun magenta + cyan */
+    line_a = float3(1.0, 0.10, 0.85); line_b = float3(0.10, 0.85, 1.0);
+    sun = float3(1.0, 0.25, 0.85); sky_top = float3(0.05, 0.0, 0.18); sky_bot = float3(0.25, 0.05, 0.45);
+}
+
+/* Soft neon-tube line: distance to line -> glow + core */
+float neonLine(float d, float core_w, float glow_w)
+{
+    float core = exp(-d * d / max(core_w, 0.0001));
+    float glow = exp(-d / max(glow_w, 0.0001));
+    return saturate(core + glow * 0.45);
 }
 
 float4 PSCyberGrid(VertInOut vert_in) : TARGET
@@ -68,89 +84,129 @@ float4 PSCyberGrid(VertInOut vert_in) : TARGET
     float aspect = resolution.x / max(resolution.y, 1.0);
 
     float bass = bands.x;
+    float treble = bands.w;
     float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
     float bs = beat_sync;
     float beat_q = (bs < 0.5) ? pow(1.0 - beat_phase, 4.0)
                   : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
                               : pow(1.0 - beat_1_8, 4.0));
 
-    float3 grid_col, sky_top, sky_bot, sun_col;
-    palette_cyber((int)palette_id, grid_col, sky_top, sky_bot, sun_col);
+    float3 line_a, line_b, sun_col, sky_top, sky_bot;
+    palette_neon((int)palette_id, line_a, line_b, sun_col, sky_top, sky_bot);
 
     float horizon = clamp(horizon_y, 0.2, 0.8);
     float3 col;
 
     if (uv.y < horizon) {
-        /* Sky gradient */
+        /* === SKY === */
         float t = uv.y / horizon;
-        col = lerp(sky_top, sky_bot, pow(t, 1.4));
+        col = lerp(sky_top, sky_bot, pow(t, 1.6));
 
-        /* Sun on horizon (lower half visible) */
-        float2 sun_c = float2(0.5, horizon - 0.0);
+        /* Stars */
+        float star_h = hash21(floor(uv * 280.0));
+        if (star_h > 0.997 && uv.y < horizon - 0.04) {
+            float twinkle = 0.5 + sin(time * 3.0 + star_h * 30.0) * 0.5;
+            col += float3(1.0, 0.95, 1.0) * twinkle * 0.85;
+        }
+
+        /* Sun on horizon: solid disk with horizontal slits + bloom */
+        float2 sun_c = float2(0.5, horizon - 0.04);
         float2 sd = float2(uv.x - sun_c.x, uv.y - sun_c.y);
         sd.x *= aspect;
         float sun_dist = length(sd);
         float sr = 0.16;
-        if (uv.y > horizon - sr * 1.0) {
-            float sun_t = saturate(1.0 - sun_dist / sr);
-            sun_t = pow(sun_t, 0.7);
-            col = lerp(col, sun_col, sun_t);
+        if (sun_dist < sr) {
+            float sun_t = (uv.y - (sun_c.y - sr)) / (sr * 2.0);
+            sun_t = saturate(sun_t);
+            float3 sgrad = lerp(line_b, sun_col, sun_t);
+            /* Horizontal slits for retro look */
+            float slit_y = sd.y * 26.0;
+            float slit = step(0.5, frac(slit_y));
+            float slit_strength = saturate(1.0 - sun_t * 1.2);
+            col = lerp(sgrad, col, slit * slit_strength * 0.85);
         }
-
-        /* Sun glow halo */
-        col += sun_col * exp(-sun_dist * 4.0) * 0.4 * (0.7 + bass * 0.5);
+        /* Sun bloom halo */
+        col += sun_col * exp(-sun_dist * 5.5) * (0.55 + bass * 0.5);
+        /* Outer atmospheric bloom */
+        col += sun_col * exp(-(uv.y - horizon) * (uv.y - horizon) * 80.0) * 0.4 * horizon_glow;
 
     } else {
-        /* === GROUND with perspective grid === */
-        col = float3(0.005, 0.0, 0.01);
+        /* === GROUND with neon-tube perspective grid === */
+        col = float3(0.005, 0.0, 0.012);
 
         float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01);
-
-        /* Perspective: foreshortening factor */
         float persp = 1.0 / max(1.0 - gy, 0.005);
 
-        /* Vertical lines (converging toward vanishing point) */
+        /* Vertical lines (perspective converging) */
         float vx = (uv.x - 0.5) * aspect;
         float vx_p = vx * persp;
         float v_count = grid_density;
-        float v_id = floor(vx_p * v_count);
-        float v_f = abs(vx_p * v_count - v_id - 0.5) * 2.0;
-        float v_line = 1.0 - smoothstep(0.92, 0.99, v_f);
-        v_line *= smoothstep(0.0, 0.05, gy);
+        float vx_grid = vx_p * v_count;
+        float v_dist = abs(vx_grid - floor(vx_grid + 0.5)) / v_count;
+
+        /* Adaptive line width based on distance */
+        float v_w_core = 0.0008 / persp;
+        float v_w_glow = 0.012 / persp;
+        float v_line = neonLine(v_dist, v_w_core, v_w_glow);
+        v_line *= smoothstep(0.0, 0.04, gy);
 
         /* Horizontal lines (scrolling toward camera) */
-        float scroll = time * scroll_speed * (1.0 + bass * 0.4);
-        /* Use sqrt(gy) for 3D-ish perspective curve */
+        float scroll = time * scroll_speed * (1.0 + bass * 0.5);
         float gp = sqrt(gy + 0.001) * 12.0 + scroll;
-        float h_id = floor(gp);
-        float h_f = abs(gp - h_id - 0.5) * 2.0;
-        /* Bass-driven thickness */
-        float h_thresh = 0.92 - bass * 0.05;
-        float h_line = 1.0 - smoothstep(h_thresh, 0.99, h_f);
+        float h_dist = abs(gp - floor(gp + 0.5)) / 12.0;
 
-        float grid = max(v_line, h_line);
+        /* H-line width — get thicker on bass kick */
+        float h_w_core = 0.0006 + kick_onset * 0.0008;
+        float h_w_glow = 0.012 + bass * 0.014;
+        float h_line = neonLine(h_dist, h_w_core, h_w_glow);
 
-        /* Audio: every 4th line pulses on beat */
-        float pulse_h = step(0.0, abs(fmod(h_id, 4.0)) - 3.5);
-        float pulse_v = step(0.0, abs(fmod(v_id, 4.0)) - 3.5);
-        float pulse = max(pulse_h * h_line, pulse_v * v_line) * beat_q * bass * 0.6;
+        /* Color: alternate between line_a and line_b on each row */
+        int h_id = (int)floor(gp);
+        bool alt = ((h_id / 1) % 2) == 0;
+        float3 h_color = alt ? line_a : line_b;
 
-        col += grid_col * grid * (0.5 + drive * 0.6);
-        col += grid_col * pulse * 1.2;
+        /* Beat-sync: every 4th h-line + every 4th v-line PULSES brightly */
+        bool h_pulse_row = (h_id % 4) == 0;
+        int v_id = (int)floor(vx_grid + 0.5);
+        bool v_pulse_col = (v_id % 4) == 0;
+        float pulse = beat_q * (0.7 + bass);
+
+        /* Compose grid (horizontal lines colored, vertical = neutral A/B mix) */
+        float3 v_color = lerp(line_a, line_b, 0.5);
+        col += v_color * v_line * (0.65 + drive * 0.4);
+        col += h_color * h_line * (0.7 + drive * 0.5);
+
+        /* Pulse boost on every-4th lines */
+        if (h_pulse_row) col += h_color * h_line * pulse * 1.4;
+        if (v_pulse_col) col += v_color * v_line * pulse * 1.0;
+
+        /* Horizontal audio waveform across the ground at near-distance */
+        float wave_band_idx = saturate(uv.x);
+        float wave_amp = bands.x * 0.5 + bands.y * 0.4 + bands.z * 0.3;
+        float wave_y = horizon + 0.04 + sin(uv.x * 24.0 + time * 4.0) * 0.018 * wave_amp;
+        float wave_d = abs(uv.y - wave_y);
+        float wave_line = neonLine(wave_d, 0.000004, 0.0035) * smoothstep(0.0, 0.2, gy) * smoothstep(0.7, 0.0, gy);
+        col += line_b * wave_line * (0.8 + treble * 1.5);
 
         /* Distance fade */
-        col *= smoothstep(0.0, 0.4, gy) * smoothstep(1.0, 0.05, gy * 0.5);
+        col *= smoothstep(0.0, 0.35, gy);
 
-        /* Horizon glow */
-        float h_glow = exp(-gy * 8.0) * horizon_glow;
-        col += sun_col * h_glow * 0.4 * (0.7 + bass * 0.6);
+        /* Horizon glow toward upper edge of ground */
+        float h_glow = exp(-gy * 7.0) * horizon_glow;
+        col += sun_col * h_glow * 0.3 * (0.7 + bass * 0.5);
+
+        /* Ground reflection of stars (sparse) */
+        float refl = step(0.998 - bass * 0.005, hash21(uv * 100.0 + floor(time * 4.0)));
+        col += line_a * refl * 0.6 * (1.0 - gy);
     }
 
     /* Onset whitewash */
     col += float3(1.0, 1.0, 1.0) * onset_strength * 0.10;
 
-    /* HDR */
-    col = col / (1.0 + col * 0.4);
+    /* HDR + saturation boost */
+    col = col / (1.0 + col * 0.35);
+    float lum = dot(col, float3(0.299, 0.587, 0.114));
+    col = lerp(float3(lum, lum, lum), col, 1.25);
     col = saturate(col);
 
     float a_out = max(max(col.r, col.g), col.b);

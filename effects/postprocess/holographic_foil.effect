@@ -1,8 +1,8 @@
 /*
  * VJLink - Holographic Foil
- * Iridescent rainbow shift on input. View-angle-style hue shift driven
- * by luminance + time + audio. Cyber/Cyberpunk surface look.
- * Standalone: generates holographic noise texture.
+ * Real holographic foil look: diffraction-pattern rainbow stripes,
+ * microstructure facets, anisotropic specular streaks, and metallic
+ * sparkle. Acts as filter on input, or generates standalone surface.
  */
 
 uniform float4x4 ViewProj;
@@ -17,9 +17,9 @@ uniform float     kick_onset;
 uniform float     onset_strength;
 uniform float     palette_id;
 
-uniform float foil_intensity;     /* 0 - 1, default 0.6 */
+uniform float foil_intensity;     /* 0 - 1, default 0.7 */
 uniform float shift_speed;        /* 0 - 3, default 0.5 */
-uniform float metallic;           /* 0 - 1, default 0.5 */
+uniform float metallic;           /* 0 - 1, default 0.6 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float has_input_source;
 
@@ -35,6 +35,7 @@ VertInOut VSDefault(VertInOut vert_in)
 }
 
 float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
 float noise(float2 p) {
     float2 i = floor(p), f = frac(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -47,23 +48,20 @@ float fbm(float2 p) {
     return v;
 }
 
-/* Iridescent palette: rainbow shift with palette accent */
-float3 iridescent(float t, int pid) {
-    /* Base rainbow */
-    float3 rainbow = 0.5 + 0.5 * cos(6.28318 * (float3(1.0, 1.0, 1.0) * t + float3(0.0, 0.33, 0.67)));
-    if (pid == 1) {
-        /* Hardtechno: shift toward red dominant rainbow */
-        return lerp(rainbow, rainbow * float3(1.4, 0.4, 0.5), 0.4);
-    }
-    if (pid == 2) return lerp(rainbow, rainbow * float3(1.4, 0.8, 0.4), 0.4);
-    if (pid == 3) return lerp(rainbow, rainbow * float3(0.6, 1.4, 0.4), 0.4);
-    if (pid == 4) return lerp(rainbow, rainbow * float3(0.6, 0.8, 1.4), 0.3);
+/* Diffraction-style rainbow: thin-film interference with wavelength shifts */
+float3 diffraction(float t, int pid)
+{
+    /* Tightly-spaced rainbow with strong red/cyan/magenta peaks */
+    float3 base = 0.5 + 0.5 * cos(6.28318 * (float3(1.0, 1.0, 1.0) * t * 1.5 + float3(0.0, 0.18, 0.52)));
+    if (pid == 1) return lerp(base, base * float3(1.4, 0.4, 0.5), 0.45);
+    if (pid == 2) return lerp(base, base * float3(1.4, 0.85, 0.45), 0.45);
+    if (pid == 3) return lerp(base, base * float3(0.6, 1.4, 0.45), 0.45);
+    if (pid == 4) return lerp(base, base * float3(0.6, 0.85, 1.4), 0.30);
     if (pid == 5) {
-        /* Mono: pearlescent grey-shift */
-        float v = 0.5 + 0.5 * cos(6.28318 * t);
+        float v = 0.5 + 0.5 * cos(6.28318 * t * 1.2);
         return float3(v, v, v);
     }
-    return rainbow;
+    return base;
 }
 
 float4 PSHolographic(VertInOut vert_in) : TARGET
@@ -72,57 +70,98 @@ float4 PSHolographic(VertInOut vert_in) : TARGET
     bool has_input = (has_input_source > 0.5);
     int pid = (int)palette_id;
 
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float bass = bands.x;
     float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Hologram noise field for "view angle" */
-    float n = fbm(uv * 4.0 + time * shift_speed * 0.3);
+    /* === MICROSTRUCTURE: small facets with random orientations === */
+    float2 facet_uv = uv * float2(aspect, 1.0) * 60.0;
+    float2 facet_id = floor(facet_uv);
+    float2 facet_f = frac(facet_uv) - 0.5;
+    /* Each facet has a random "tilt" — angle that biases its hue */
+    float facet_tilt = hash21(facet_id) * 6.28318;
+    float tilt_x = cos(facet_tilt);
+    float tilt_y = sin(facet_tilt);
+    float facet_normal_t = facet_f.x * tilt_x + facet_f.y * tilt_y;
+
+    /* === ANISOTROPIC STREAK pattern (brushed-metal style stripes) === */
+    float streak_angle = time * shift_speed * 0.1;
+    float sa_c = cos(streak_angle), sa_s = sin(streak_angle);
+    float2 streak_uv = float2(uv.x * sa_c - uv.y * sa_s, uv.x * sa_s + uv.y * sa_c);
+    float streak = sin(streak_uv.x * 320.0 + facet_normal_t * 4.0) * 0.5 + 0.5;
+    streak = pow(streak, 4.0);
+
+    /* === DIFFRACTION RAINBOW: position + microstructure + audio modulate hue === */
+    float n_lo = fbm(uv * 3.0 + time * shift_speed * 0.15);
+    float view_t = uv.x * 1.4 + uv.y * 0.4
+                 + n_lo * 0.6
+                 + facet_normal_t * 0.35
+                 + time * shift_speed * 0.07
+                 + bass * 0.25
+                 + kick_onset * 0.15;
+    float3 foil = diffraction(view_t, pid);
+
+    /* === SPECULAR SPARKLES: tiny bright facets that "wink" === */
+    float sparkle_h = hash21(facet_id + floor(time * 16.0));
+    float sparkle = step(0.985, sparkle_h);
+    /* Sparkle position shifts hue dramatically (diffraction at peak) */
+    float3 sparkle_col = diffraction(view_t + 0.5, pid);
 
     if (!has_input) {
-        /* Standalone: pure holographic surface */
-        float view_t = n + time * shift_speed * 0.1 + bass * 0.4;
-        float3 col = iridescent(view_t, pid);
+        /* === STANDALONE: pure holographic foil surface === */
+        float3 col = foil * (0.55 + 0.45 * streak);
 
-        /* Specular highlights */
-        float spec_n = fbm(uv * 12.0 + time * 0.5);
-        float spec = pow(saturate(spec_n - 0.6) * 2.5, 4.0);
-        col += float3(1.0, 1.0, 1.0) * spec * (0.5 + treble * 0.6);
+        /* Metallic base — gives "silvery" undertone */
+        float metallic_base = 0.55 + 0.45 * smoothstep(-0.5, 0.5, facet_normal_t);
+        col = lerp(col, col * metallic_base + float3(metallic_base, metallic_base, metallic_base) * 0.25, metallic);
 
-        /* Beat brightness */
-        col *= 0.7 + drive * 0.4;
+        /* Specular streaks (anisotropic highlight) */
+        col += float3(1.0, 1.0, 1.0) * streak * 0.45 * (0.6 + treble * 0.6);
+
+        /* Sparkles */
+        col += sparkle_col * sparkle * 1.6;
+
+        /* Beat brightness boost */
+        col *= 0.75 + drive * 0.4 + beat_4 * 0.2;
 
         /* Vignette */
-        col *= smoothstep(1.6, 0.4, length((uv - 0.5) * 2.0));
+        col *= smoothstep(1.7, 0.4, length((uv - 0.5) * 2.0));
 
-        /* HDR */
-        col = col / (1.0 + col * 0.4);
+        /* HDR + saturation */
+        col = col / (1.0 + col * 0.35);
+        float lum = dot(col, float3(0.299, 0.587, 0.114));
+        col = lerp(float3(lum, lum, lum), col, 1.25);
         col = saturate(col);
 
         float a_out = max(max(col.r, col.g), col.b);
         return float4(col, a_out);
     }
 
-    /* Filter: shift hue based on luminance + simulated viewing angle */
+    /* === FILTER MODE: holographic finish on input image === */
     float4 src = image.Sample(texSampler, uv);
-    float lum = dot(src.rgb, float3(0.299, 0.587, 0.114));
+    float lum_in = dot(src.rgb, float3(0.299, 0.587, 0.114));
 
-    /* Foil shift: luminance + noise + time = "view angle" */
-    float view_t = lum * 1.5 + n * 0.6 + time * shift_speed * 0.1
-                 + kick_onset * 0.3;
-    float3 foil = iridescent(view_t, pid);
+    /* Slightly perturb foil hue based on input luminance for "view-angle" feel */
+    float3 foil_filter = diffraction(view_t + lum_in * 0.6, pid);
 
-    /* Mix foil with original — metallic = how much of original luminance is preserved */
-    float3 base = lerp(src.rgb, float3(lum, lum, lum) * 1.0, saturate(metallic));
-    float3 col = lerp(src.rgb, base * foil * 1.3, saturate(foil_intensity));
+    /* Metallic-flake base: blend toward grayscale of input for "chrome" undertone */
+    float3 metallic_base = lerp(src.rgb, float3(lum_in, lum_in, lum_in), saturate(metallic));
+    /* Apply foil tint — multiply gives realistic foil appearance */
+    float3 foiled = metallic_base * foil_filter * 1.4;
 
-    /* Specular streaks (anisotropic-like) */
-    float streak_y = sin(uv.y * 200.0 + time * 0.5) * 0.5 + 0.5;
-    streak_y = pow(streak_y, 12.0);
-    col += foil * streak_y * 0.18 * foil_intensity;
+    /* Streak overlay (additive bright highlights) */
+    foiled += foil_filter * streak * 0.30;
+
+    /* Sparkle overlay */
+    foiled += sparkle_col * sparkle * 0.9;
+
+    /* Mix with original by foil_intensity */
+    float3 col = lerp(src.rgb, foiled, saturate(foil_intensity));
 
     /* Onset white pop */
-    col += foil * onset_strength * 0.12;
+    col += sparkle_col * onset_strength * 0.15;
 
     col = saturate(col);
     return float4(col, src.a);

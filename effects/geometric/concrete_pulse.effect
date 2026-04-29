@@ -22,7 +22,7 @@ uniform float crack_density;     /* 1-12, default 5 */
 uniform float pulse_strength;    /* 0-2, default 1.0 */
 uniform float concrete_grain;    /* 0-1, default 0.6 */
 uniform float audio_drive;       /* 0-2, default 1.0 */
-uniform float beat_sync;         /* 0=continuous 1=1/4 2=1/8 3=1/16 */
+uniform float beat_sync;         /* 0=continuous 1=1/4 2=1/8 */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -76,8 +76,7 @@ float4 PSConcretePulse(VertInOut vert_in) : TARGET
     float pulse_phase;
     if (bs < 0.5) pulse_phase = beat;
     else if (bs < 1.5) pulse_phase = pow(1.0 - beat_1_4, 3.0);
-    else if (bs < 2.5) pulse_phase = pow(1.0 - beat_1_8, 3.0);
-    else pulse_phase = pow(1.0 - beat_1_16, 3.0);
+    else pulse_phase = pow(1.0 - beat_1_8, 3.0);
 
     float drive = audio_drive * (0.5 + bass + kick_onset);
 

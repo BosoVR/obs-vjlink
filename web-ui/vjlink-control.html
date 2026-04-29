@@ -3985,7 +3985,6 @@ const EFFECT_DESCRIPTIONS = {
   wireframe_city: 'Cyberpunk skyline fly-through with neon-twinkling building windows.',
   type_animator: 'Audio-reactive bold typography — RAVE, BERGHAIN, HARDTECHNO, ACID, DROP, TECHNO.',
   iridescent_mesh: 'Pseudo-3D oil-on-metal with view-angle iridescence + treble sparkle.',
-  volumetric_light: 'Real raymarched god-rays + configurable light source + quality slider.',
   liquid_sim: 'Form-aware liquid: depth, caustics, sub-surface glow, beat ripples.',
   concrete_pulse: 'Brutalist concrete with kick-driven cracks + shockwave rings.',
   industrial_strobe_tunnel: 'Calm B/W tunnel with smooth beat-locked depth pulses.',
@@ -3997,7 +3996,6 @@ const EFFECT_DESCRIPTIONS = {
   datamosh: 'Codec corruption + I-frame drops on beat.',
   pixel_sort: 'Aggressive directional pixel stretching with chroma + palette tint.',
   vhs_glitch: 'VHS tape tracking errors, snow noise, head-switching.',
-  lens_flare: 'Anamorphic streak + ghost orbs + sun disk overlay.',
   holographic_foil: 'View-angle iridescent shift on input.',
   feedback: 'Recursive feedback with zoom, rotation, hue shift trails.',
   displacement: 'UV warp via animated noise + audio swirl + chromatic split.',
@@ -5759,8 +5757,9 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   ];
   effectParams.mono_outline = [
     { name: 'edge_thickness', label: 'Edge Thickness', min: 0.0005, max: 0.01, step: 0.0005, default: 0.0025 },
-    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.18 },
     { name: 'invert_on_beat', label: 'Invert on Beat', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+    { name: 'style_mode', label: 'Style', min: 0, max: 3, step: 1, default: 0, options: ['Outline','Cel-Shaded','Inverse','Color Bleed'] },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 1, step: 1, default: 0, options: ['Continuous','1/4'] },
   ];
@@ -5778,8 +5777,6 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
       effectCategories.postprocess.effects.push('bloom_pro');
     if (!effectCategories.postprocess.effects.includes('holographic_foil'))
       effectCategories.postprocess.effects.push('holographic_foil');
-    if (!effectCategories.postprocess.effects.includes('lens_flare'))
-      effectCategories.postprocess.effects.push('lens_flare');
   }
   if (effectCategories.retro) {
     if (!effectCategories.retro.effects.includes('crt_pro'))
@@ -5806,7 +5803,6 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   effectNames.witch_sigil = 'Witch Sigil';
   effectNames.holographic_foil = 'Holographic Foil';
   effectNames.cyber_grid = 'Cyber Grid';
-  effectNames.lens_flare = 'Lens Flare';
 
   /* Mark as new */
   if (typeof NEW_EFFECTS !== 'undefined') {
@@ -5817,13 +5813,12 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     NEW_EFFECTS.add('witch_sigil');
     NEW_EFFECTS.add('holographic_foil');
     NEW_EFFECTS.add('cyber_grid');
-    NEW_EFFECTS.add('lens_flare');
   }
 
   /* Pro groups */
   if (typeof effectProGroups !== 'undefined') {
     effectProGroups.pro_main.effects.push('vaporwave_sunset', 'demoscene_plasma', 'witch_sigil', 'cyber_grid');
-    effectProGroups.pro_content.effects.push('bloom_pro', 'crt_pro', 'holographic_foil', 'lens_flare');
+    effectProGroups.pro_content.effects.push('bloom_pro', 'crt_pro', 'holographic_foil');
   }
 
   /* Params */
@@ -5876,14 +5871,6 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'horizon_glow', label: 'Horizon Glow', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 1, options: ['Continuous','1/4','1/8'] },
-  ];
-  effectParams.lens_flare = [
-    { name: 'flare_x', label: 'Flare X', min: 0, max: 1, step: 0.01, default: 0.5 },
-    { name: 'flare_y', label: 'Flare Y', min: 0, max: 1, step: 0.01, default: 0.5 },
-    { name: 'intensity', label: 'Intensity', min: 0, max: 3, step: 0.05, default: 1.0 },
-    { name: 'streak_length', label: 'Streak Length', min: 0, max: 2, step: 0.05, default: 1.0 },
-    { name: 'ghost_count', label: 'Ghost Count', min: 0, max: 6, step: 1, default: 3 },
-    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ];
 
   /* === v1.1.0 NEW EFFECTS === */
@@ -5938,24 +5925,18 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     if (!effectCategories['3d'].effects.includes('iridescent_mesh'))
       effectCategories['3d'].effects.push('iridescent_mesh');
   }
-  if (effectCategories.postprocess) {
-    if (!effectCategories.postprocess.effects.includes('volumetric_light'))
-      effectCategories.postprocess.effects.push('volumetric_light');
-  }
   if (effectCategories.plasma) {
     if (!effectCategories.plasma.effects.includes('liquid_sim'))
       effectCategories.plasma.effects.push('liquid_sim');
   }
   effectNames.iridescent_mesh = 'Iridescent Mesh';
-  effectNames.volumetric_light = 'Volumetric Light Pro';
   effectNames.liquid_sim = 'Liquid Sim';
   if (typeof NEW_EFFECTS !== 'undefined') {
     NEW_EFFECTS.add('iridescent_mesh');
-    NEW_EFFECTS.add('volumetric_light');
     NEW_EFFECTS.add('liquid_sim');
   }
   if (typeof effectProGroups !== 'undefined') {
-    effectProGroups.pro_main.effects.push('iridescent_mesh', 'volumetric_light', 'liquid_sim');
+    effectProGroups.pro_main.effects.push('iridescent_mesh', 'liquid_sim');
   }
   effectParams.iridescent_mesh = [
     { name: 'surface_scale', label: 'Surface Scale', min: 0.5, max: 5, step: 0.05, default: 1.5 },
@@ -5963,14 +5944,7 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'fresnel_strength', label: 'Fresnel', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.7 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
-  ];
-  effectParams.volumetric_light = [
-    { name: 'light_x', label: 'Light X', min: 0, max: 1, step: 0.01, default: 0.5 },
-    { name: 'light_y', label: 'Light Y', min: 0, max: 1, step: 0.01, default: 0.25 },
-    { name: 'fog_density', label: 'Fog Density', min: 0, max: 2, step: 0.05, default: 1.0 },
-    { name: 'ray_density', label: 'Quality (raymarch steps)', min: 16, max: 96, step: 4, default: 48 },
-    { name: 'scatter', label: 'Scatter', min: 0, max: 1, step: 0.05, default: 0.6 },
-    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'bg_mode', label: 'Background', min: 0, max: 2, step: 1, default: 0, options: ['Iridescent','Black','Transparent'] },
   ];
   effectParams.liquid_sim = [
     { name: 'viscosity', label: 'Viscosity', min: 0.5, max: 3, step: 0.05, default: 1.4 },

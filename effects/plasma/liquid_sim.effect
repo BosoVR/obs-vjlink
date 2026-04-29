@@ -42,10 +42,12 @@ float noise(float2 p) {
 }
 float fbm6(float2 p) {
     float v = 0.0, a = 0.5;
-    float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
+    /* Rotation matrix inlined to avoid HLSL float2x2 issues */
+    float c = 0.8, s = 0.6;
     for (int i = 0; i < 6; i++) {
         v += a * noise(p);
-        p = mul(p, rot) * 2.05;
+        float2 rp = float2(p.x * c - p.y * s, p.x * s + p.y * c);
+        p = rp * 2.05;
         a *= 0.5;
     }
     return v;

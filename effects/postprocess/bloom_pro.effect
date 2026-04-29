@@ -53,46 +53,50 @@ float3 brightPass(float3 c, float thresh)
     return c * w * w;
 }
 
-/* 13-tap gaussian blur, single pass, dual-direction approximation */
+/* Helper: sample bright-passed image at offset */
+float3 bs(float2 uv) { return brightPass(image.Sample(texSampler, uv).rgb, threshold); }
+
+/* Single-tap gaussian ring at radius i with weight w */
+float3 ring(float2 uv, float2 px, float i, float w)
+{
+    float3 s = float3(0.0, 0.0, 0.0);
+    float2 ohx = px * float2(i, 0.0);
+    float2 ohy = px * float2(0.0, i);
+    float2 od1 = px * float2(i, i) * 0.707;
+    float2 od2 = px * float2(i, -i) * 0.707;
+    s += bs(uv + ohx) * w;
+    s += bs(uv - ohx) * w;
+    s += bs(uv + ohy) * w;
+    s += bs(uv - ohy) * w;
+    s += bs(uv + od1) * w * 0.5;
+    s += bs(uv - od1) * w * 0.5;
+    s += bs(uv + od2) * w * 0.5;
+    s += bs(uv - od2) * w * 0.5;
+    return s;
+}
+
+/* 13-tap gaussian blur, single pass, dual-direction approximation
+ * Weights for sigma ~= 3 hardcoded as constants (no array init). */
 float3 sampleBloom(float2 uv, float r)
 {
     float2 px = (1.0 / resolution) * r;
-    float3 sum = float3(0.0, 0.0, 0.0);
-    float wsum = 0.0;
+    float w0 = 0.198596;
+    float w1 = 0.175713;
+    float w2 = 0.121703;
+    float w3 = 0.065984;
+    float w4 = 0.028002;
+    float w5 = 0.0093;
+    float w6 = 0.002403;
 
-    /* 13-tap kernel — sigma ~= 3 */
-    const int N = 6;
-    float weights[7] = {
-        0.198596, 0.175713, 0.121703, 0.065984, 0.028002, 0.0093, 0.002403
-    };
-    /* Center */
-    sum += brightPass(image.Sample(texSampler, uv).rgb, threshold) * weights[0];
-    wsum += weights[0];
+    float3 sum = bs(uv) * w0;
+    sum += ring(uv, px, 1.0, w1);
+    sum += ring(uv, px, 2.0, w2);
+    sum += ring(uv, px, 3.0, w3);
+    sum += ring(uv, px, 4.0, w4);
+    sum += ring(uv, px, 5.0, w5);
+    sum += ring(uv, px, 6.0, w6);
 
-    for (int i = 1; i <= 6; i++) {
-        float fi = (float)i;
-        float w = weights[i];
-
-        /* Horizontal */
-        float2 ohx = px * float2(fi, 0.0);
-        sum += brightPass(image.Sample(texSampler, uv + ohx).rgb, threshold) * w;
-        sum += brightPass(image.Sample(texSampler, uv - ohx).rgb, threshold) * w;
-
-        /* Vertical */
-        float2 ohy = px * float2(0.0, fi);
-        sum += brightPass(image.Sample(texSampler, uv + ohy).rgb, threshold) * w;
-        sum += brightPass(image.Sample(texSampler, uv - ohy).rgb, threshold) * w;
-
-        /* Diagonal (subtle softness, half weight) */
-        float2 od1 = px * float2(fi, fi) * 0.707;
-        float2 od2 = px * float2(fi, -fi) * 0.707;
-        sum += brightPass(image.Sample(texSampler, uv + od1).rgb, threshold) * w * 0.5;
-        sum += brightPass(image.Sample(texSampler, uv - od1).rgb, threshold) * w * 0.5;
-        sum += brightPass(image.Sample(texSampler, uv + od2).rgb, threshold) * w * 0.5;
-        sum += brightPass(image.Sample(texSampler, uv - od2).rgb, threshold) * w * 0.5;
-
-        wsum += w * 6.0; /* 4 axis + 2 diag * 0.5 */
-    }
+    float wsum = w0 + (w1 + w2 + w3 + w4 + w5 + w6) * 6.0;
     return sum / max(wsum, 0.001);
 }
 

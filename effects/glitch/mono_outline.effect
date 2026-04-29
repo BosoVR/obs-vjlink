@@ -1,12 +1,11 @@
 /*
  * VJLink - Mono Outline (Pro)
- * Brutalist edge-detect filter for content. Black/white extreme contrast,
- * audio-reactive edge thickness, beat-driven invert.
+ * High-contrast brutalist edge filter with multi-pass Sobel, double-edge
+ * threshold, posterize, and audio-reactive line thickness/glow.
  */
 
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d input_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
@@ -20,10 +19,11 @@ uniform float     has_input_source;
 uniform float     band_activation;
 
 uniform float edge_thickness;     /* 0.0005-0.01, default 0.0025 */
-uniform float threshold;          /* 0-1, default 0.25 */
+uniform float threshold;          /* 0-1, default 0.18 */
 uniform float invert_on_beat;     /* 0=off 1=on */
 uniform float audio_drive;        /* 0-2, default 1.0 */
 uniform float beat_sync;          /* 0=continuous 1=1/4 */
+uniform float style_mode;         /* 0=Outline 1=Outline+Posterize 2=Inverse 3=Color Bleed */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -37,16 +37,38 @@ VertInOut VSDefault(VertInOut vert_in)
 }
 
 float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
-
 float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
 
-float3 palette_outline(int pid, float t) {
-    if (pid == 1) return lerp(float3(1,1,1), float3(1.0, 0.05, 0.08), t);
-    if (pid == 2) return lerp(float3(1,1,1), float3(1.0, 0.4, 0.05), t);
-    if (pid == 3) return lerp(float3(1,1,1), float3(0.65, 1.0, 0.1), t);
-    if (pid == 4) return lerp(float3(1,1,1), float3(0.05, 0.85, 1.0), t);
-    if (pid == 5) return float3(1,1,1);
-    return lerp(float3(1,1,1), float3(0.95, 0.15, 0.6), t);
+float3 palette_outline(int pid, float t)
+{
+    if (pid == 1) return lerp(float3(1,1,1), float3(1.0, 0.05, 0.10), t);
+    if (pid == 2) return lerp(float3(1,1,1), float3(1.0, 0.45, 0.05), t);
+    if (pid == 3) return lerp(float3(1,1,1), float3(0.65, 1.0, 0.10), t);
+    if (pid == 4) return lerp(float3(1,1,1), float3(0.10, 0.85, 1.0), t);
+    if (pid == 5) return float3(1, 1, 1);
+    return lerp(float3(1, 1, 1), float3(0.95, 0.15, 0.6), t);
+}
+
+/* Posterize a color to N levels */
+float3 posterize(float3 c, float levels)
+{
+    return floor(c * levels) / max(levels - 1.0, 1.0);
+}
+
+/* Sobel magnitude on luminance */
+float sobel_lum(float2 uv, float2 px)
+{
+    float tl = lum(image.Sample(texSampler, uv + px * float2(-1, -1)).rgb);
+    float t_ = lum(image.Sample(texSampler, uv + px * float2( 0, -1)).rgb);
+    float tr = lum(image.Sample(texSampler, uv + px * float2( 1, -1)).rgb);
+    float l_ = lum(image.Sample(texSampler, uv + px * float2(-1,  0)).rgb);
+    float r_ = lum(image.Sample(texSampler, uv + px * float2( 1,  0)).rgb);
+    float bl = lum(image.Sample(texSampler, uv + px * float2(-1,  1)).rgb);
+    float b_ = lum(image.Sample(texSampler, uv + px * float2( 0,  1)).rgb);
+    float br = lum(image.Sample(texSampler, uv + px * float2( 1,  1)).rgb);
+    float gx = -tl - 2.0 * l_ - bl + tr + 2.0 * r_ + br;
+    float gy = -tl - 2.0 * t_ - tr + bl + 2.0 * b_ + br;
+    return sqrt(gx * gx + gy * gy);
 }
 
 float4 PSMonoOutline(VertInOut vert_in) : TARGET
@@ -60,56 +82,94 @@ float4 PSMonoOutline(VertInOut vert_in) : TARGET
     float bs = beat_sync;
     float beat = (bs < 0.5) ? pow(1.0 - beat_phase, 3.0) : pow(1.0 - beat_1_4, 3.0);
 
-    float thick = edge_thickness * (1.0 + drive * 1.5);
-    float thresh = threshold * (1.0 - kick_onset * 0.4);
+    int sm = (int)style_mode;
 
     if (!has_input) {
-        /* Generator fallback: high-contrast geometric shapes from PRNG */
+        /* === STANDALONE: bold concentric+radial geometric pattern === */
         float aspect = resolution.x / max(resolution.y, 1.0);
         float2 p = (uv - 0.5) * 2.0;
         p.x *= aspect;
         float r = length(p);
         float ang = atan2(p.y, p.x);
-        float lines = abs(sin(ang * 8.0 + time * 0.5 * (0.5 + bass)));
-        lines *= smoothstep(0.1, 0.5, r) * smoothstep(1.5, 0.7, r);
-        float ring = step(0.7, lines);
-        float invert_flag = (invert_on_beat > 0.5 && beat > 0.5) ? 1.0 : 0.0;
-        float v = abs(ring - invert_flag);
+
+        /* Rotating wedge slices */
+        float spin = time * 0.4 * (0.6 + bass);
+        float wedges = abs(sin((ang + spin) * 8.0));
+        wedges *= smoothstep(0.05, 0.2, r) * smoothstep(1.6, 0.7, r);
+
+        /* Concentric rings on beat */
+        float ring_phase = r * 6.0 - time * 1.5 - beat * 1.5;
+        float ring = abs(sin(ring_phase * 3.14159));
+        float ring_step = step(0.85, ring);
+
+        /* Combined mask */
+        float v = max(step(0.7, wedges), ring_step);
+
+        /* Optional invert on beat */
+        float invert_flag = (invert_on_beat > 0.5 && beat > 0.6) ? 1.0 : 0.0;
+        v = abs(v - invert_flag);
+
         float3 col = palette_outline((int)palette_id, beat) * v;
         return float4(col, v);
     }
 
-    /* Sobel edge detection */
     float2 px = 1.0 / resolution;
-    float tl = lum(image.Sample(texSampler, uv + px * float2(-1, -1)).rgb);
-    float t_ = lum(image.Sample(texSampler, uv + px * float2( 0, -1)).rgb);
-    float tr = lum(image.Sample(texSampler, uv + px * float2( 1, -1)).rgb);
-    float l_ = lum(image.Sample(texSampler, uv + px * float2(-1,  0)).rgb);
-    float r_ = lum(image.Sample(texSampler, uv + px * float2( 1,  0)).rgb);
-    float bl = lum(image.Sample(texSampler, uv + px * float2(-1,  1)).rgb);
-    float b_ = lum(image.Sample(texSampler, uv + px * float2( 0,  1)).rgb);
-    float br = lum(image.Sample(texSampler, uv + px * float2( 1,  1)).rgb);
 
-    float gx = -tl - 2.0 * l_ - bl + tr + 2.0 * r_ + br;
-    float gy = -tl - 2.0 * t_ - tr + bl + 2.0 * b_ + br;
-    float edge = sqrt(gx * gx + gy * gy);
+    /* Multi-radius Sobel: combine fine + coarse edges for a thicker look */
+    float thick_mul = 1.0 + drive * 1.4 + kick_onset * 0.6;
+    float edge_fine = sobel_lum(uv, px);
+    float edge_coarse = sobel_lum(uv, px * 2.0);
+    float edge = max(edge_fine, edge_coarse * 0.7);
 
-    /* Threshold + thickening (audio scales) */
-    float edge_v = smoothstep(thresh, thresh + thick * 80.0, edge);
+    /* Threshold & smoothstep softening */
+    float thresh = threshold * (1.0 - kick_onset * 0.35);
+    float thick = edge_thickness * thick_mul;
+    float edge_v = smoothstep(thresh, thresh + thick * 60.0, edge);
 
-    /* Invert on beat */
+    /* Optional invert on beat */
     float invert_flag = (invert_on_beat > 0.5 && beat > 0.6) ? 1.0 : 0.0;
     float v = abs(edge_v - invert_flag);
 
-    /* Choose output: outline color from palette */
     float3 col_outline = palette_outline((int)palette_id, beat * drive);
-    float3 col = col_outline * v;
+    float3 col;
 
-    /* Add bottom darkness so edges stand out */
-    col -= 0.02 * (1.0 - v);
+    if (sm == 0) {
+        /* Pure outline on black */
+        col = col_outline * v;
+    } else if (sm == 1) {
+        /* Outline + posterized fill (cel-shading look) */
+        float4 src = image.Sample(texSampler, uv);
+        float3 poster = posterize(src.rgb, 4.0);
+        /* Use luma-driven palette mix as fill */
+        float L = lum(poster);
+        float3 fill = lerp(float3(0.06, 0.06, 0.06), col_outline * 0.65, L);
+        col = lerp(fill, col_outline, v);
+    } else if (sm == 2) {
+        /* Inverse: light areas → outlined, rest = inverted source */
+        float4 src = image.Sample(texSampler, uv);
+        float3 inv = float3(1, 1, 1) - src.rgb;
+        col = lerp(inv * 0.55, col_outline, v);
+    } else {
+        /* Color bleed: outline + 1-pixel chromatic aberration around edges */
+        float4 src = image.Sample(texSampler, uv);
+        float r_off = sobel_lum(uv + px * float2(2.0, 0.0), px);
+        float b_off = sobel_lum(uv - px * float2(2.0, 0.0), px);
+        float3 bleed = float3(r_off, edge, b_off) * 0.5;
+        col = lerp(src.rgb * 0.4, col_outline, v) + bleed * 0.4;
+    }
+
+    /* Subtle scanline tint for cinematic feel */
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    col -= scan * 0.04 * v;
+
+    /* Onset whitewash */
+    col += float3(1, 1, 1) * onset_strength * v * 0.25;
+
     col = saturate(col);
 
-    return float4(col, v);
+    /* Alpha = max(channel) for proper transparent compositing */
+    float a_out = (sm == 0) ? v : max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
 technique Draw {

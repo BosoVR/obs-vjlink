@@ -6,7 +6,6 @@
 
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
