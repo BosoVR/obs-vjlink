@@ -105,7 +105,7 @@ float4 PSConcretePulse(VertInOut vert_in) : TARGET
     float angle_norm = (ang + 3.14159) / 6.28318;
 
     float crack_intensity = 0.0;
-    [unroll(12)] for (int c = 0; c < 12; c++) {
+    for (int c = 0; c < 12; c++) {
         if ((float)c >= crack_count) break;
         float fc = (float)c;
         float seed = fc * 13.7;

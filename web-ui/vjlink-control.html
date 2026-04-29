@@ -1117,6 +1117,21 @@
     gap: 6px;
     margin-top: 8px;
   }
+  /* Size variants — adjust columns + base font size */
+  .pad-grid.size-sm { grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .pad-grid.size-md { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .pad-grid.size-lg { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pad-grid.size-xl { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .pad-grid.size-sm .perf-pad { padding: 4px 2px; font-size: 9px; }
+  .pad-grid.size-sm .pad-key { font-size: 11px; }
+  .pad-grid.size-sm .pad-name { font-size: 8px; }
+  .pad-grid.size-lg .perf-pad { padding: 10px 6px; font-size: 12px; }
+  .pad-grid.size-lg .pad-key { font-size: 18px; }
+  .pad-grid.size-lg .pad-name { font-size: 11px; }
+  .pad-grid.size-xl .perf-pad { padding: 14px 8px; font-size: 14px; }
+  .pad-grid.size-xl .pad-key { font-size: 22px; }
+  .pad-grid.size-xl .pad-name { font-size: 13px; }
+
   .perf-pad {
     aspect-ratio: 1;
     background: var(--surface2);
@@ -1516,15 +1531,6 @@
       </div>
     </div>
 
-    <!-- ===== PERFORMANCE PADS ===== -->
-    <div class="pro-panel" style="margin-top:12px">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-        <span>Performance Pads</span>
-        <span style="font-size:9px;color:var(--text-dim);font-weight:400">Hotkeys 1-9, Q W E R</span>
-      </div>
-      <div class="pad-grid" id="padGrid"></div>
-    </div>
-
     <!-- ===== STROBE SAFETY ===== -->
     <div class="pro-panel pro-only" style="margin-top:12px">
       <div class="section-title">Strobe Safety</div>
@@ -1549,6 +1555,37 @@
       </div>
     </div>
 
+    <!-- ===== PERFORMANCE PADS ===== -->
+    <div class="pro-panel" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span>Performance Pads</span>
+        <div style="display:flex;gap:8px;align-items:center;font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0.4px">
+          <label style="display:flex;align-items:center;gap:4px">
+            Count
+            <select id="padCountSel" onchange="setPadCount(parseInt(this.value))"
+              style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px">
+              <option value="4">4</option>
+              <option value="8">8</option>
+              <option value="12" selected>12</option>
+              <option value="16">16</option>
+              <option value="24">24</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px">
+            Size
+            <select id="padSizeSel" onchange="setPadSize(this.value)"
+              style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:4px;font-size:10px">
+              <option value="sm">S</option>
+              <option value="md" selected>M</option>
+              <option value="lg">L</option>
+              <option value="xl">XL</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="pad-grid" id="padGrid"></div>
+    </div>
+
     <!-- Media / Source Triggers -->
     <div class="media-section">
       <div class="section-title">Media & Source Triggers</div>
@@ -1557,20 +1594,6 @@
         <button class="media-tab" onclick="switchMediaTab('media')" id="tabMedia">Media Layers</button>
       </div>
       <div id="mediaContent">
-        <!-- Filled by JS -->
-      </div>
-    </div>
-
-    <!-- Presets -->
-    <div class="presets-section">
-      <div class="presets-header">
-        <div class="section-title" style="margin:0">Presets</div>
-        <div class="preset-nav">
-          <button class="preset-nav-btn" onclick="sendPrevPreset()" title="Previous">&#9664;</button>
-          <button class="preset-nav-btn" onclick="sendNextPreset()" title="Next">&#9654;</button>
-        </div>
-      </div>
-      <div class="presets-grid" id="presetsGrid">
         <!-- Filled by JS -->
       </div>
     </div>
@@ -1592,8 +1615,6 @@
     <div class="section-title">Controls</div>
 
     <div class="quick-actions">
-      <button class="quick-btn" onclick="sendPrevPreset()">&#9664; Prev Preset</button>
-      <button class="quick-btn" onclick="sendNextPreset()">Next Preset &#9654;</button>
       <button class="quick-btn" onclick="selectEffect('')" style="color:var(--red);border-color:var(--red)">Clear Effect</button>
       <button class="quick-btn" onclick="fetchSceneSources()">Refresh Sources</button>
     </div>
@@ -3516,6 +3537,7 @@ function setActivePresetByIndex(idx) {
 
 function renderPresets() {
   const grid = document.getElementById('presetsGrid');
+  if (!grid) return; /* Presets section was removed from UI */
   grid.innerHTML = '';
   builtinPresets.forEach((p, i) => {
     const card = document.createElement('div');
@@ -4614,15 +4636,28 @@ function setStrobeSafetyFromUI() {
 }
 
 /* ===== Performance Pads ===== */
-const PAD_HOTKEYS = ['1','2','3','4','5','6','7','8','9','q','w','e'];
-const PAD_STORAGE_KEY = 'vjlink_pads_v1';
-let perfPads = []; /* [{ effect, params, palette }] x 12 */
+const PAD_HOTKEYS = ['1','2','3','4','5','6','7','8','9','q','w','e','r','t','z','u','i','o','p','a','s','d','f','g'];
+const PAD_STORAGE_KEY = 'vjlink_pads_v2';
+const PAD_PREFS_KEY = 'vjlink_pad_prefs_v1';
+let perfPads = []; /* [{ effect, params, palette }] x padCount */
+let padCount = 12; /* configurable: 4 / 8 / 12 / 16 / 24 */
+let padSize = 'md'; /* sm / md / lg / xl */
 
 function loadPerfPads() {
+  /* Restore preferences first */
   try {
-    perfPads = JSON.parse(localStorage.getItem(PAD_STORAGE_KEY) || 'null') || new Array(12).fill(null);
-  } catch (e) { perfPads = new Array(12).fill(null); }
-  if (perfPads.length < 12) perfPads = perfPads.concat(new Array(12 - perfPads.length).fill(null));
+    const prefs = JSON.parse(localStorage.getItem(PAD_PREFS_KEY) || '{}');
+    if (typeof prefs.count === 'number' && [4,8,12,16,24].includes(prefs.count))
+      padCount = prefs.count;
+    if (typeof prefs.size === 'string' && ['sm','md','lg','xl'].includes(prefs.size))
+      padSize = prefs.size;
+  } catch (e) {}
+
+  try {
+    perfPads = JSON.parse(localStorage.getItem(PAD_STORAGE_KEY) || 'null') || [];
+  } catch (e) { perfPads = []; }
+  /* Ensure correct length without losing data */
+  while (perfPads.length < padCount) perfPads.push(null);
 }
 
 function savePerfPads() {
@@ -4630,17 +4665,47 @@ function savePerfPads() {
   catch (e) {}
 }
 
+function savePadPrefs() {
+  try { localStorage.setItem(PAD_PREFS_KEY, JSON.stringify({ count: padCount, size: padSize })); }
+  catch (e) {}
+}
+
+function setPadCount(n) {
+  if (![4,8,12,16,24].includes(n)) return;
+  padCount = n;
+  while (perfPads.length < padCount) perfPads.push(null);
+  /* Don't truncate stored data — keep it in case user grows pad count again */
+  savePadPrefs();
+  savePerfPads();
+  renderPerfPads();
+}
+
+function setPadSize(size) {
+  if (!['sm','md','lg','xl'].includes(size)) return;
+  padSize = size;
+  savePadPrefs();
+  renderPerfPads();
+}
+
 function renderPerfPads() {
   const grid = document.getElementById('padGrid');
   if (!grid) return;
+  grid.className = 'pad-grid size-' + padSize;
   grid.innerHTML = '';
-  for (let i = 0; i < 12; i++) {
-    const pad = perfPads[i];
+  /* Sync the dropdowns to current state */
+  const cSel = document.getElementById('padCountSel');
+  const sSel = document.getElementById('padSizeSel');
+  if (cSel && cSel.value !== String(padCount)) cSel.value = String(padCount);
+  if (sSel && sSel.value !== padSize) sSel.value = padSize;
+
+  for (let i = 0; i < padCount; i++) {
+    const pad = perfPads[i] || null;
     const div = document.createElement('button');
     div.className = 'perf-pad' + (pad ? ' assigned' : '');
     div.dataset.padIdx = i;
+    const hk = (i < PAD_HOTKEYS.length) ? PAD_HOTKEYS[i].toUpperCase() : '';
     const name = pad ? (effectNames[pad.effect] || pad.effect) : 'EMPTY';
-    div.innerHTML = `<span class="pad-key">${PAD_HOTKEYS[i].toUpperCase()}</span>
+    div.innerHTML = `<span class="pad-key">${hk}</span>
       <span class="pad-name">${name}</span>`;
     div.title = pad ? `Click to trigger | Right-click to clear` : 'Click to assign current effect';
     div.onclick = () => triggerPad(i);
@@ -4693,15 +4758,15 @@ function clearPad(idx) {
   renderPerfPads();
 }
 
-/* Hotkey wiring for pads */
+/* Hotkey wiring for pads (only the first padCount hotkeys are active) */
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   const key = e.key.toLowerCase();
   const idx = PAD_HOTKEYS.indexOf(key);
-  if (idx >= 0) { e.preventDefault(); triggerPad(idx); return; }
-  /* Also: B for blackout, T for tap BPM, P for prev preset, N for next preset */
+  if (idx >= 0 && idx < padCount) { e.preventDefault(); triggerPad(idx); return; }
+  /* Global hotkeys: B = blackout, Y = tap BPM (T conflicts with pad slot 14) */
   if (key === 'b') { sendBlackout(); }
-  else if (key === 't') { sendRequest('TapBPM'); }
+  else if (key === 'y') { sendRequest('TapBPM'); }
 });
 
 /* ===== Header FFT visualizer + Beat Pulse ===== */
@@ -4925,7 +4990,6 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
 
 // === Init ===
 setUIMode(uiMode);
-renderPresets();
 renderBandEffects();
 renderMediaContent();
 loadPerfPads();

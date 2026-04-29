@@ -1,7 +1,8 @@
 /*
- * VJLink - Industrial Strobe Tunnel (Pro)
- * Stark B/W tunnel with synchronized hard strobes on beat subdivisions.
- * Hardtechno/Berghain — minimalist, brutalist, kick-locked.
+ * VJLink - Industrial Tunnel (Pro v2)
+ * Calm forward motion through a concrete/steel tunnel.
+ * Concentric depth rings pulse with kicks (no rapid flicker).
+ * Subtle palette accent on bass — built so it does NOT cause migraine.
  */
 
 uniform float4x4 ViewProj;
@@ -16,12 +17,12 @@ uniform float     beat_1_16;
 uniform float     kick_onset;
 uniform float     palette_id;
 
-uniform float tunnel_speed;       /* 0.1-5, default 1.5 */
-uniform float ring_count;         /* 4-32, default 16 */
-uniform float strobe_amount;      /* 0-2, default 1.0 */
-uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 3=1/16 */
+uniform float tunnel_speed;       /* 0.1-3, default 0.6 */
+uniform float ring_count;         /* 6-32, default 14 */
+uniform float kick_punch;         /* 0-2, default 1.0 — depth pulse on kick */
+uniform float beat_sync;          /* 0=off 1=1/4 2=1/8 3=1/16 */
 uniform float audio_drive;        /* 0-2, default 1.0 */
-uniform float distortion;         /* 0-1, default 0.2 */
+uniform float color_amount;       /* 0-1, default 0.4 — palette tint over base */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -34,19 +35,30 @@ VertInOut VSDefault(VertInOut vert_in)
     return o;
 }
 
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
 float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
-
-float3 palette_strobe(int pid, float t) {
-    float3 white = float3(1.0, 1.0, 1.0);
-    if (pid == 1) return lerp(white, float3(1.0, 0.05, 0.08), t);  /* Hardtechno red flash */
-    if (pid == 2) return lerp(white, float3(1.0, 0.35, 0.05), t);  /* Rawstyle orange */
-    if (pid == 3) return lerp(white, float3(0.7, 1.0, 0.05), t);   /* Acid */
-    if (pid == 4) return lerp(white, float3(0.05, 0.85, 1.0), t);  /* Cyber */
-    if (pid == 5) return white;                                       /* Mono */
-    return lerp(white, float3(0.95, 0.15, 0.6), t);                   /* Default magenta */
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
 }
 
-float4 PSIndustrialStrobeTunnel(VertInOut vert_in) : TARGET
+float3 palette_industrial(int pid) {
+    if (pid == 1) return float3(1.0, 0.10, 0.12);   /* Hardtechno red */
+    if (pid == 2) return float3(1.0, 0.42, 0.08);   /* Rawstyle orange */
+    if (pid == 3) return float3(0.65, 1.0, 0.10);   /* Acid */
+    if (pid == 4) return float3(0.10, 0.85, 1.0);   /* Cyber */
+    if (pid == 5) return float3(0.95, 0.95, 1.0);   /* Mono */
+    return float3(0.85, 0.45, 1.0);                  /* Default soft purple */
+}
+
+float4 PSIndustrialTunnel(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
     float aspect = resolution.x / max(resolution.y, 1.0);
@@ -54,70 +66,76 @@ float4 PSIndustrialStrobeTunnel(VertInOut vert_in) : TARGET
     p.x *= aspect;
 
     float bass = bands.x;
-    float beat = pow(1.0 - beat_phase, 4.0);
+    float lowmid = bands.y;
+    float drive = audio_drive * (0.7 + bass * 0.5);
 
-    float drive = audio_drive * (1.0 + bass * 0.8 + kick_onset * 1.4);
-    float spd = tunnel_speed * (1.0 + bass * 0.5);
-
-    /* Cylindrical tunnel coords with subtle distortion */
-    float r = length(p);
+    /* Polar tunnel coordinates */
+    float r = max(length(p), 0.001);
     float ang = atan2(p.y, p.x);
 
-    /* Audio-reactive bend */
-    if (distortion > 0.01) {
-        ang += sin(r * 4.0 + time * 0.5) * distortion * 0.15;
-    }
+    /* Forward depth — slow drift, gently bass-modulated */
+    float spd = max(tunnel_speed, 0.05) * (1.0 + bass * 0.4 + kick_onset * 0.25);
+    float depth = time * spd + 1.0 / r;
 
-    float u = ang / 6.28318;
-    float v = 1.0 / max(r, 0.05);
+    /* Concentric rings — soft, smooth, no harsh flicker */
+    float rings = ring_count;
+    float ring_phase = depth * rings * 0.08;
+    float ring_band = sin(ring_phase * 6.28318);
+    /* Make rings smooth (not square) — much easier on the eyes */
+    float ring_intensity = pow(0.5 + 0.5 * ring_band, 2.0);
 
-    /* Tunnel rings */
-    float ring_z = v * 0.5 + time * spd;
-    float ring_idx = floor(ring_z * ring_count);
-    float ring_f = frac(ring_z * ring_count);
-
-    /* Hard binary rings */
-    float ring_mask = step(0.5, ring_f);
-
-    /* Radial bars */
+    /* Soft radial bars (not strobing — just static texture rolling forward) */
     float bar_count = ring_count * 0.5;
-    float bar = step(0.5, frac(u * bar_count));
+    float radial = sin(ang * bar_count + depth * 0.5) * 0.5 + 0.5;
+    radial = pow(radial, 1.3);
 
-    /* Combine for grid pattern */
-    float grid = abs(ring_mask - bar);
+    /* Combine: cross-shaded grid, soft mix not XOR */
+    float grid = ring_intensity * 0.65 + radial * 0.35;
 
-    /* === Strobe sync === */
+    /* === Concrete/steel surface modulation === */
+    float surface_n = fbm(float2(ang * 4.0, depth * 2.5));
+    float surface = 0.55 + surface_n * 0.45;
+
+    /* Depth fade — close to camera dim, far away brighter (light at end) */
+    float depth_fade = smoothstep(0.0, 0.6, r) * smoothstep(2.5, 0.5, r);
+    float far_glow = smoothstep(0.5, 0.05, r);
+
+    /* === Color === */
+    /* Base monochrome — concrete grey */
+    float base_lum = grid * surface * depth_fade;
+    float3 col = float3(base_lum, base_lum, base_lum) * 0.85;
+
+    /* Add palette accent (subtle by default, can be cranked up) */
+    float3 accent = palette_industrial((int)palette_id);
+    col = lerp(col, col * (0.6 + accent * 1.4), color_amount);
+
+    /* === Beat-driven depth pulse (NO flicker, just smooth pulsing) === */
     float bs = beat_sync;
-    float strobe_phase;
-    if (bs < 0.5) strobe_phase = beat;
-    else if (bs < 1.5) strobe_phase = pow(1.0 - beat_1_4, 6.0);
-    else if (bs < 2.5) strobe_phase = pow(1.0 - beat_1_8, 6.0);
-    else strobe_phase = pow(1.0 - beat_1_16, 6.0);
+    float pulse_phase;
+    if (bs < 0.5)         pulse_phase = 0.0;                     /* off */
+    else if (bs < 1.5)    pulse_phase = pow(1.0 - beat_1_4, 4.0);
+    else if (bs < 2.5)    pulse_phase = pow(1.0 - beat_1_8, 4.0);
+    else                  pulse_phase = pow(1.0 - beat_1_16, 4.0);
 
-    /* Hard strobe gate */
-    float gate = step(0.65, strobe_phase * (0.7 + drive * 0.5));
-    float strobe = step(0.3, strobe_phase) * strobe_amount;
+    /* The pulse expands outward from the vanishing point — feels like a kick wave */
+    float pulse_r = pulse_phase * 1.6;
+    float pulse_ring = exp(-abs(r - pulse_r) * 6.0) * pulse_phase;
+    col += accent * pulse_ring * (0.4 + drive * 0.5) * kick_punch;
 
-    /* Color */
-    float3 col = float3(0.02, 0.02, 0.025);
+    /* Bright core glow at vanishing point */
+    float core = far_glow * (0.6 + bass * 0.4);
+    col += accent * core * 0.45;
+    col += far_glow * float3(0.9, 0.9, 1.0) * 0.18; /* white core */
 
-    /* Base tunnel grid */
-    float depth_fade = exp(-r * 0.4);
-    col += float3(grid, grid, grid) * depth_fade * 0.4;
-
-    /* Strobe flash makes pattern explode in brightness */
-    float3 flash_col = palette_strobe((int)palette_id, gate);
-    col += flash_col * grid * strobe * gate * 1.8 * (1.0 + drive * 0.5);
-
-    /* Center hot spot on kick */
-    float center = exp(-r * 3.5) * (kick_onset * 1.2 + bass * 0.3);
-    col += flash_col * center;
+    /* Subtle grain/dust */
+    float grain = hash21(uv * resolution * 0.5 + floor(time * 4.0)) * 0.025;
+    col += grain;
 
     /* Edge vignette */
-    col *= smoothstep(2.5, 0.8, r);
+    col *= smoothstep(2.4, 0.5, r);
 
-    /* Hard contrast (brutalist look) */
-    col = pow(col, float3(0.85, 0.85, 0.85));
+    /* HDR tonemap — keeps highlights smooth */
+    col = col / (1.0 + col * 0.45);
     col = saturate(col);
 
     float a_out = max(max(col.r, col.g), col.b);
@@ -127,6 +145,6 @@ float4 PSIndustrialStrobeTunnel(VertInOut vert_in) : TARGET
 technique Draw {
     pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader = PSIndustrialStrobeTunnel(vert_in);
+        pixel_shader = PSIndustrialTunnel(vert_in);
     }
 }
