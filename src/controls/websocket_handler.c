@@ -157,24 +157,37 @@ static void handle_set_effect_direct(obs_data_t *request_data,
 	struct vjlink_context *ctx = vjlink_get_context();
 	const char *effect_id = obs_data_get_string(request_data, "effect_id");
 
+	/* Optional quantize: 0=immediate, 1=next beat, 4=next bar, 8=next 2 bars */
+	int quantize = 0;
+	if (obs_data_has_user_value(request_data, "quantize")) {
+		quantize = (int)obs_data_get_int(request_data, "quantize");
+		if (quantize < 0) quantize = 0;
+		if (quantize > 32) quantize = 32;
+	}
+
 	if (!effect_id || !*effect_id) {
-		/* Empty = clear effect */
 		ctx->pending_effect[0] = '\0';
 		ctx->effect_pending = true;
+		ctx->pending_effect_quantize = quantize;
+		ctx->pending_effect_beat_anchor = ctx->beat_count;
 		ctx->active_preset_index = -1;
 		vjlink_preset_set_index(-1);
 		obs_data_set_bool(response_data, "success", true);
-		blog(LOG_INFO, "[VJLink] WebSocket: effect cleared");
+		obs_data_set_int(response_data, "quantize", quantize);
+		blog(LOG_INFO, "[VJLink] WebSocket: effect cleared (q=%d)", quantize);
 		return;
 	}
 
 	strncpy(ctx->pending_effect, effect_id,
 	        sizeof(ctx->pending_effect) - 1);
 	ctx->effect_pending = true;
+	ctx->pending_effect_quantize = quantize;
+	ctx->pending_effect_beat_anchor = ctx->beat_count;
 	ctx->active_preset_index = -1;
 	vjlink_preset_set_index(-1);
 	obs_data_set_bool(response_data, "success", true);
-	blog(LOG_INFO, "[VJLink] WebSocket: effect set to '%s'", effect_id);
+	obs_data_set_int(response_data, "quantize", quantize);
+	blog(LOG_INFO, "[VJLink] WebSocket: effect '%s' (q=%d)", effect_id, quantize);
 }
 
 static void handle_set_param(obs_data_t *request_data,
@@ -327,6 +340,26 @@ static void handle_get_state(obs_data_t *request_data,
 	obs_data_set_double(response_data, "beat_1_4", (double)ctx->beat_1_4);
 	obs_data_set_double(response_data, "beat_1_8", (double)ctx->beat_1_8);
 	obs_data_set_double(response_data, "beat_1_16", (double)ctx->beat_1_16);
+
+	/* Shader compile error log + total count for UI badge */
+	obs_data_set_int(response_data, "shader_error_count",
+	                 ctx->shader_error_count);
+	obs_data_array_t *err_arr = obs_data_array_create();
+	for (int i = 0; i < 8; i++) {
+		if (ctx->shader_errors[i][0] == '\0') continue;
+		obs_data_t *e = obs_data_create();
+		obs_data_set_string(e, "msg", ctx->shader_errors[i]);
+		obs_data_array_push_back(err_arr, e);
+		obs_data_release(e);
+	}
+	obs_data_set_array(response_data, "shader_errors", err_arr);
+	obs_data_array_release(err_arr);
+
+	/* Pending-effect state for UI quantize indicator */
+	obs_data_set_bool(response_data, "effect_pending",
+	                  (bool)ctx->effect_pending);
+	obs_data_set_int(response_data, "effect_quantize",
+	                 ctx->pending_effect_quantize);
 
 	/* LFO values */
 	obs_data_t *lfo_data = obs_data_create();
@@ -757,6 +790,51 @@ static void handle_set_audio_controls(obs_data_t *request_data,
 	                    (double)ctx->audio_fall_rate);
 }
 
+/* Pending chain replacement, applied on render thread */
+struct vjlink_pending_chain_slot {
+	char effect_id[64];
+	int  blend_mode; /* enum vjlink_blend_mode */
+	float blend_alpha;
+};
+
+static void handle_set_chain(obs_data_t *request_data,
+                              obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	struct vjlink_context *ctx = vjlink_get_context();
+
+	obs_data_array_t *arr = obs_data_get_array(request_data, "effects");
+	if (!arr) {
+		obs_data_set_bool(response_data, "success", false);
+		obs_data_set_string(response_data, "error", "Missing 'effects' array");
+		return;
+	}
+
+	size_t n = obs_data_array_count(arr);
+	if (n > 8) n = 8;
+
+	/* Stash the new chain in the context — it will be applied on
+	 * the render thread (we can't touch the compositor here). */
+	ctx->pending_chain_count = (int)n;
+	for (size_t i = 0; i < n; i++) {
+		obs_data_t *e = obs_data_array_item(arr, i);
+		const char *id = obs_data_get_string(e, "effect_id");
+		strncpy(ctx->pending_chain[i].effect_id, id ? id : "",
+		        sizeof(ctx->pending_chain[i].effect_id) - 1);
+		ctx->pending_chain[i].effect_id[63] = '\0';
+		ctx->pending_chain[i].blend_mode = (int)obs_data_get_int(e, "blend_mode");
+		ctx->pending_chain[i].blend_alpha = (float)obs_data_get_double(e, "blend_alpha");
+		if (ctx->pending_chain[i].blend_alpha <= 0.0f)
+			ctx->pending_chain[i].blend_alpha = 1.0f;
+		obs_data_release(e);
+	}
+	ctx->pending_chain_replace = true;
+	obs_data_array_release(arr);
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "chain_length", (int)n);
+}
+
 static void handle_set_palette(obs_data_t *request_data,
                                 obs_data_t *response_data, void *priv)
 {
@@ -927,6 +1005,8 @@ static void register_all_requests(void)
 	                        handle_set_sensitivity, NULL);
 	vendor_request_register(g_vendor, "SetAudioControls",
 	                        handle_set_audio_controls, NULL);
+	vendor_request_register(g_vendor, "SetChain",
+	                        handle_set_chain, NULL);
 	vendor_request_register(g_vendor, "SetPalette",
 	                        handle_set_palette, NULL);
 	vendor_request_register(g_vendor, "SetMacros",

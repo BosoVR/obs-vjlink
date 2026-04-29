@@ -1194,6 +1194,19 @@
     box-shadow: 0 0 14px 4px rgba(239,68,68,0.6);
   }
 
+  /* === MIDI learn mode visual cue === */
+  body.midi-learn-active .perf-pad,
+  body.midi-learn-active .pal-btn,
+  body.midi-learn-active .macro-knob input,
+  body.midi-learn-active #qBtn0,
+  body.midi-learn-active #qBtn1,
+  body.midi-learn-active #qBtn4,
+  body.midi-learn-active #qBtn8,
+  body.midi-learn-active #blackoutBtn {
+    cursor: crosshair !important;
+    outline: 1px dashed var(--accent2);
+  }
+
   /* === Mini FFT visualizer in header === */
   .header-fft {
     display: flex;
@@ -1544,6 +1557,77 @@
         <div style="font-size:10px;color:var(--text-dim);margin-top:6px;letter-spacing:0.5px">
           Reduces peak brightness on flash/strobe effects to protect photosensitive viewers.
         </div>
+      </div>
+    </div>
+
+    <!-- ===== EFFECT CHAIN (Pro stack) ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">
+        <span>Effect Chain</span>
+        <span style="font-size:9px;color:var(--text-dim);font-weight:400;letter-spacing:0.4px;text-transform:none">Generator → Filters → Post-FX (top of list = top of stack)</span>
+      </div>
+      <div id="effectChainList" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+        <button class="mini-btn" onclick="chainAddSlot()">+ Add Slot</button>
+        <button class="mini-btn" onclick="chainClear()" style="color:var(--red);border-color:var(--red)">Clear</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        Stack up to 4 effects. Each slot has its own blend mode (Normal/Add/Multiply/Screen) and alpha.
+        Recommended: Generator at slot 0, Filters/Post-FX above.
+      </div>
+    </div>
+
+    <!-- ===== BEAT QUANTIZE ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Beat Quantize</span>
+        <span id="quantizePending" style="font-size:9px;font-weight:600;color:var(--green);letter-spacing:0.4px"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px">
+        <button class="mini-btn" onclick="setQuantize(0)" id="qBtn0">NOW</button>
+        <button class="mini-btn" onclick="setQuantize(1)" id="qBtn1">1/4</button>
+        <button class="mini-btn" onclick="setQuantize(4)" id="qBtn4">BAR</button>
+        <button class="mini-btn" onclick="setQuantize(8)" id="qBtn8">2 BAR</button>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        New effect switches wait for the next musical boundary. Resolume calls this "beat snapping".
+      </div>
+    </div>
+
+    <!-- ===== MIDI ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>MIDI Control</span>
+        <span id="midiStatus" style="font-size:9px;font-weight:600;color:var(--text-dim);letter-spacing:0.4px">DISCONNECTED</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+        <button class="mini-btn" id="midiConnectBtn" onclick="midiConnect()">Connect MIDI</button>
+        <button class="mini-btn" id="midiLearnBtn" onclick="midiToggleLearn()">Learn Mode</button>
+      </div>
+      <div id="midiDeviceList" style="margin-top:6px;font-size:10px;color:var(--text-dim);line-height:1.4"></div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        After connect: enable LEARN, then click any pad/macro/palette button and move a MIDI control to bind it. APC mini, MidiMix, Launchpad all supported.
+      </div>
+    </div>
+
+    <!-- ===== HOT RELOAD ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Shader Errors</span>
+        <span id="shaderErrorBadge" style="font-size:9px;font-weight:700;color:var(--green);letter-spacing:0.4px;padding:2px 6px;background:var(--surface2);border-radius:4px">0</span>
+      </div>
+      <div id="shaderErrorList" style="margin-top:6px;font-size:10px;color:var(--text-dim);line-height:1.4;max-height:120px;overflow-y:auto;font-family:monospace"></div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:0.3px;line-height:1.4">
+        Backend hot-reloads .effect files automatically. Compile errors appear here.
+      </div>
+    </div>
+
+    <!-- ===== RECORDING NOTE ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px;border-color:var(--cyan)">
+      <div class="section-title">Recording</div>
+      <div style="font-size:11px;color:var(--text);margin-top:6px;line-height:1.5">
+        Use OBS' built-in <strong>Source Record</strong> on the <code>VJLink Compositor</code> source. Right-click → <em>Filters</em> → add <em>Source Record</em>.
+        OBS handles encoding (HEVC/AV1/H.264) at higher quality than any in-plugin export could.
       </div>
     </div>
 
@@ -5310,6 +5394,315 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
 })();
 
 /* ============================================================
+ *  v1.2.0: Effect Chain UI + Beat Quantize + MIDI + Hot-reload
+ * ============================================================ */
+
+/* ===== Effect Chain ===== */
+const BLEND_MODES = ['Normal', 'Add', 'Multiply', 'Screen'];
+let effectChain = [{ effect: '', blend: 0, alpha: 1.0 }]; /* [{ effect, blend, alpha }] */
+
+function renderEffectChain() {
+  const list = document.getElementById('effectChainList');
+  if (!list) return;
+  list.innerHTML = '';
+
+  let optionsHtml = '<option value="">— Select —</option>';
+  Object.entries(effectCategories).forEach(([catKey, cat]) => {
+    optionsHtml += `<optgroup label="${cat.label}">`;
+    cat.effects.forEach(id => {
+      const effName = effectNames[id] || id;
+      optionsHtml += `<option value="${id}">${effName}</option>`;
+    });
+    optionsHtml += '</optgroup>';
+  });
+
+  effectChain.forEach((slot, idx) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:grid;grid-template-columns:auto 1fr auto auto auto auto;gap:4px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 6px';
+    div.innerHTML = `
+      <span style="font-size:10px;font-weight:700;color:var(--text-dim);width:18px;text-align:center">${idx + 1}</span>
+      <select onchange="chainSetEffect(${idx}, this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:11px;min-width:0">
+        ${optionsHtml.replace(`value="${slot.effect}"`, `value="${slot.effect}" selected`)}
+      </select>
+      <select onchange="chainSetBlend(${idx}, parseInt(this.value))" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 4px;border-radius:4px;font-size:10px">
+        ${BLEND_MODES.map((m, i) => `<option value="${i}" ${i === slot.blend ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <input type="range" min="0" max="100" value="${slot.alpha * 100}" step="5"
+        oninput="chainSetAlpha(${idx}, this.value/100)"
+        style="width:60px"
+        title="Alpha: ${slot.alpha.toFixed(2)}">
+      <button onclick="chainMove(${idx}, -1)" title="Move down (toward bottom)" ${idx === 0 ? 'disabled' : ''}
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:2px 5px;border-radius:3px;font-size:9px;cursor:pointer">↓</button>
+      <button onclick="chainRemove(${idx})" title="Remove"
+        style="background:var(--surface);border:1px solid var(--red);color:var(--red);padding:2px 5px;border-radius:3px;font-size:9px;cursor:pointer">✕</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function chainSetEffect(idx, eid) {
+  effectChain[idx].effect = eid;
+  chainSync();
+}
+function chainSetBlend(idx, mode) {
+  effectChain[idx].blend = mode;
+  chainSync();
+}
+function chainSetAlpha(idx, a) {
+  effectChain[idx].alpha = a;
+  chainSync();
+}
+function chainAddSlot() {
+  if (effectChain.length >= 4) return;
+  effectChain.push({ effect: '', blend: 1, alpha: 1.0 }); /* Add mode for stacked layer */
+  renderEffectChain();
+  chainSync();
+}
+function chainRemove(idx) {
+  effectChain.splice(idx, 1);
+  if (effectChain.length === 0) effectChain.push({ effect: '', blend: 0, alpha: 1.0 });
+  renderEffectChain();
+  chainSync();
+}
+function chainMove(idx, dir) {
+  const n = idx + dir;
+  if (n < 0 || n >= effectChain.length) return;
+  const tmp = effectChain[idx];
+  effectChain[idx] = effectChain[n];
+  effectChain[n] = tmp;
+  renderEffectChain();
+  chainSync();
+}
+function chainClear() {
+  effectChain = [{ effect: '', blend: 0, alpha: 1.0 }];
+  renderEffectChain();
+  chainSync();
+}
+async function chainSync() {
+  /* Send to backend */
+  const effects = effectChain.filter(s => s.effect).map(s => ({
+    effect_id: s.effect,
+    blend_mode: s.blend,
+    blend_alpha: s.alpha,
+  }));
+  await sendRequest('SetChain', { effects });
+}
+
+/* ===== Beat Quantize ===== */
+let activeQuantize = 0;
+function setQuantize(q) {
+  activeQuantize = q;
+  ['qBtn0','qBtn1','qBtn4','qBtn8'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) {
+      b.style.background = '';
+      b.style.color = '';
+    }
+  });
+  const map = { 0: 'qBtn0', 1: 'qBtn1', 4: 'qBtn4', 8: 'qBtn8' };
+  const btn = document.getElementById(map[q]);
+  if (btn) {
+    btn.style.background = 'var(--accent)';
+    btn.style.color = 'white';
+  }
+}
+setQuantize(0);
+
+/* Hook selectEffect to include quantize */
+const _origSelectEffect_v120 = (typeof selectEffect === 'function') ? selectEffect : null;
+if (_origSelectEffect_v120) {
+  selectEffect = async function(eid) {
+    /* When chain is active (more than just slot 0), don't override via SetEffect */
+    if (effectChain.filter(s => s.effect).length > 1) {
+      effectChain[0].effect = eid;
+      renderEffectChain();
+      chainSync();
+      activeEffect = eid;
+      renderEffects();
+      renderParams();
+      return;
+    }
+    /* Lock polling */
+    effectClickLock = true;
+    if (effectClickTimer) clearTimeout(effectClickTimer);
+    effectClickTimer = setTimeout(() => { effectClickLock = false; }, 3000);
+
+    if (activeEffect === eid) {
+      activeEffect = '';
+      await sendRequest('SetEffect', { effect_id: '', quantize: activeQuantize });
+      renderParams();
+    } else {
+      activeEffect = eid;
+      await sendRequest('SetEffect', { effect_id: eid, quantize: activeQuantize });
+      renderParams();
+    }
+    renderEffects();
+  };
+}
+
+function updateQuantizePending(state) {
+  const lbl = document.getElementById('quantizePending');
+  if (!lbl) return;
+  if (state.effect_pending && state.effect_quantize > 0) {
+    const q = state.effect_quantize;
+    const txt = q === 1 ? 'Waiting for next beat'
+              : q === 4 ? 'Waiting for next bar'
+              : q === 8 ? 'Waiting for next 2 bars'
+              : 'Waiting for ' + q + ' beats';
+    lbl.textContent = txt;
+    lbl.style.color = 'var(--orange)';
+  } else {
+    lbl.textContent = '';
+  }
+}
+
+/* ===== Web MIDI Support ===== */
+const MIDI_STATE = {
+  access: null,
+  inputs: [],
+  bindings: {},  /* "ccChannel:ccNumber" -> { type: 'macro'|'pad'|'palette'|'blackout'|'tap', target: ... } */
+  learnTarget: null,
+  learnMode: false,
+  storageKey: 'vjlink_midi_v1',
+};
+
+function midiLoad() {
+  try {
+    const raw = localStorage.getItem(MIDI_STATE.storageKey);
+    if (raw) MIDI_STATE.bindings = JSON.parse(raw) || {};
+  } catch (e) {}
+}
+function midiSave() {
+  try { localStorage.setItem(MIDI_STATE.storageKey, JSON.stringify(MIDI_STATE.bindings)); } catch (e) {}
+}
+midiLoad();
+
+async function midiConnect() {
+  if (!navigator.requestMIDIAccess) {
+    alert('Web MIDI not supported in this browser. Use Chrome / Edge / Opera.');
+    return;
+  }
+  try {
+    MIDI_STATE.access = await navigator.requestMIDIAccess();
+    MIDI_STATE.inputs = [...MIDI_STATE.access.inputs.values()];
+    MIDI_STATE.inputs.forEach(input => {
+      input.onmidimessage = onMidiMessage;
+    });
+    MIDI_STATE.access.onstatechange = (e) => {
+      MIDI_STATE.inputs = [...MIDI_STATE.access.inputs.values()];
+      MIDI_STATE.inputs.forEach(input => { input.onmidimessage = onMidiMessage; });
+      midiUpdateUi();
+    };
+    midiUpdateUi();
+  } catch (e) {
+    alert('MIDI access denied: ' + e.message);
+  }
+}
+
+function midiUpdateUi() {
+  const status = document.getElementById('midiStatus');
+  const list = document.getElementById('midiDeviceList');
+  if (!status || !list) return;
+  const count = MIDI_STATE.inputs.length;
+  status.textContent = count > 0 ? count + ' DEVICE(S)' : 'NO DEVICES';
+  status.style.color = count > 0 ? 'var(--green)' : 'var(--text-dim)';
+  list.innerHTML = MIDI_STATE.inputs.map(i =>
+    `<div>• ${i.manufacturer || ''} ${i.name}</div>`
+  ).join('') || '<div style="color:var(--text-dim)">Click Connect MIDI to scan devices.</div>';
+  list.innerHTML += `<div style="margin-top:4px;color:var(--accent2)">Bindings: ${Object.keys(MIDI_STATE.bindings).length}</div>`;
+}
+
+function midiToggleLearn() {
+  MIDI_STATE.learnMode = !MIDI_STATE.learnMode;
+  const btn = document.getElementById('midiLearnBtn');
+  if (btn) {
+    btn.style.background = MIDI_STATE.learnMode ? 'var(--accent)' : '';
+    btn.style.color = MIDI_STATE.learnMode ? 'white' : '';
+    btn.textContent = MIDI_STATE.learnMode ? 'LEARNING...' : 'Learn Mode';
+  }
+  if (MIDI_STATE.learnMode) {
+    /* Wire up click-to-bind for binding-eligible elements */
+    document.body.classList.add('midi-learn-active');
+  } else {
+    document.body.classList.remove('midi-learn-active');
+    MIDI_STATE.learnTarget = null;
+  }
+}
+
+function midiSetLearnTarget(target) {
+  if (!MIDI_STATE.learnMode) return;
+  MIDI_STATE.learnTarget = target;
+}
+
+function onMidiMessage(e) {
+  const [status, data1, data2] = e.data;
+  const channel = status & 0x0F;
+  const cmd = status & 0xF0;
+  /* CC message (0xB0) or NoteOn (0x90) */
+  if (cmd !== 0xB0 && cmd !== 0x90) return;
+  const isNote = (cmd === 0x90);
+  const key = (isNote ? 'n' : 'c') + channel + ':' + data1;
+
+  if (MIDI_STATE.learnMode && MIDI_STATE.learnTarget) {
+    /* Bind */
+    MIDI_STATE.bindings[key] = MIDI_STATE.learnTarget;
+    midiSave();
+    midiUpdateUi();
+    /* Auto-exit learn for this binding */
+    MIDI_STATE.learnTarget = null;
+    return;
+  }
+
+  /* Trigger binding */
+  const binding = MIDI_STATE.bindings[key];
+  if (!binding) return;
+  /* For notes: trigger only on velocity > 0 */
+  if (isNote && data2 === 0) return;
+
+  const v = data2 / 127;
+  if (binding.type === 'macro') {
+    const ids = ['macroEnergy','macroChaos','macroSpeed','macroColor'];
+    const slider = document.getElementById(ids[binding.target] || '');
+    if (slider) {
+      slider.value = Math.round(v * 100);
+      slider.dispatchEvent(new Event('input'));
+    }
+  } else if (binding.type === 'pad') {
+    triggerPad(binding.target);
+  } else if (binding.type === 'palette') {
+    setPalette(binding.target);
+  } else if (binding.type === 'blackout') {
+    sendBlackout();
+  } else if (binding.type === 'tap') {
+    sendRequest('TapBPM');
+  } else if (binding.type === 'quantize') {
+    setQuantize(binding.target);
+  }
+}
+
+/* ===== Hot-reload + Shader Errors ===== */
+let lastErrorCount = -1;
+function updateShaderErrors(state) {
+  const badge = document.getElementById('shaderErrorBadge');
+  const list = document.getElementById('shaderErrorList');
+  if (!badge || !list) return;
+  const count = state.shader_error_count || 0;
+  const errors = state.shader_errors || [];
+  badge.textContent = count;
+  badge.style.color = count > 0 ? 'var(--red)' : 'var(--green)';
+  badge.style.background = count > 0 ? 'rgba(239,68,68,0.15)' : 'var(--surface2)';
+  if (count !== lastErrorCount) {
+    list.innerHTML = errors.length === 0
+      ? '<div style="color:var(--green)">No shader errors. ✓</div>'
+      : errors.slice(-5).reverse().map(e =>
+          `<div style="padding:3px 0;border-bottom:1px solid var(--border)">${e.msg || ''}</div>`
+        ).join('');
+    lastErrorCount = count;
+  }
+}
+
+
+/* ============================================================
  *  VJ AI — statistical learning of user style.
  *
  *  Strategy: bucket the audio state (BPM, energy, treble) into
@@ -5643,17 +6036,78 @@ function updateDiagnostics(state) {
   }
 }
 
-/* Wrap updateState to drive diagnostics + auto-vj + VJ AI */
+/* Wrap updateState to drive diagnostics + auto-vj + VJ AI + v1.2 features */
 const _origUpdateState_v110 = (typeof updateState === 'function') ? updateState : null;
 if (_origUpdateState_v110) {
   updateState = function(state) {
     _origUpdateState_v110(state);
     updateDiagnostics(state);
+    updateShaderErrors(state);
+    updateQuantizePending(state);
     /* Auto-VJ runs only when AI is OFF (so they don't fight) */
     if (VJ_AI.mode === 'off') {
       tickAutoVj(state);
     }
     tickVjAi(state);
+  };
+}
+
+/* MIDI: wire learn-target click handlers */
+function _midiAttachClickListener(elementId, target) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.addEventListener('mousedown', (e) => {
+    if (MIDI_STATE.learnMode) {
+      e.stopPropagation();
+      midiSetLearnTarget(target);
+      el.style.outline = '2px solid var(--accent)';
+      setTimeout(() => { el.style.outline = ''; }, 1200);
+    }
+  }, true);
+}
+setTimeout(() => {
+  /* Macros */
+  ['macroEnergy','macroChaos','macroSpeed','macroColor'].forEach((id, i) => {
+    _midiAttachClickListener(id, { type: 'macro', target: i });
+  });
+  /* Quantize buttons */
+  [0,1,4,8].forEach(q => _midiAttachClickListener('qBtn' + q, { type: 'quantize', target: q }));
+  /* Blackout / Tap if available */
+  _midiAttachClickListener('blackoutBtn', { type: 'blackout' });
+  /* Palette buttons */
+  document.querySelectorAll('.pal-btn').forEach(btn => {
+    const pid = parseInt(btn.dataset.pid);
+    btn.addEventListener('mousedown', (e) => {
+      if (MIDI_STATE.learnMode) {
+        e.stopPropagation();
+        midiSetLearnTarget({ type: 'palette', target: pid });
+        btn.style.outline = '2px solid var(--accent)';
+        setTimeout(() => { btn.style.outline = ''; }, 1200);
+      }
+    }, true);
+  });
+  /* Pads — re-attach after every renderPerfPads */
+  midiAttachPads();
+}, 1000);
+
+function midiAttachPads() {
+  document.querySelectorAll('.perf-pad').forEach((btn, i) => {
+    btn.addEventListener('mousedown', (e) => {
+      if (MIDI_STATE.learnMode) {
+        e.stopPropagation();
+        midiSetLearnTarget({ type: 'pad', target: i });
+        btn.style.outline = '2px solid var(--accent)';
+        setTimeout(() => { btn.style.outline = ''; }, 1200);
+      }
+    }, true);
+  });
+}
+/* Re-attach pad listeners after re-render */
+const _origRenderPads = (typeof renderPerfPads === 'function') ? renderPerfPads : null;
+if (_origRenderPads) {
+  renderPerfPads = function() {
+    _origRenderPads();
+    setTimeout(midiAttachPads, 0);
   };
 }
 
@@ -5810,6 +6264,8 @@ renderMediaContent();
 loadPerfPads();
 renderPerfPads();
 renderHeaderFftBars();
+renderEffectChain();
+midiUpdateUi();
 /* Re-render effects after registerNewEffects() injected the new ones */
 if (typeof renderCategories === 'function') renderCategories();
 if (typeof renderEffects === 'function') renderEffects();

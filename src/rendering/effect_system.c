@@ -393,6 +393,11 @@ bool vjlink_effect_ensure_loaded(struct vjlink_effect_entry *entry)
 		         "Effect '%s': %s", entry->id, err);
 		ctx->has_error = true;
 
+		/* Append to ring buffer for Web UI Diagnostics panel */
+		char err_short[256];
+		snprintf(err_short, sizeof(err_short), "%s: %.200s", entry->id, err);
+		vjlink_context_log_shader_error(err_short);
+
 		bfree(errors);
 		return false;
 	}

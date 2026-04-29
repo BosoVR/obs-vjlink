@@ -124,6 +124,27 @@ struct vjlink_context {
     /* WebSocket -> Compositor effect override */
     char             pending_effect[64];
     volatile bool    effect_pending;
+    /* Beat quantize for the pending effect:
+     *   0 = immediate, 1 = on next beat, 4 = on next bar (4 beats),
+     *   8 = on next 2 bars. Cleared on apply. */
+    volatile int     pending_effect_quantize;
+    /* Beat counter snapshot when the request arrived; used to wait
+     * until (snapshot + quantize) boundary. */
+    volatile uint32_t pending_effect_beat_anchor;
+
+    /* Shader compile error log (last 8 entries, ring buffer) */
+    char             shader_errors[8][256];
+    volatile int     shader_error_write;     /* next write index */
+    volatile int     shader_error_count;     /* total errors logged */
+
+    /* Pending effect chain replacement (applied on render thread) */
+    struct {
+        char  effect_id[64];
+        int   blend_mode;
+        float blend_alpha;
+    } pending_chain[8];
+    volatile int     pending_chain_count;
+    volatile bool    pending_chain_replace;
     int              active_preset_index;
     char             active_effect_id[64]; /* current effect for UI sync */
     float            band_sensitivity[4]; /* user gain per band, default 1.0 */
@@ -164,6 +185,10 @@ struct vjlink_context *vjlink_get_context(void);
 /* Initialize / shutdown */
 bool vjlink_context_init(void);
 void vjlink_context_shutdown(void);
+
+/* Append a shader compile/load error message to the ring buffer.
+ * Truncated to 255 chars. Visible in Web UI Diagnostics panel. */
+void vjlink_context_log_shader_error(const char *msg);
 
 /* Check GPU capabilities (call once from graphics thread) */
 void vjlink_check_gpu_caps(void);

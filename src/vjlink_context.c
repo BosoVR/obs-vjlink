@@ -46,6 +46,11 @@ bool vjlink_context_init(void)
 	ctx->macro_speed = 0.5f;
 	ctx->macro_color = 0.5f;
 	ctx->strobe_safety_max = 1.0f;
+	ctx->pending_effect_quantize = 0;
+	ctx->pending_effect_beat_anchor = 0;
+	ctx->shader_error_write = 0;
+	ctx->shader_error_count = 0;
+	for (int i = 0; i < 8; i++) ctx->shader_errors[i][0] = '\0';
 	ctx->initialized = true;
 
 	blog(LOG_INFO, "[VJLink] Context initialized");
@@ -140,4 +145,15 @@ void vjlink_tick_time(float seconds)
 	struct vjlink_context *ctx = &g_vjlink_ctx;
 	if (seconds > 0.0f && seconds < 1.0f)
 		ctx->elapsed_time += seconds;
+}
+
+void vjlink_context_log_shader_error(const char *msg)
+{
+	struct vjlink_context *ctx = &g_vjlink_ctx;
+	if (!ctx->initialized || !msg) return;
+	int idx = ctx->shader_error_write & 7;
+	strncpy(ctx->shader_errors[idx], msg, 255);
+	ctx->shader_errors[idx][255] = '\0';
+	ctx->shader_error_write = (ctx->shader_error_write + 1) & 7;
+	ctx->shader_error_count++;
 }

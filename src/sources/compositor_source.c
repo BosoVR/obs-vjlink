@@ -520,19 +520,56 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 		}
 	}
 
-	/* Check for WebSocket effect override */
+	/* Check for WebSocket effect override.
+	 * If quantize > 0, hold the change until the next BPM-aligned beat:
+	 *   1 = next beat, 4 = next bar, 8 = next 2 bars. */
 	if (ctx->effect_pending && comp->renderer) {
-		ctx->effect_pending = false;
-		if (ctx->pending_effect[0]) {
-			strncpy(comp->active_effect, ctx->pending_effect,
-			        sizeof(comp->active_effect) - 1);
-			vjlink_compositor_set_effect(comp->renderer,
-				comp->active_effect);
-		} else {
-			comp->active_effect[0] = '\0';
-			vjlink_compositor_chain_clear(comp->renderer);
+		bool apply_now = true;
+		int q = ctx->pending_effect_quantize;
+		if (q > 0) {
+			uint32_t target = ctx->pending_effect_beat_anchor + (uint32_t)q;
+			/* Wait until current beat_count crosses the target.
+			 * Use signed compare via subtraction for wrap safety. */
+			int32_t diff = (int32_t)(ctx->beat_count - target);
+			apply_now = (diff >= 0);
 		}
-		comp->needs_effect_update = false;
+
+		if (apply_now) {
+			ctx->effect_pending = false;
+			ctx->pending_effect_quantize = 0;
+			if (ctx->pending_effect[0]) {
+				strncpy(comp->active_effect, ctx->pending_effect,
+				        sizeof(comp->active_effect) - 1);
+				vjlink_compositor_set_effect(comp->renderer,
+					comp->active_effect);
+			} else {
+				comp->active_effect[0] = '\0';
+				vjlink_compositor_chain_clear(comp->renderer);
+			}
+			comp->needs_effect_update = false;
+		}
+	}
+
+	/* Apply pending chain replacement (multi-effect stack from UI) */
+	if (ctx->pending_chain_replace && comp->renderer) {
+		ctx->pending_chain_replace = false;
+		vjlink_compositor_chain_clear(comp->renderer);
+		int n = ctx->pending_chain_count;
+		if (n > 8) n = 8;
+		for (int i = 0; i < n; i++) {
+			const char *id = ctx->pending_chain[i].effect_id;
+			if (!id || !id[0]) continue;
+			vjlink_compositor_chain_add(
+				comp->renderer, id,
+				(enum vjlink_blend_mode)ctx->pending_chain[i].blend_mode,
+				ctx->pending_chain[i].blend_alpha);
+		}
+		/* Track active_effect as the first slot for UI sync */
+		if (n > 0)
+			strncpy(comp->active_effect, ctx->pending_chain[0].effect_id,
+			        sizeof(comp->active_effect) - 1);
+		else
+			comp->active_effect[0] = '\0';
 	}
 
 	/* Update effect selection if changed via OBS properties */
