@@ -1,0 +1,228 @@
+/*
+ * VJLink - Wireframe City
+ * Cyberpunk skyline rendered as wireframe grid + neon edge glow.
+ * Forward fly-through with palette-aware sky and grid color.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float fly_speed;          /* 0.1 - 5, default 1.2 */
+uniform float building_density;   /* 0.3 - 1, default 0.7 */
+uniform float horizon_y;          /* 0.3 - 0.7, default 0.45 */
+uniform float fog_density;        /* 0 - 2, default 0.7 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+void palette_city(int pid, out float3 sky_top, out float3 sky_bot,
+                  out float3 grid_col, out float3 window_col)
+{
+    if (pid == 1) {
+        sky_top = float3(0.06, 0.0, 0.0);
+        sky_bot = float3(0.5, 0.05, 0.05);
+        grid_col = float3(1.0, 0.10, 0.10);
+        window_col = float3(1.0, 0.5, 0.2);
+        return;
+    }
+    if (pid == 2) {
+        sky_top = float3(0.10, 0.03, 0.0);
+        sky_bot = float3(0.7, 0.25, 0.05);
+        grid_col = float3(1.0, 0.55, 0.10);
+        window_col = float3(1.0, 0.85, 0.3);
+        return;
+    }
+    if (pid == 3) {
+        sky_top = float3(0.02, 0.05, 0.0);
+        sky_bot = float3(0.2, 0.5, 0.05);
+        grid_col = float3(0.7, 1.0, 0.10);
+        window_col = float3(0.95, 1.0, 0.5);
+        return;
+    }
+    if (pid == 4) {
+        sky_top = float3(0.0, 0.02, 0.08);
+        sky_bot = float3(0.15, 0.05, 0.45);
+        grid_col = float3(0.10, 0.85, 1.0);
+        window_col = float3(1.0, 0.20, 0.85);
+        return;
+    }
+    if (pid == 5) {
+        sky_top = float3(0.0, 0.0, 0.0);
+        sky_bot = float3(0.25, 0.25, 0.25);
+        grid_col = float3(1.0, 1.0, 1.0);
+        window_col = float3(0.9, 0.9, 0.9);
+        return;
+    }
+    /* Default: classic Blade Runner cyberpunk */
+    sky_top = float3(0.05, 0.0, 0.15);
+    sky_bot = float3(0.4, 0.05, 0.5);
+    grid_col = float3(0.10, 0.85, 1.0);
+    window_col = float3(1.0, 0.45, 0.85);
+}
+
+/* Building height at column x and depth z */
+float buildingHeight(float column_id, float depth_id, float density)
+{
+    float h = hash21(float2(column_id, depth_id));
+    /* density controls how often a column has a building */
+    if (h < (1.0 - density) * 0.5) return 0.0;
+    /* Heights vary; use second hash for variation */
+    float vh = hash21(float2(column_id * 1.7, depth_id * 2.3));
+    return 0.3 + vh * 0.7;
+}
+
+float4 PSWireframeCity(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    float3 sky_top, sky_bot, grid_col, window_col;
+    palette_city((int)palette_id, sky_top, sky_bot, grid_col, window_col);
+
+    float horizon = clamp(horizon_y, 0.25, 0.75);
+    float spd = max(fly_speed, 0.1) * (1.0 + bass * 0.5 + kick_onset * 0.2);
+    float depth = time * spd;
+
+    float3 col;
+
+    if (uv.y < horizon) {
+        /* === SKY === */
+        float t = uv.y / horizon;
+        col = lerp(sky_top, sky_bot, pow(t, 1.4));
+
+        /* Distant city silhouette */
+        float far_x = uv.x * 40.0;
+        float far_id = floor(far_x);
+        float far_h = horizon - hash11(far_id) * 0.05 - 0.02;
+        float far_mask = step(uv.y, far_h);
+        col = lerp(col, sky_top * 0.4, far_mask * 0.6);
+
+        /* Distant window lights */
+        float light_h = hash21(float2(far_id, floor(time * 0.3)));
+        if (far_mask > 0.5 && light_h > 0.94) {
+            float lx = frac(far_x) - 0.5;
+            float ly = (far_h - uv.y) * 60.0;
+            ly = frac(ly);
+            float twink = 0.5 + sin(time * 2.5 + light_h * 30.0) * 0.5;
+            if (abs(lx) < 0.15 && abs(ly - 0.5) < 0.15) {
+                col += window_col * twink * 0.7;
+            }
+        }
+
+    } else {
+        /* === STREET / ROAD === */
+        col = float3(0.005, 0.0, 0.01);
+
+        float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01);
+        float persp = 1.0 / max(1.0 - gy, 0.005);
+
+        /* Road grid: horizontal scrolling lines */
+        float gp = sqrt(gy + 0.001) * 8.0 + depth;
+        float h_id = floor(gp);
+        float h_f = abs(gp - h_id - 0.5) * 2.0;
+        float h_line = 1.0 - smoothstep(0.92, 0.99, h_f);
+        h_line *= smoothstep(0.0, 0.05, gy);
+
+        /* Lane markers */
+        float vx = (uv.x - 0.5) * aspect * persp;
+        float v_id = floor(vx * 6.0);
+        float v_f = abs(vx * 6.0 - v_id - 0.5) * 2.0;
+        float v_line = 1.0 - smoothstep(0.9, 0.99, v_f);
+
+        col += grid_col * (h_line * 0.5 + v_line * 0.3) * (0.4 + drive * 0.5);
+
+        /* === BUILDINGS on left & right of road === */
+        float side = 0.0;
+        if (abs(uv.x - 0.5) > 0.18) {
+            float side_x = (uv.x - 0.5) * aspect;
+            float column = floor(side_x * 8.0);
+            float depth_id = floor(gp * 0.5);
+
+            float bh = buildingHeight(column, depth_id, building_density);
+            if (bh > 0.001) {
+                /* Building wall: y from horizon up to horizon - bh */
+                float wall_y = horizon - bh * 0.4;
+                if (uv.y < horizon && uv.y > wall_y) {
+                    /* Building body — dark with windows */
+                    side = 1.0;
+                    col = sky_top * 0.3;
+
+                    /* Vertical wireframe edges */
+                    float c_f = abs(side_x * 8.0 - column - 0.5) * 2.0;
+                    float v_edge = 1.0 - smoothstep(0.92, 0.99, c_f);
+                    col += grid_col * v_edge * (0.6 + bass * 0.5);
+
+                    /* Top edge */
+                    float t_dist = abs(uv.y - wall_y);
+                    col += grid_col * exp(-t_dist * 200.0) * 0.8;
+
+                    /* Windows: 5x10 grid per building */
+                    float bx = (frac(side_x * 8.0) - 0.5) * 2.0;  /* -1..1 within building */
+                    float by = (uv.y - wall_y) / (horizon - wall_y);  /* 0..1 within building */
+                    float wcols = 4.0;
+                    float wrows = floor(bh * 18.0);
+                    if (wrows < 2.0) wrows = 2.0;
+                    float wx_id = floor((bx + 1.0) * wcols * 0.5);
+                    float wy_id = floor(by * wrows);
+                    float wseed = hash21(float2(column + depth_id * 0.7, wy_id * 1.7));
+                    float win_on = step(0.7 - kick_onset * 0.2, wseed);
+                    /* Window cell shape */
+                    float wxf = abs(frac((bx + 1.0) * wcols * 0.5) - 0.5) * 2.0;
+                    float wyf = abs(frac(by * wrows) - 0.5) * 2.0;
+                    float win = step(wxf, 0.5) * step(wyf, 0.6) * win_on;
+                    /* Twinkle */
+                    float twink = 0.5 + sin(time * 2.0 + wseed * 30.0) * 0.5;
+                    col += window_col * win * (0.5 + twink * 0.5) * (0.6 + bass * 0.4);
+                }
+            }
+        }
+
+        /* Distance fog */
+        col = lerp(col, sky_bot * 0.3, saturate(gy * 1.5) * fog_density);
+    }
+
+    /* Beat: bright accent strokes scrolling */
+    float strobe_y = sin(uv.y * 60.0 + time * 4.0) * 0.5 + 0.5;
+    col += grid_col * pow(strobe_y, 12.0) * beat_4 * bass * 0.15;
+
+    /* Onset whitewash */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.08;
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSWireframeCity(vert_in);
+    }
+}

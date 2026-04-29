@@ -424,8 +424,59 @@ static void handle_get_band_effects(obs_data_t *request_data,
 		}
 	}
 
+	/* Render order */
+	obs_data_array_t *order_arr = obs_data_array_create();
+	if (ctx->active_band_fx) {
+		for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
+			obs_data_t *od = obs_data_create();
+			obs_data_set_int(od, "band", ctx->active_band_fx->render_order[i]);
+			obs_data_array_push_back(order_arr, od);
+			obs_data_release(od);
+		}
+	}
+	obs_data_set_array(response_data, "render_order", order_arr);
+	obs_data_array_release(order_arr);
+
 	obs_data_set_array(response_data, "bands", arr);
 	obs_data_array_release(arr);
+}
+
+static void handle_set_band_order(obs_data_t *request_data,
+                                   obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+
+	struct vjlink_context *ctx = vjlink_get_context();
+	if (!ctx->active_band_fx) {
+		obs_data_set_bool(response_data, "success", false);
+		obs_data_set_string(response_data, "error", "No active compositor");
+		return;
+	}
+
+	obs_data_array_t *arr = obs_data_get_array(request_data, "order");
+	if (!arr) {
+		obs_data_set_bool(response_data, "success", false);
+		obs_data_set_string(response_data, "error", "Missing 'order' array");
+		return;
+	}
+
+	int order[VJLINK_NUM_BANDS] = {0};
+	size_t n = obs_data_array_count(arr);
+	if (n != VJLINK_NUM_BANDS) {
+		obs_data_set_bool(response_data, "success", false);
+		obs_data_set_string(response_data, "error", "order must have 4 entries");
+		obs_data_array_release(arr);
+		return;
+	}
+	for (size_t i = 0; i < n; i++) {
+		obs_data_t *e = obs_data_array_item(arr, i);
+		order[i] = (int)obs_data_get_int(e, "band");
+		obs_data_release(e);
+	}
+	obs_data_array_release(arr);
+
+	vjlink_band_effects_set_order(ctx->active_band_fx, order);
+	obs_data_set_bool(response_data, "success", true);
 }
 
 static void handle_set_source_trigger(obs_data_t *request_data,
@@ -886,6 +937,8 @@ static void register_all_requests(void)
 	                        handle_set_transparent_bg, NULL);
 	vendor_request_register(g_vendor, "SetBandParam",
 	                        handle_set_band_param, NULL);
+	vendor_request_register(g_vendor, "SetBandOrder",
+	                        handle_set_band_order, NULL);
 }
 
 void vjlink_websocket_init(void)

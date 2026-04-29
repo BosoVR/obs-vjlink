@@ -1,0 +1,258 @@
+/*
+ * VJLink - Type Animator
+ * Audio-reactive bold blocky typography for Hardtechno drops.
+ * Uses procedural 5x7 letter SDFs to spell preset words on beat.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     beat_2_1;
+uniform float     beat_4_1;
+uniform float     beat_count;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float text_choice;        /* 0=RAVE 1=BERGHAIN 2=HARDTECHNO 3=ACID 4=DROP 5=BPM */
+uniform float text_size;          /* 0.05 - 0.5, default 0.2 */
+uniform float change_rate;        /* 0=continuous 1=on bar 2=on beat */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float background_amount;  /* 0 - 1, default 0.3 — adds geometric BG */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_type(int pid) {
+    if (pid == 1) return float3(1.0, 0.10, 0.10);
+    if (pid == 2) return float3(1.0, 0.55, 0.10);
+    if (pid == 3) return float3(0.7, 1.0, 0.10);
+    if (pid == 4) return float3(0.10, 0.85, 1.0);
+    if (pid == 5) return float3(1.0, 1.0, 1.0);
+    return float3(0.95, 0.10, 0.55);
+}
+
+/* Sample a 5x7 letter glyph encoded as 35 bits in a single number.
+ * Returns 1 if pixel inside glyph cell at (cx, cy) is filled. */
+float glyphBit(int letter, int cx, int cy)
+{
+    if (cx < 0 || cx >= 5 || cy < 0 || cy >= 7) return 0.0;
+    /* Map letter to 35-bit pattern (rows top-to-bottom, left-to-right within row).
+     * Each letter = 7 row-patterns of 5 bits each = 35 bits.
+     * I encode them as 7 separate row-ints for HLSL compatibility. */
+
+    int rows[7] = {0, 0, 0, 0, 0, 0, 0};
+
+    /* A */
+    if (letter == 1) {
+        rows[0] = 14;  rows[1] = 17;  rows[2] = 17;  rows[3] = 31;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 17;
+    } else if (letter == 2) {  /* B */
+        rows[0] = 30;  rows[1] = 17;  rows[2] = 17;  rows[3] = 30;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 30;
+    } else if (letter == 3) {  /* C */
+        rows[0] = 14;  rows[1] = 17;  rows[2] = 16;  rows[3] = 16;
+        rows[4] = 16;  rows[5] = 17;  rows[6] = 14;
+    } else if (letter == 4) {  /* D */
+        rows[0] = 30;  rows[1] = 17;  rows[2] = 17;  rows[3] = 17;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 30;
+    } else if (letter == 5) {  /* E */
+        rows[0] = 31;  rows[1] = 16;  rows[2] = 16;  rows[3] = 30;
+        rows[4] = 16;  rows[5] = 16;  rows[6] = 31;
+    } else if (letter == 6) {  /* G */
+        rows[0] = 14;  rows[1] = 17;  rows[2] = 16;  rows[3] = 23;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 14;
+    } else if (letter == 7) {  /* H */
+        rows[0] = 17;  rows[1] = 17;  rows[2] = 17;  rows[3] = 31;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 17;
+    } else if (letter == 8) {  /* I */
+        rows[0] = 14;  rows[1] = 4;   rows[2] = 4;   rows[3] = 4;
+        rows[4] = 4;   rows[5] = 4;   rows[6] = 14;
+    } else if (letter == 9) {  /* M */
+        rows[0] = 17;  rows[1] = 27;  rows[2] = 21;  rows[3] = 17;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 17;
+    } else if (letter == 10) { /* N */
+        rows[0] = 17;  rows[1] = 25;  rows[2] = 21;  rows[3] = 19;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 17;
+    } else if (letter == 11) { /* O */
+        rows[0] = 14;  rows[1] = 17;  rows[2] = 17;  rows[3] = 17;
+        rows[4] = 17;  rows[5] = 17;  rows[6] = 14;
+    } else if (letter == 12) { /* P */
+        rows[0] = 30;  rows[1] = 17;  rows[2] = 17;  rows[3] = 30;
+        rows[4] = 16;  rows[5] = 16;  rows[6] = 16;
+    } else if (letter == 13) { /* R */
+        rows[0] = 30;  rows[1] = 17;  rows[2] = 17;  rows[3] = 30;
+        rows[4] = 20;  rows[5] = 18;  rows[6] = 17;
+    } else if (letter == 14) { /* T */
+        rows[0] = 31;  rows[1] = 4;   rows[2] = 4;   rows[3] = 4;
+        rows[4] = 4;   rows[5] = 4;   rows[6] = 4;
+    } else if (letter == 15) { /* V */
+        rows[0] = 17;  rows[1] = 17;  rows[2] = 17;  rows[3] = 17;
+        rows[4] = 17;  rows[5] = 10;  rows[6] = 4;
+    } else if (letter == 16) { /* 0..9 — for BPM display */
+        rows[0] = 14; rows[1] = 17; rows[2] = 17; rows[3] = 17;
+        rows[4] = 17; rows[5] = 17; rows[6] = 14;
+    } else {
+        return 0.0;
+    }
+
+    int row = rows[cy];
+    int bit = (row >> (4 - cx)) & 1;
+    return (float)bit;
+}
+
+/* Convert ASCII-ish letter index to glyph index */
+int letterIndex(int ch) {
+    /* ch: 'A'=1, 'B'=2, ..., used by my preset words */
+    return ch;
+}
+
+/* Words: max 12 chars. */
+void getWord(int choice, out int letters[12], out int len)
+{
+    /* Initialize to 0 */
+    for (int i = 0; i < 12; i++) letters[i] = 0;
+    len = 0;
+    if (choice == 0) {
+        /* RAVE */
+        letters[0] = 13; letters[1] = 1; letters[2] = 15; letters[3] = 5;
+        len = 4;
+    } else if (choice == 1) {
+        /* BERGHAIN */
+        letters[0] = 2; letters[1] = 5; letters[2] = 13; letters[3] = 6;
+        letters[4] = 7; letters[5] = 1; letters[6] = 8; letters[7] = 10;
+        len = 8;
+    } else if (choice == 2) {
+        /* HARDTECHNO */
+        letters[0] = 7; letters[1] = 1; letters[2] = 13; letters[3] = 4;
+        letters[4] = 14; letters[5] = 5; letters[6] = 3; letters[7] = 7;
+        letters[8] = 10; letters[9] = 11;
+        len = 10;
+    } else if (choice == 3) {
+        /* ACID */
+        letters[0] = 1; letters[1] = 3; letters[2] = 8; letters[3] = 4;
+        len = 4;
+    } else if (choice == 4) {
+        /* DROP */
+        letters[0] = 4; letters[1] = 13; letters[2] = 11; letters[3] = 12;
+        len = 4;
+    } else if (choice == 5) {
+        /* TECHNO */
+        letters[0] = 14; letters[1] = 5; letters[2] = 3; letters[3] = 7;
+        letters[4] = 10; letters[5] = 11;
+        len = 6;
+    }
+}
+
+float4 PSTypeAnimator(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+
+    /* Choose word based on change_rate */
+    int word_idx = (int)text_choice;
+    int cr = (int)change_rate;
+    if (cr == 1) {
+        /* Change every bar (4 beats) */
+        word_idx = (int)(beat_count * 0.25 + text_choice) % 6;
+    } else if (cr == 2) {
+        /* Change every beat */
+        word_idx = (int)(beat_count + text_choice) % 6;
+    }
+
+    int letters[12]; int len;
+    getWord(word_idx, letters, len);
+
+    /* Layout the word horizontally in the middle */
+    float ts = clamp(text_size, 0.04, 0.5);
+
+    /* Beat-driven scale pulse */
+    float scale_pulse = 1.0 + kick_onset * 0.18;
+    ts *= scale_pulse;
+
+    float char_w = ts;
+    float total_w = char_w * (float)len;
+    float start_x = -total_w * 0.5 + char_w * 0.5;
+
+    float text_mask = 0.0;
+    for (int li = 0; li < 12; li++) {
+        if (li >= len) break;
+        float cx_center = start_x + (float)li * char_w;
+        float2 lp = float2(p.x - cx_center, p.y) / (ts * 0.5);
+        /* Letter cell is 5 wide x 7 tall, normalized */
+        /* Sample 5x7 grid */
+        if (lp.x < -0.6 || lp.x > 0.6 || lp.y < -0.85 || lp.y > 0.85) continue;
+        int cx = (int)((lp.x + 0.5) * 5.0);
+        int cy = 6 - (int)((lp.y + 0.7) * 5.0);
+        cy = clamp(cy, 0, 6);
+        cx = clamp(cx, 0, 4);
+        text_mask = max(text_mask, glyphBit(letters[li], cx, cy));
+    }
+
+    /* Color */
+    float3 accent = palette_type((int)palette_id);
+    float3 col = float3(0.02, 0.02, 0.025);
+
+    /* Audio-driven background */
+    if (background_amount > 0.001) {
+        /* Scrolling diagonal stripes on bass */
+        float diag = sin((p.x + p.y) * 8.0 + time * 2.0 * (1.0 + bass));
+        float bg_bars = step(0.7, diag);
+        col += accent * bg_bars * 0.08 * background_amount;
+
+        /* Random rectangles */
+        float2 rg_id = floor(uv * float2(12.0, 8.0));
+        float rg_h = hash21(rg_id + floor(time * 4.0));
+        float rg = step(0.92 - bass * 0.1, rg_h);
+        col += accent * rg * 0.05 * background_amount;
+    }
+
+    /* Text */
+    float beat_glow = pow(1.0 - beat_1_4, 4.0) * 0.4 + kick_onset * 0.6;
+    col += accent * text_mask * (0.7 + drive * 0.5 + beat_glow);
+    col += float3(1.0, 1.0, 1.0) * text_mask * 0.3;
+
+    /* Outline glow */
+    float glow_dist = 0.0;
+    /* Cheap glow: sample around for nearby text */
+    /* Just use kick_onset to add halo */
+    col += accent * text_mask * kick_onset * 0.5;
+
+    /* Onset white pulse */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * text_mask * 0.4;
+
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, length(p));
+
+    col = saturate(col);
+    float a_out = max(text_mask, max(max(col.r, col.g), col.b) * 0.6);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSTypeAnimator(vert_in);
+    }
+}

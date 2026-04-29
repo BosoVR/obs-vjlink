@@ -24,6 +24,7 @@ void vjlink_band_effects_init(struct vjlink_band_effects *bfx,
 		bfx->slots[i].hold_frames = 6.0f;
 		bfx->slots[i].blend_mode = VJLINK_BLEND_ADD;
 		bfx->slots[i].blend_alpha = 1.0f;
+		bfx->render_order[i] = i; /* default: bass(0) bottom -> treble(3) top */
 	}
 
 	bfx->composite_target = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
@@ -43,6 +44,24 @@ void vjlink_band_effects_set_slot_response(struct vjlink_band_effects *bfx,
 	slot->attack = fmaxf(0.01f, fminf(1.0f, attack));
 	slot->release = fmaxf(0.01f, fminf(1.0f, release));
 	slot->hold_frames = fmaxf(0.0f, fminf(60.0f, hold_frames));
+}
+
+void vjlink_band_effects_set_order(struct vjlink_band_effects *bfx,
+                                    const int order[VJLINK_NUM_BANDS])
+{
+	if (!bfx || !order)
+		return;
+	/* Validate: every band index 0..3 must appear exactly once */
+	int seen[VJLINK_NUM_BANDS] = {0};
+	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
+		int v = order[i];
+		if (v < 0 || v >= VJLINK_NUM_BANDS) return;
+		if (seen[v]) return;
+		seen[v] = 1;
+	}
+	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
+		bfx->render_order[i] = order[i];
+	}
 }
 
 void vjlink_band_effects_destroy(struct vjlink_band_effects *bfx)
@@ -327,8 +346,10 @@ gs_texture_t *vjlink_band_effects_render(struct vjlink_band_effects *bfx,
 	gs_texrender_t *src_buf = bfx->composite_target;
 	gs_texrender_t *dst_buf = bfx->composite_target2;
 
-	/* Render each active band effect and blend onto composite */
-	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
+	/* Render each active band effect and blend onto composite, in user-defined Z order. */
+	for (int oi = 0; oi < VJLINK_NUM_BANDS; oi++) {
+		int i = bfx->render_order[oi];
+		if (i < 0 || i >= VJLINK_NUM_BANDS) i = oi; /* defensive */
 		struct vjlink_band_slot *slot = &bfx->slots[i];
 		if (!slot->enabled || slot->current_activation <= 0.001f)
 			continue;

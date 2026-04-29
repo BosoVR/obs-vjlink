@@ -34,6 +34,10 @@ struct vjlink_band_slot {
 /* Band effects system: 4 slots, one per audio band */
 struct vjlink_band_effects {
 	struct vjlink_band_slot slots[VJLINK_NUM_BANDS];
+	/* Render order: layer index 0 = bottom, last = top.
+	 * Default: [0, 1, 2, 3] = Bass at bottom, Treble on top.
+	 * Values are band indices (0..3); each must appear exactly once. */
+	int      render_order[VJLINK_NUM_BANDS];
 	gs_texrender_t *composite_target;  /* ping-pong buffer A */
 	gs_texrender_t *composite_target2; /* ping-pong buffer B */
 	uint32_t width;
@@ -64,6 +68,11 @@ void vjlink_band_effects_set_slot_response(struct vjlink_band_effects *bfx,
 
 /* Clear a band slot */
 void vjlink_band_effects_clear_slot(struct vjlink_band_effects *bfx, int band);
+
+/* Set render order: order[i] = band index that should render at layer i.
+ * Layer 0 is rendered first (bottom), last is on top. */
+void vjlink_band_effects_set_order(struct vjlink_band_effects *bfx,
+                                    const int order[VJLINK_NUM_BANDS]);
 
 /* Update activation values based on current audio (call per frame) */
 void vjlink_band_effects_update(struct vjlink_band_effects *bfx);

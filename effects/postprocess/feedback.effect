@@ -1,52 +1,47 @@
 /*
- * VJLink - Feedback Loop
- * Ping-pong feedback: blends current frame with transformed previous frame.
- * Creates trails, echoes, and recursive mirror effects.
+ * VJLink - Feedback (Pro v3)
+ * Recursive feedback with zoom, rotation, hue shift trails.
+ * Audio-reactive zoom on kicks, palette accent, beat-locked rotation.
  */
 
 uniform float4x4 ViewProj;
-uniform texture2d image;      /* OBS filter pipeline binds source here */
-uniform texture2d input_tex;  /* compositor chain binds previous layer here */
+uniform texture2d image;
+uniform texture2d input_tex;
 uniform texture2d prev_tex;
 uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float4    chronotensity;
 uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
 uniform float     onset_strength;
 uniform float     rms;
+uniform float     palette_id;
 
-uniform float     has_input_source; /* 1.0 when used as filter */
+uniform float fb_decay;           /* 0 - 0.5, default 0.05 */
+uniform float fb_zoom;            /* 0.95 - 1.05, default 0.99 */
+uniform float fb_rotation;        /* -0.1 - 0.1, default 0.005 */
+uniform float fb_hue_shift;       /* 0 - 0.1, default 0.005 */
+uniform float fb_mix;             /* 0 - 1, default 0.85 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
 
-/* Custom parameters */
-uniform float     fb_decay;        /* 0.01 - 0.5, default 0.05 (lower = longer trails) */
-uniform float     fb_zoom;         /* 0.95 - 1.05, default 0.99 */
-uniform float     fb_rotation;     /* -0.1 - 0.1, default 0.01 */
-uniform float     fb_hue_shift;    /* 0.0 - 0.1, default 0.01 */
-uniform float     fb_mix;          /* 0.0 - 1.0, default 0.85 */
-
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float3 rgb2hsv(float3 c)
-{
+float3 rgb2hsv(float3 c) {
     float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
     float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
     float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
@@ -54,92 +49,83 @@ float3 rgb2hsv(float3 c)
     float e = 1.0e-10;
     return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
 }
-
-float3 hsv2rgb(float3 c)
-{
+float3 hsv2rgb(float3 c) {
     float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+}
+
+float3 palette_fb(int pid) {
+    if (pid == 1) return float3(1.0, 0.10, 0.10);
+    if (pid == 2) return float3(1.0, 0.55, 0.10);
+    if (pid == 3) return float3(0.7, 1.0, 0.10);
+    if (pid == 4) return float3(0.10, 0.85, 1.0);
+    if (pid == 5) return float3(1.0, 1.0, 1.0);
+    return float3(0.95, 0.40, 0.85);
 }
 
 float4 PSFeedback(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+
     float bass = bands.x;
-    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.7);
+    float energy = (chronotensity.x + chronotensity.y) * 0.5;
 
-    /* Transform UV for feedback sampling: zoom + rotate */
-    float2 centered = uv - 0.5;
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
+                              : pow(1.0 - beat_1_8, 4.0));
 
-    /* Audio-reactive zoom */
-    float energy = max(rms, chronotensity.x * 0.65);
-    float zoom = fb_zoom - bass * 0.008 - onset_strength * 0.006;
-    centered *= zoom;
+    float zoom = fb_zoom + bass * 0.005 + kick_onset * 0.008;
+    float rot = fb_rotation + beat_q * bass * 0.012;
+    float cs = cos(rot), sn = sin(rot);
 
-    /* Audio-reactive rotation */
-    float rot = fb_rotation + treble * 0.005 + chronotensity.w * 0.006;
-    float cs = cos(rot);
-    float sn = sin(rot);
-    float2 rotated;
-    rotated.x = centered.x * cs - centered.y * sn;
-    rotated.y = centered.x * sn + centered.y * cs;
+    float2 center = float2(0.5, 0.5);
+    float2 p = uv - center;
+    p = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs) * zoom;
+    float2 prev_uv = saturate(p + center);
 
-    float2 fb_uv = rotated + 0.5;
+    float3 prev_shifted = prev_tex.Sample(texSampler, prev_uv).rgb;
 
-    /* Sample previous frame with transformed UVs */
-    float4 prev = prev_tex.Sample(texSampler, fb_uv);
-
-    /* Hue shift the feedback */
-    float3 prev_hsv = rgb2hsv(prev.rgb);
-    prev_hsv.x = frac(prev_hsv.x + fb_hue_shift);
-    float3 prev_shifted = hsv2rgb(prev_hsv);
-
-    /* Decay: reduce brightness of feedback */
-    float decay = fb_decay * (1.0 + bass * 0.35 + onset_strength * 0.6);
-    prev_shifted *= (1.0 - decay);
-
-    /* Sample current input */
-    float4 current;
-    bool has_input = (has_input_source > 0.5);
-
-    if (has_input) {
-        current = image.Sample(texSampler, uv);
-    } else {
-        /* Standalone: inject audio-reactive seed pixels so feedback has something to work with */
-        float2 p = (uv - 0.5) * 2.0;
-        float r = length(p);
-        float angle = atan2(p.y, p.x);
-        float pulse = sin(angle * 3.0 + time * 2.0) * 0.5 + 0.5;
-        pulse *= smoothstep(0.8, 0.2, r) * bass;
-        float3 seed_col = float3(
-            pulse * (0.5 + sin(time) * 0.5),
-            pulse * (0.5 + sin(time * 1.3) * 0.5),
-            pulse * (0.5 + sin(time * 1.7) * 0.5)
-        );
-        current = float4(seed_col, 1.0);
+    if (fb_hue_shift > 0.001) {
+        float3 hsv = rgb2hsv(saturate(prev_shifted));
+        hsv.x = frac(hsv.x + fb_hue_shift + bands.z * 0.005);
+        prev_shifted = hsv2rgb(hsv);
     }
 
-    /* Beat-reactive decay: faster fade on beat */
-    float beat = (1.0 - beat_phase);
-    beat = beat * beat * beat;
-    float dynamic_mix = fb_mix * (1.0 - beat * bass * 0.22 - onset_strength * 0.16);
-    dynamic_mix = saturate(dynamic_mix + energy * 0.08);
+    float decay = fb_decay * (1.0 + bass * 0.35 + onset_strength * 0.6 + kick_onset * 0.5);
+    prev_shifted *= (1.0 - decay);
 
-    /* Blend: feedback * mix + current * (1-mix) */
-    float3 result = prev_shifted * dynamic_mix + current.rgb * (1.0 - dynamic_mix);
+    float4 curr = image.Sample(texSampler, uv);
+    if (curr.a < 0.001 && length(curr.rgb) < 0.005) {
+        curr = input_tex.Sample(texSampler, uv);
+    }
 
-    /* Ensure we don't accumulate above 1.0 */
-    result = clamp(result, 0.0, 1.0);
+    float dynamic_mix = fb_mix * (1.0 - beat_q * bass * 0.22 - onset_strength * 0.16);
+    dynamic_mix = saturate(dynamic_mix + energy * 0.06);
 
-    float out_alpha = has_input ? current.a : max(max(result.r, result.g), result.b);
+    float3 result = lerp(curr.rgb, prev_shifted, dynamic_mix);
+
+    int pid = (int)palette_id;
+    if (pid != 5) {
+        float3 tint = palette_fb(pid);
+        float lum = dot(result, float3(0.299, 0.587, 0.114));
+        result = lerp(result, result * (0.65 + tint * 1.2 * (0.4 + lum * 0.6)),
+                      0.10 + drive * 0.10);
+    }
+
+    result += float3(1.0, 0.95, 1.0) * onset_strength * 0.06;
+
+    result = saturate(result);
+    float out_alpha = max(curr.a, max(max(result.r, result.g), result.b));
     return float4(result, out_alpha);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSFeedback(vert_in);
+        pixel_shader = PSFeedback(vert_in);
     }
 }

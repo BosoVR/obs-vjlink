@@ -1,0 +1,17 @@
+{
+  "id": "type_animator",
+  "name": "Type Animator",
+  "category": "geometric",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "main_visual",
+  "genre": ["hardtechno", "techno", "all"],
+  "description": "Audio-reactive bold typography drops — RAVE / BERGHAIN / HARDTECHNO / ACID / DROP / TECHNO.",
+  "params": [
+    { "name": "text_choice", "label": "Text", "type": "float", "default": 0.0, "min": 0.0, "max": 5.0, "step": 1.0 },
+    { "name": "text_size", "label": "Size", "type": "float", "default": 0.2, "min": 0.05, "max": 0.5, "step": 0.01 },
+    { "name": "change_rate", "label": "Change Rate (0=Off 1=Bar 2=Beat)", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "background_amount", "label": "Background", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05 }
+  ]
+}
