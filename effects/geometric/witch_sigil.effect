@@ -1,0 +1,178 @@
+/*
+ * VJLink - Witch Sigil
+ * Animated occult sigil: rotating pentagram + outer circle + glyphs.
+ * Beat-driven blood drips, palette-aware accent. Dark Hardtechno aesthetic.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float sigil_size;         /* 0.3 - 1.0, default 0.65 */
+uniform float spin_speed;         /* -3 - 3, default 0.3 */
+uniform float drip_amount;        /* 0 - 1, default 0.5 */
+uniform float glyph_density;      /* 4 - 24, default 12 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_witch(int pid) {
+    if (pid == 1) return float3(1.0, 0.05, 0.05);   /* Hardtechno blood red */
+    if (pid == 2) return float3(1.0, 0.45, 0.1);    /* Rawstyle orange */
+    if (pid == 3) return float3(0.7, 1.0, 0.1);     /* Acid */
+    if (pid == 4) return float3(0.10, 0.85, 1.0);   /* Cyber */
+    if (pid == 5) return float3(0.95, 0.95, 1.0);   /* Mono */
+    return float3(0.95, 0.10, 0.55);                 /* Default crimson-pink */
+}
+
+/* SDF: line segment */
+float sdSegment(float2 p, float2 a, float2 b)
+{
+    float2 pa = p - a, ba = b - a;
+    float h = saturate(dot(pa, ba) / dot(ba, ba));
+    return length(pa - ba * h);
+}
+
+/* SDF: pentagram (5-pointed star outline) */
+float sdPentagram(float2 p, float r)
+{
+    /* 5 vertices on a circle */
+    float min_d = 1e9;
+    for (int i = 0; i < 5; i++) {
+        for (int j = i + 2; j < 5 + ((i == 0) ? 1 : 0); j++) {
+            int j2 = j % 5;
+            if (j2 == i) continue;
+            float a1 = (float)i * 6.28318 / 5.0 - 1.5708;
+            float a2 = (float)j2 * 6.28318 / 5.0 - 1.5708;
+            float2 v1 = float2(cos(a1), sin(a1)) * r;
+            float2 v2 = float2(cos(a2), sin(a2)) * r;
+            float d = sdSegment(p, v1, v2);
+            if (d < min_d) min_d = d;
+        }
+    }
+    return min_d;
+}
+
+float4 PSWitchSigil(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    float3 accent = palette_witch((int)palette_id);
+
+    /* Dark base with subtle smoke */
+    float3 col = float3(0.025, 0.015, 0.025);
+    float smoke = hash21(uv * resolution * 0.005 + floor(time * 2.0));
+    col += smoke * 0.025;
+
+    /* Spinning local frame */
+    float spin = time * spin_speed * 0.5;
+    float cs = cos(spin), sn = sin(spin);
+    float2 ps = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+
+    float r = length(ps);
+    float ang = atan2(ps.y, ps.x);
+
+    float sz = clamp(sigil_size, 0.2, 1.2);
+    float lw = 0.012 * (1.0 + drive * 0.3);
+
+    /* === Outer circle === */
+    float outer_d = abs(r - sz);
+    float outer = exp(-outer_d / lw * 3.0);
+    /* Inner circle */
+    float inner_d = abs(r - sz * 0.7);
+    float inner = exp(-inner_d / lw * 4.0) * 0.7;
+
+    /* === Pentagram === */
+    float pent_d = sdPentagram(ps, sz * 0.8);
+    float pent = exp(-pent_d / lw * 4.0);
+
+    /* Accent on lines (palette + bass-pulse) */
+    float line_strength = max(outer, max(inner, pent));
+    col += accent * line_strength * (0.6 + bass * 0.7 + beat_4 * bass * 0.4);
+    col += float3(1.0, 1.0, 1.0) * pow(line_strength, 4.0) * 0.4;
+
+    /* === Outer ring of glyphs (small SDF dots between rings) === */
+    float gd = clamp(glyph_density, 4.0, 24.0);
+    float ang_n = ang / 6.28318 + 0.5;
+    float gi = floor(ang_n * gd);
+    float gf = frac(ang_n * gd);
+    float gh = hash11(gi * 17.3);
+    /* Each glyph sits between outer & inner ring */
+    float ring_r = lerp(sz * 0.78, sz * 0.92, gh);
+    float glyph_d = abs(r - ring_r) + abs(gf - 0.5) * 0.04;
+    float glyph = exp(-glyph_d * 50.0);
+    /* Glyphs have rotation-locked angular position too */
+    glyph *= step(0.3, gf) * step(gf, 0.7);
+    col += accent * glyph * (0.5 + bass * 0.4) * 0.6;
+
+    /* === Center burning eye === */
+    float eye = exp(-r * 8.0);
+    /* Slit pupil */
+    float pupil = exp(-(abs(ps.y) * 30.0 + abs(ps.x) * 8.0));
+    eye *= 1.0 - pupil * 0.85;
+    col += accent * eye * (1.0 + kick_onset * 0.8);
+    col += float3(1.0, 0.3, 0.2) * pow(eye, 3.0) * (0.4 + bass * 0.4);
+
+    /* === Blood drips falling from outer circle on bass === */
+    if (drip_amount > 0.001) {
+        for (int d = 0; d < 6; d++) {
+            float fd = (float)d;
+            float drip_seed = hash11(fd * 7.7);
+            /* Drips appear on beat */
+            float drip_phase = frac(time * 0.4 + drip_seed) * 1.6;
+            float drip_x = (drip_seed - 0.5) * sz * 1.6;
+            float drip_y = sz - drip_phase;
+            float dx = ps.x - drip_x;
+            float dy = ps.y - drip_y;
+            float drip_d = abs(dx) * 30.0 + max(0.0, dy) * 5.0;
+            float drip = exp(-drip_d) * drip_amount * step(drip_phase, 1.4);
+            col += accent * drip * 0.6;
+        }
+    }
+
+    /* Onset whitewash on lines */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * line_strength * 0.4;
+
+    /* Vignette */
+    col *= smoothstep(2.0, 0.5, length(p));
+
+    /* HDR */
+    col = col / (1.0 + col * 0.45);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSWitchSigil(vert_in);
+    }
+}

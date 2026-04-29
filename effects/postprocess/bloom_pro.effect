@@ -1,0 +1,146 @@
+/*
+ * VJLink - Bloom Pro
+ * Single-pass approximated bloom: bright-pass + 13-tap dual gaussian blur.
+ * Beat-driven intensity. Use as final post FX after generators.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float threshold;          /* 0 - 1, default 0.55 */
+uniform float intensity;          /* 0 - 4, default 1.4 */
+uniform float radius;             /* 0.5 - 5, default 1.5 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float palette_tint;       /* 0 - 1, default 0.0 (pure bloom) */
+uniform float has_input_source;
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float3 palette_bloom(int pid, float t) {
+    if (pid == 1) return float3(1.0, 0.10, 0.10);
+    if (pid == 2) return float3(1.0, 0.55, 0.10);
+    if (pid == 3) return float3(0.7, 1.0, 0.10);
+    if (pid == 4) return float3(0.10, 0.85, 1.0);
+    if (pid == 5) return float3(1.0, 1.0, 1.0);
+    return float3(1.0, 0.5, 0.9);
+}
+
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+/* Bright-pass: extracts pixels above threshold */
+float3 brightPass(float3 c, float thresh)
+{
+    float l = lum(c);
+    float w = saturate((l - thresh) / max(1.0 - thresh, 0.001));
+    return c * w * w;
+}
+
+/* 13-tap gaussian blur, single pass, dual-direction approximation */
+float3 sampleBloom(float2 uv, float r)
+{
+    float2 px = (1.0 / resolution) * r;
+    float3 sum = float3(0.0, 0.0, 0.0);
+    float wsum = 0.0;
+
+    /* 13-tap kernel — sigma ~= 3 */
+    const int N = 6;
+    float weights[7] = {
+        0.198596, 0.175713, 0.121703, 0.065984, 0.028002, 0.0093, 0.002403
+    };
+    /* Center */
+    sum += brightPass(image.Sample(texSampler, uv).rgb, threshold) * weights[0];
+    wsum += weights[0];
+
+    for (int i = 1; i <= 6; i++) {
+        float fi = (float)i;
+        float w = weights[i];
+
+        /* Horizontal */
+        float2 ohx = px * float2(fi, 0.0);
+        sum += brightPass(image.Sample(texSampler, uv + ohx).rgb, threshold) * w;
+        sum += brightPass(image.Sample(texSampler, uv - ohx).rgb, threshold) * w;
+
+        /* Vertical */
+        float2 ohy = px * float2(0.0, fi);
+        sum += brightPass(image.Sample(texSampler, uv + ohy).rgb, threshold) * w;
+        sum += brightPass(image.Sample(texSampler, uv - ohy).rgb, threshold) * w;
+
+        /* Diagonal (subtle softness, half weight) */
+        float2 od1 = px * float2(fi, fi) * 0.707;
+        float2 od2 = px * float2(fi, -fi) * 0.707;
+        sum += brightPass(image.Sample(texSampler, uv + od1).rgb, threshold) * w * 0.5;
+        sum += brightPass(image.Sample(texSampler, uv - od1).rgb, threshold) * w * 0.5;
+        sum += brightPass(image.Sample(texSampler, uv + od2).rgb, threshold) * w * 0.5;
+        sum += brightPass(image.Sample(texSampler, uv - od2).rgb, threshold) * w * 0.5;
+
+        wsum += w * 6.0; /* 4 axis + 2 diag * 0.5 */
+    }
+    return sum / max(wsum, 0.001);
+}
+
+float4 PSBloom(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    bool has_input = (has_input_source > 0.5);
+
+    if (!has_input) {
+        /* No input: nothing to bloom */
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    /* Original */
+    float4 src = image.Sample(texSampler, uv);
+
+    /* Bloom */
+    float r = max(radius, 0.5) * (1.0 + beat_4 * bass * 0.4);
+    float3 bloom = sampleBloom(uv, r);
+
+    /* Beat-driven intensity */
+    float ints = max(intensity, 0.0) * (1.0 + kick_onset * 0.6 + onset_strength * 0.3);
+    bloom *= ints * (0.7 + drive * 0.5);
+
+    /* Optional palette tint on the bloom (0=pure white-ish bloom) */
+    int pid = (int)palette_id;
+    if (palette_tint > 0.001 && pid != 5) {
+        float3 tint = palette_bloom(pid, time * 0.05);
+        bloom = lerp(bloom, bloom * (0.55 + tint * 1.0), saturate(palette_tint));
+    }
+
+    /* Composite: additive over original */
+    float3 col = src.rgb + bloom;
+
+    /* Soft tonemap for HDR safety */
+    col = col / (1.0 + col * 0.35);
+    col = saturate(col);
+
+    return float4(col, src.a);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSBloom(vert_in);
+    }
+}

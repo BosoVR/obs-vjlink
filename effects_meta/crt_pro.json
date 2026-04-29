@@ -1,0 +1,19 @@
+{
+  "id": "crt_pro",
+  "name": "CRT Pro",
+  "category": "retro",
+  "role": "filter",
+  "requires_input": false,
+  "performance_group": "post_glitch",
+  "genre": ["retro", "synthwave", "vaporwave"],
+  "description": "Trinitron CRT: phosphor mask, halation, gaussian scanlines, curvature, warmth, interlace.",
+  "params": [
+    { "name": "scanline_intensity", "label": "Scanlines", "type": "float", "default": 0.45, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "curvature", "label": "Curvature", "type": "float", "default": 0.04, "min": 0.0, "max": 0.2, "step": 0.005 },
+    { "name": "halation", "label": "Halation", "type": "float", "default": 0.8, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "phosphor_strength", "label": "Phosphor Mask", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "warmth", "label": "Warmth", "type": "float", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "interlace", "label": "Interlace", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
+  ]
+}

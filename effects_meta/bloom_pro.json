@@ -1,0 +1,17 @@
+{
+  "id": "bloom_pro",
+  "name": "Bloom Pro",
+  "category": "postprocess",
+  "role": "post",
+  "requires_input": true,
+  "performance_group": "post_glitch",
+  "genre": ["all"],
+  "description": "Multi-tap bright-pass bloom — turns any generator pro. Beat-driven intensity.",
+  "params": [
+    { "name": "threshold", "label": "Threshold", "type": "float", "default": 0.55, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "intensity", "label": "Intensity", "type": "float", "default": 1.4, "min": 0.0, "max": 4.0, "step": 0.05 },
+    { "name": "radius", "label": "Radius", "type": "float", "default": 1.5, "min": 0.5, "max": 5.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "palette_tint", "label": "Palette Tint", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01 }
+  ]
+}

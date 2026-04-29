@@ -4986,6 +4986,121 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'color_invert', label: 'Color Invert', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
   ];
+
+  /* === v1.0.11 NEW EFFECTS === */
+  /* Categories */
+  if (effectCategories.postprocess) {
+    if (!effectCategories.postprocess.effects.includes('bloom_pro'))
+      effectCategories.postprocess.effects.push('bloom_pro');
+    if (!effectCategories.postprocess.effects.includes('holographic_foil'))
+      effectCategories.postprocess.effects.push('holographic_foil');
+    if (!effectCategories.postprocess.effects.includes('lens_flare'))
+      effectCategories.postprocess.effects.push('lens_flare');
+  }
+  if (effectCategories.retro) {
+    if (!effectCategories.retro.effects.includes('crt_pro'))
+      effectCategories.retro.effects.push('crt_pro');
+    if (!effectCategories.retro.effects.includes('vaporwave_sunset'))
+      effectCategories.retro.effects.push('vaporwave_sunset');
+  }
+  if (effectCategories.plasma) {
+    if (!effectCategories.plasma.effects.includes('demoscene_plasma'))
+      effectCategories.plasma.effects.push('demoscene_plasma');
+  }
+  if (effectCategories.geometric) {
+    if (!effectCategories.geometric.effects.includes('witch_sigil'))
+      effectCategories.geometric.effects.push('witch_sigil');
+    if (!effectCategories.geometric.effects.includes('cyber_grid'))
+      effectCategories.geometric.effects.push('cyber_grid');
+  }
+
+  /* Display names */
+  effectNames.bloom_pro = 'Bloom Pro';
+  effectNames.crt_pro = 'CRT Pro';
+  effectNames.vaporwave_sunset = 'Vaporwave Sunset';
+  effectNames.demoscene_plasma = 'Demoscene Plasma';
+  effectNames.witch_sigil = 'Witch Sigil';
+  effectNames.holographic_foil = 'Holographic Foil';
+  effectNames.cyber_grid = 'Cyber Grid';
+  effectNames.lens_flare = 'Lens Flare';
+
+  /* Mark as new */
+  if (typeof NEW_EFFECTS !== 'undefined') {
+    NEW_EFFECTS.add('bloom_pro');
+    NEW_EFFECTS.add('crt_pro');
+    NEW_EFFECTS.add('vaporwave_sunset');
+    NEW_EFFECTS.add('demoscene_plasma');
+    NEW_EFFECTS.add('witch_sigil');
+    NEW_EFFECTS.add('holographic_foil');
+    NEW_EFFECTS.add('cyber_grid');
+    NEW_EFFECTS.add('lens_flare');
+  }
+
+  /* Pro groups */
+  if (typeof effectProGroups !== 'undefined') {
+    effectProGroups.pro_main.effects.push('vaporwave_sunset', 'demoscene_plasma', 'witch_sigil', 'cyber_grid');
+    effectProGroups.pro_content.effects.push('bloom_pro', 'crt_pro', 'holographic_foil', 'lens_flare');
+  }
+
+  /* Params */
+  effectParams.bloom_pro = [
+    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 4, step: 0.05, default: 1.4 },
+    { name: 'radius', label: 'Radius', min: 0.5, max: 5, step: 0.05, default: 1.5 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'palette_tint', label: 'Palette Tint', min: 0, max: 1, step: 0.01, default: 0.0 },
+  ];
+  effectParams.crt_pro = [
+    { name: 'scanline_intensity', label: 'Scanlines', min: 0, max: 1, step: 0.01, default: 0.45 },
+    { name: 'curvature', label: 'Curvature', min: 0, max: 0.2, step: 0.005, default: 0.04 },
+    { name: 'halation', label: 'Halation', min: 0, max: 2, step: 0.05, default: 0.8 },
+    { name: 'phosphor_strength', label: 'Phosphor Mask', min: 0, max: 1, step: 0.05, default: 0.6 },
+    { name: 'warmth', label: 'Warmth', min: 0, max: 1, step: 0.05, default: 0.5 },
+    { name: 'interlace', label: 'Interlace', min: 0, max: 1, step: 0.05, default: 0.3 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.vaporwave_sunset = [
+    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 3, step: 0.05, default: 0.6 },
+    { name: 'sun_size', label: 'Sun Size', min: 0.1, max: 0.6, step: 0.01, default: 0.32 },
+    { name: 'grid_density', label: 'Grid Density', min: 4, max: 32, step: 1, default: 14 },
+    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.5 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.demoscene_plasma = [
+    { name: 'plasma_speed', label: 'Speed', min: 0, max: 3, step: 0.05, default: 1.0 },
+    { name: 'layer_count', label: 'Layers', min: 2, max: 8, step: 1, default: 5 },
+    { name: 'xor_pattern', label: 'XOR Pattern', min: 0, max: 1, step: 0.05, default: 0.4 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.witch_sigil = [
+    { name: 'sigil_size', label: 'Size', min: 0.3, max: 1.0, step: 0.01, default: 0.65 },
+    { name: 'spin_speed', label: 'Spin Speed', min: -3, max: 3, step: 0.05, default: 0.3 },
+    { name: 'drip_amount', label: 'Drip Amount', min: 0, max: 1, step: 0.05, default: 0.5 },
+    { name: 'glyph_density', label: 'Glyph Density', min: 4, max: 24, step: 1, default: 12 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.holographic_foil = [
+    { name: 'foil_intensity', label: 'Foil Intensity', min: 0, max: 1, step: 0.05, default: 0.6 },
+    { name: 'shift_speed', label: 'Shift Speed', min: 0, max: 3, step: 0.05, default: 0.5 },
+    { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.5 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
+  effectParams.cyber_grid = [
+    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 5, step: 0.05, default: 1.4 },
+    { name: 'grid_density', label: 'Grid Density', min: 6, max: 40, step: 1, default: 18 },
+    { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.45 },
+    { name: 'horizon_glow', label: 'Horizon Glow', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 1, options: ['Continuous','1/4','1/8'] },
+  ];
+  effectParams.lens_flare = [
+    { name: 'flare_x', label: 'Flare X', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'flare_y', label: 'Flare Y', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 3, step: 0.05, default: 1.0 },
+    { name: 'streak_length', label: 'Streak Length', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'ghost_count', label: 'Ghost Count', min: 0, max: 6, step: 1, default: 3 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+  ];
 })();
 
 // === Init ===

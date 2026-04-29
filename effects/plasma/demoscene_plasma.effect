@@ -1,0 +1,109 @@
+/*
+ * VJLink - Demoscene Plasma
+ * Classic 90s demoscene plasma: layered sin/cos oscillators with XOR pattern,
+ * palette cycling. Authentic Amiga/PC demo aesthetic.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float plasma_speed;       /* 0 - 3, default 1.0 */
+uniform float layer_count;        /* 2 - 8, default 5 */
+uniform float xor_pattern;        /* 0 - 1, default 0.4 — pixel art feel */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float3 palette_demo(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.5) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.5); return float3(v, v, v); }
+    /* Default: classic Amiga rainbow */
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
+}
+
+float4 PSDemoPlasma(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    float t = time * plasma_speed * (1.0 + bass * 0.4);
+
+    /* Classic demoscene plasma: sum of sinusoidal oscillators */
+    float v = 0.0;
+    int layers = clamp((int)layer_count, 2, 8);
+    for (int i = 0; i < 8; i++) {
+        if (i >= layers) break;
+        float fi = (float)(i + 1);
+        float sx = sin(p.x * fi * 4.0 + t * (0.5 + fi * 0.3));
+        float sy = sin(p.y * fi * 3.5 + t * (0.4 + fi * 0.25));
+        float sd = sin(length(p) * fi * 5.0 - t * (0.6 + fi * 0.2));
+        float sa = sin((p.x * fi + p.y * fi * 0.5) * 3.0 + t * 0.7);
+        v += (sx + sy + sd + sa) * 0.25 / fi;
+    }
+    v = v * 0.5 + 0.5;
+    v = saturate(v);
+
+    /* Optional XOR pixelization */
+    if (xor_pattern > 0.001) {
+        float xor_scale = 80.0;
+        int xx = (int)(uv.x * xor_scale);
+        int yy = (int)(uv.y * xor_scale);
+        int xored = xx ^ yy;
+        float xor_v = (float)(xored % 64) / 64.0;
+        v = lerp(v, frac(v + xor_v * 0.6), saturate(xor_pattern));
+    }
+
+    /* Color cycling */
+    float hue = frac(v + t * 0.05);
+    float3 col = palette_demo((int)palette_id, hue);
+
+    /* Beat drive */
+    col *= 0.7 + drive * 0.5 + beat_4 * bass * 0.3;
+
+    /* Onset highlight */
+    col += palette_demo((int)palette_id, frac(hue + 0.3)) * onset_strength * 0.15;
+
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, length(p));
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSDemoPlasma(vert_in);
+    }
+}

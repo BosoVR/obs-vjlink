@@ -1,0 +1,18 @@
+{
+  "id": "cyber_grid",
+  "name": "Cyber Grid",
+  "category": "geometric",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "main_visual",
+  "genre": ["cyber", "synthwave", "vaporwave"],
+  "description": "80s vector horizon grid with perspective + horizon sun + beat pulse on grid lines.",
+  "params": [
+    { "name": "scroll_speed", "label": "Scroll Speed", "type": "float", "default": 1.4, "min": 0.0, "max": 5.0, "step": 0.05 },
+    { "name": "grid_density", "label": "Grid Density", "type": "float", "default": 18.0, "min": 6.0, "max": 40.0, "step": 1.0 },
+    { "name": "horizon_y", "label": "Horizon Y", "type": "float", "default": 0.45, "min": 0.3, "max": 0.7, "step": 0.01 },
+    { "name": "horizon_glow", "label": "Horizon Glow", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_sync", "label": "Beat Sync", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 1.0 }
+  ]
+}

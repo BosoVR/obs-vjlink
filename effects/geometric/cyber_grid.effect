@@ -1,0 +1,165 @@
+/*
+ * VJLink - Cyber Grid
+ * 80s vector horizon: glowing perspective grid running to vanishing point.
+ * Beat-locked grid pulse, palette-aware grid color.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float scroll_speed;       /* 0 - 5, default 1.4 */
+uniform float grid_density;       /* 6 - 40, default 18 */
+uniform float horizon_y;          /* 0.3 - 0.7, default 0.45 */
+uniform float horizon_glow;       /* 0 - 2, default 1.0 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=cont 1=1/4 2=1/8 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+
+void palette_cyber(int pid, out float3 grid_col, out float3 sky_top, out float3 sky_bot, out float3 sun_col) {
+    if (pid == 1) {
+        grid_col = float3(1.0, 0.10, 0.10); sky_top = float3(0.05, 0.0, 0.0);
+        sky_bot = float3(0.4, 0.05, 0.05); sun_col = float3(1.0, 0.2, 0.1); return;
+    }
+    if (pid == 2) {
+        grid_col = float3(1.0, 0.55, 0.10); sky_top = float3(0.1, 0.02, 0.0);
+        sky_bot = float3(0.7, 0.25, 0.05); sun_col = float3(1.0, 0.5, 0.05); return;
+    }
+    if (pid == 3) {
+        grid_col = float3(0.7, 1.0, 0.10); sky_top = float3(0.02, 0.05, 0.0);
+        sky_bot = float3(0.2, 0.5, 0.05); sun_col = float3(0.7, 1.0, 0.1); return;
+    }
+    if (pid == 4) {
+        grid_col = float3(0.10, 0.85, 1.0); sky_top = float3(0.0, 0.02, 0.08);
+        sky_bot = float3(0.05, 0.2, 0.5); sun_col = float3(1.0, 0.2, 0.85); return;
+    }
+    if (pid == 5) {
+        grid_col = float3(1.0, 1.0, 1.0); sky_top = float3(0.0, 0.0, 0.0);
+        sky_bot = float3(0.3, 0.3, 0.3); sun_col = float3(1.0, 1.0, 1.0); return;
+    }
+    /* Default cyberpunk: hot pink + cyan */
+    grid_col = float3(1.0, 0.20, 0.85); sky_top = float3(0.05, 0.0, 0.15);
+    sky_bot = float3(0.3, 0.05, 0.45); sun_col = float3(0.10, 0.85, 1.0);
+}
+
+float4 PSCyberGrid(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float bs = beat_sync;
+    float beat_q = (bs < 0.5) ? pow(1.0 - beat_phase, 4.0)
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
+                              : pow(1.0 - beat_1_8, 4.0));
+
+    float3 grid_col, sky_top, sky_bot, sun_col;
+    palette_cyber((int)palette_id, grid_col, sky_top, sky_bot, sun_col);
+
+    float horizon = clamp(horizon_y, 0.2, 0.8);
+    float3 col;
+
+    if (uv.y < horizon) {
+        /* Sky gradient */
+        float t = uv.y / horizon;
+        col = lerp(sky_top, sky_bot, pow(t, 1.4));
+
+        /* Sun on horizon (lower half visible) */
+        float2 sun_c = float2(0.5, horizon - 0.0);
+        float2 sd = float2(uv.x - sun_c.x, uv.y - sun_c.y);
+        sd.x *= aspect;
+        float sun_dist = length(sd);
+        float sr = 0.16;
+        if (uv.y > horizon - sr * 1.0) {
+            float sun_t = saturate(1.0 - sun_dist / sr);
+            sun_t = pow(sun_t, 0.7);
+            col = lerp(col, sun_col, sun_t);
+        }
+
+        /* Sun glow halo */
+        col += sun_col * exp(-sun_dist * 4.0) * 0.4 * (0.7 + bass * 0.5);
+
+    } else {
+        /* === GROUND with perspective grid === */
+        col = float3(0.005, 0.0, 0.01);
+
+        float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01);
+
+        /* Perspective: foreshortening factor */
+        float persp = 1.0 / max(1.0 - gy, 0.005);
+
+        /* Vertical lines (converging toward vanishing point) */
+        float vx = (uv.x - 0.5) * aspect;
+        float vx_p = vx * persp;
+        float v_count = grid_density;
+        float v_id = floor(vx_p * v_count);
+        float v_f = abs(vx_p * v_count - v_id - 0.5) * 2.0;
+        float v_line = 1.0 - smoothstep(0.92, 0.99, v_f);
+        v_line *= smoothstep(0.0, 0.05, gy);
+
+        /* Horizontal lines (scrolling toward camera) */
+        float scroll = time * scroll_speed * (1.0 + bass * 0.4);
+        /* Use sqrt(gy) for 3D-ish perspective curve */
+        float gp = sqrt(gy + 0.001) * 12.0 + scroll;
+        float h_id = floor(gp);
+        float h_f = abs(gp - h_id - 0.5) * 2.0;
+        /* Bass-driven thickness */
+        float h_thresh = 0.92 - bass * 0.05;
+        float h_line = 1.0 - smoothstep(h_thresh, 0.99, h_f);
+
+        float grid = max(v_line, h_line);
+
+        /* Audio: every 4th line pulses on beat */
+        float pulse_h = step(0.0, abs(fmod(h_id, 4.0)) - 3.5);
+        float pulse_v = step(0.0, abs(fmod(v_id, 4.0)) - 3.5);
+        float pulse = max(pulse_h * h_line, pulse_v * v_line) * beat_q * bass * 0.6;
+
+        col += grid_col * grid * (0.5 + drive * 0.6);
+        col += grid_col * pulse * 1.2;
+
+        /* Distance fade */
+        col *= smoothstep(0.0, 0.4, gy) * smoothstep(1.0, 0.05, gy * 0.5);
+
+        /* Horizon glow */
+        float h_glow = exp(-gy * 8.0) * horizon_glow;
+        col += sun_col * h_glow * 0.4 * (0.7 + bass * 0.6);
+    }
+
+    /* Onset whitewash */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.10;
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSCyberGrid(vert_in);
+    }
+}

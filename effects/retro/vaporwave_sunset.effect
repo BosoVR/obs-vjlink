@@ -1,0 +1,207 @@
+/*
+ * VJLink - Vaporwave Sunset
+ * Classic 80s vaporwave: sun on horizon, wireframe mountains/grid,
+ * gradient sky, audio-reactive grid scroll. A E S T H E T I C.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float scroll_speed;       /* 0 - 3, default 0.6 */
+uniform float sun_size;           /* 0.1 - 0.6, default 0.32 */
+uniform float grid_density;       /* 4 - 32, default 14 */
+uniform float horizon_y;          /* 0.3 - 0.7, default 0.5 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+void palette_vapor(int pid, out float3 sky_top, out float3 sky_bot,
+                   out float3 sun_top, out float3 sun_bot, out float3 grid_col)
+{
+    if (pid == 1) {
+        /* Hardtechno vapor: red sky */
+        sky_top = float3(0.18, 0.0, 0.0);
+        sky_bot = float3(1.0, 0.15, 0.05);
+        sun_top = float3(1.0, 0.95, 0.6);
+        sun_bot = float3(1.0, 0.1, 0.05);
+        grid_col = float3(1.0, 0.15, 0.1);
+        return;
+    }
+    if (pid == 2) {
+        /* Rawstyle: orange */
+        sky_top = float3(0.2, 0.05, 0.0);
+        sky_bot = float3(1.0, 0.5, 0.05);
+        sun_top = float3(1.0, 0.95, 0.5);
+        sun_bot = float3(1.0, 0.4, 0.05);
+        grid_col = float3(1.0, 0.55, 0.1);
+        return;
+    }
+    if (pid == 3) {
+        /* Acid green */
+        sky_top = float3(0.0, 0.18, 0.0);
+        sky_bot = float3(0.6, 1.0, 0.05);
+        sun_top = float3(0.95, 1.0, 0.6);
+        sun_bot = float3(0.4, 0.95, 0.05);
+        grid_col = float3(0.65, 1.0, 0.1);
+        return;
+    }
+    if (pid == 4) {
+        /* Cyber: cyan/magenta */
+        sky_top = float3(0.05, 0.0, 0.20);
+        sky_bot = float3(0.10, 0.5, 1.0);
+        sun_top = float3(1.0, 0.6, 1.0);
+        sun_bot = float3(1.0, 0.15, 0.85);
+        grid_col = float3(0.10, 0.85, 1.0);
+        return;
+    }
+    if (pid == 5) {
+        /* Mono */
+        sky_top = float3(0.0, 0.0, 0.0);
+        sky_bot = float3(0.6, 0.6, 0.6);
+        sun_top = float3(1.0, 1.0, 1.0);
+        sun_bot = float3(0.4, 0.4, 0.4);
+        grid_col = float3(0.85, 0.85, 0.85);
+        return;
+    }
+    /* Default: classic vaporwave purple/pink */
+    sky_top = float3(0.10, 0.02, 0.30);
+    sky_bot = float3(1.0, 0.25, 0.65);
+    sun_top = float3(1.0, 0.95, 0.45);
+    sun_bot = float3(1.0, 0.15, 0.55);
+    grid_col = float3(1.0, 0.20, 0.85);
+}
+
+float4 PSVaporwaveSunset(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.35);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
+
+    float3 sky_top, sky_bot, sun_top, sun_bot, grid_col;
+    palette_vapor((int)palette_id, sky_top, sky_bot, sun_top, sun_bot, grid_col);
+
+    float horizon = clamp(horizon_y, 0.2, 0.8);
+
+    float3 col;
+
+    if (uv.y < horizon) {
+        /* === SKY === */
+        float t = uv.y / horizon;
+        col = lerp(sky_top, sky_bot, pow(t, 1.4));
+
+        /* Stars */
+        float star_h = hash21(floor(uv * 200.0));
+        if (star_h > 0.997 && uv.y < horizon - 0.05) {
+            float twinkle = 0.5 + sin(time * 4.0 + star_h * 30.0) * 0.5;
+            col += float3(1.0, 0.95, 1.0) * twinkle * (1.0 - uv.y / horizon);
+        }
+
+        /* === SUN === */
+        float2 sun_center = float2(0.5, horizon - 0.05);
+        float2 sd = float2(uv.x - sun_center.x, uv.y - sun_center.y);
+        sd.x *= aspect;
+        float sun_dist = length(sd);
+        float sr = max(sun_size, 0.05);
+
+        if (sun_dist < sr) {
+            float sun_t = uv.y - (sun_center.y - sr);
+            sun_t = saturate(sun_t / (sr * 2.0));
+            float3 sun_col = lerp(sun_bot, sun_top, sun_t);
+
+            /* Horizontal sun stripes (classic vaporwave) */
+            float stripe_y = uv.y - sun_center.y + sr;
+            float stripe = step(0.0, stripe_y) * step(stripe_y, sr);
+            stripe *= step(0.5, frac(stripe_y * 16.0));
+
+            col = lerp(sun_col, col, stripe * 0.7);
+        } else {
+            /* Sun glow */
+            float glow = exp(-(sun_dist - sr) * 4.0);
+            col += sun_bot * glow * 0.5;
+        }
+
+    } else {
+        /* === GROUND with grid === */
+        float gy = (uv.y - horizon) / max(1.0 - horizon, 0.01); /* 0..1 from horizon to bottom */
+        col = lerp(float3(0.02, 0.0, 0.05), sky_bot * 0.2, 0.0);
+
+        /* Perspective: deeper rows scroll faster */
+        float scroll = time * scroll_speed * (1.0 + bass * 0.6);
+        float persp = 1.0 / max(1.0 - gy, 0.01); /* perspective scaling */
+
+        /* Vertical grid lines (perspective converging to horizon) */
+        float vx_count = grid_density * 2.0;
+        float vx = uv.x * 2.0 - 1.0; /* -1..1 */
+        vx *= persp;
+        float vx_id = floor(vx * vx_count * 0.5);
+        float vx_f = abs(vx * vx_count * 0.5 - vx_id - 0.5) * 2.0;
+        float v_line = 1.0 - smoothstep(0.95, 1.0, vx_f);
+
+        /* Horizontal grid lines (scrolling toward camera) */
+        float hz = gy * 4.0 + scroll;
+        float hz_id = floor(hz * grid_density);
+        float hz_f = abs(hz * grid_density - hz_id - 0.5) * 2.0;
+        float h_line = 1.0 - smoothstep(0.92, 1.0, hz_f);
+
+        float grid = max(v_line, h_line);
+
+        /* Grid fades with distance (toward horizon) */
+        grid *= smoothstep(0.0, 0.5, gy) * smoothstep(1.0, 0.9, gy);
+
+        col += grid_col * grid * (0.5 + bass * 0.7 + beat_4 * bass * 0.4);
+
+        /* Wireframe mountain silhouettes */
+        float mtn_y = horizon + (sin(uv.x * 8.0 + time * 0.1) * 0.04
+                               + sin(uv.x * 19.0 + time * 0.07) * 0.025
+                               + 0.03);
+        float mtn_mask = step(uv.y, mtn_y);
+        col = lerp(col, sky_bot * 0.15, mtn_mask);
+        /* Mountain edge glow */
+        float mtn_edge = 1.0 - smoothstep(0.0, 0.005, abs(uv.y - mtn_y));
+        col += grid_col * mtn_edge * 0.3 * mtn_mask;
+    }
+
+    /* Onset color flash */
+    col += sun_top * onset_strength * 0.10;
+
+    /* Subtle grain */
+    col += (hash21(uv * resolution + floor(time * 6.0)) - 0.5) * 0.015;
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSVaporwaveSunset(vert_in);
+    }
+}

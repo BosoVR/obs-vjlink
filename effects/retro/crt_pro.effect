@@ -1,0 +1,175 @@
+/*
+ * VJLink - CRT Pro
+ * Trinitron-style CRT with phosphor mask, halation, gaussian scanlines,
+ * screen curvature, vignette, warm color temperature, interlace flicker.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+
+uniform float scanline_intensity; /* 0 - 1, default 0.45 */
+uniform float curvature;          /* 0 - 0.2, default 0.04 */
+uniform float halation;           /* 0 - 2, default 0.8 — light bleed around bright pixels */
+uniform float phosphor_strength;  /* 0 - 1, default 0.6 — RGB stripe mask intensity */
+uniform float warmth;             /* 0 - 1, default 0.5 — CRT warm tint */
+uniform float interlace;          /* 0 - 1, default 0.3 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float has_input_source;
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+/* Curve UV like a CRT screen surface */
+float2 curveUV(float2 uv, float curve)
+{
+    uv = uv * 2.0 - 1.0;
+    float2 sq = uv * uv;
+    uv += uv * sq.yx * curve;
+    return uv * 0.5 + 0.5;
+}
+
+float2 cellUV(float2 uv, float scale)
+{
+    return frac(uv * scale);
+}
+
+float4 PSCRTPro(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    bool has_input = (has_input_source > 0.5);
+
+    /* Curve coordinates */
+    float curve = max(curvature, 0.0);
+    float2 cuv = curveUV(uv, curve);
+
+    /* Off-screen black border (visible when curvature is on) */
+    float oob = step(cuv.x, 0.0) + step(1.0, cuv.x)
+              + step(cuv.y, 0.0) + step(1.0, cuv.y);
+    if (oob > 0.5) {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+
+    /* Source */
+    float3 col;
+    if (has_input) {
+        col = image.Sample(texSampler, cuv).rgb;
+    } else {
+        /* Standalone: SMPTE-ish color bars test pattern */
+        float bar = floor(cuv.x * 8.0);
+        float3 bar_cols[8] = {
+            float3(0.75, 0.75, 0.75), float3(0.75, 0.75, 0.0),
+            float3(0.0, 0.75, 0.75),  float3(0.0, 0.75, 0.0),
+            float3(0.75, 0.0, 0.75),  float3(0.75, 0.0, 0.0),
+            float3(0.0, 0.0, 0.75),   float3(0.0, 0.0, 0.0)
+        };
+        int bi = clamp((int)bar, 0, 7);
+        col = bar_cols[bi];
+        col *= step(cuv.y, 0.66);
+        col += float3(0.05, 0.05, 0.07) * step(0.66, cuv.y);
+    }
+
+    /* === Halation: sample neighbors, take max luminance, bleed brightness === */
+    float halo = 0.0;
+    if (halation > 0.001) {
+        float2 px = 1.0 / resolution;
+        float l_center = lum(col);
+        for (int hx = -2; hx <= 2; hx++) {
+            for (int hy = -2; hy <= 2; hy++) {
+                if (hx == 0 && hy == 0) continue;
+                float2 off = px * float2((float)hx, (float)hy) * 1.5;
+                float l_n = lum(image.Sample(texSampler, cuv + off).rgb);
+                float dist = length(float2((float)hx, (float)hy));
+                halo += l_n * exp(-dist * 0.7);
+            }
+        }
+        halo /= 24.0;
+        col += float3(1.0, 0.95, 0.85) * halo * halation * 0.45;
+    }
+
+    /* === Phosphor mask (Trinitron aperture grille) === */
+    if (phosphor_strength > 0.001) {
+        float pixel_x = cuv.x * resolution.x;
+        float ph = floor(fmod(pixel_x, 3.0));
+        float3 mask = float3(0.0, 0.0, 0.0);
+        if (ph < 1.0) mask.r = 1.0;
+        else if (ph < 2.0) mask.g = 1.0;
+        else mask.b = 1.0;
+        /* Soft mask: blend each channel with darkening */
+        float3 mask_col = lerp(float3(0.5, 0.5, 0.5), mask, phosphor_strength);
+        col = col * (mask_col * 1.0 + (1.0 - phosphor_strength) * 0.3);
+    }
+
+    /* === Scanlines (gaussian beam shape) === */
+    if (scanline_intensity > 0.001) {
+        float scan_y = cuv.y * resolution.y;
+        float scan_phase = fmod(scan_y, 2.0);
+        /* Gaussian centered at 0.5 within [0..2) */
+        float dist_from_line = abs(scan_phase - 1.0);
+        float scan = exp(-dist_from_line * dist_from_line * 4.0);
+        /* Scan effect: bright lines get full color, between lines goes darker */
+        float scan_mul = lerp(1.0 - scanline_intensity, 1.0, scan);
+        col *= scan_mul;
+    }
+
+    /* === Interlace flicker === */
+    if (interlace > 0.001) {
+        int line_idx = (int)(cuv.y * resolution.y);
+        int frame_parity = (int)fmod(time * 60.0, 2.0);
+        if ((line_idx + frame_parity) % 2 == 0) {
+            col *= 1.0 - interlace * 0.18;
+        }
+    }
+
+    /* === Warm color temperature shift === */
+    if (warmth > 0.001) {
+        col.r *= 1.0 + warmth * 0.10;
+        col.b *= 1.0 - warmth * 0.07;
+        col.g *= 1.0 + warmth * 0.02;
+    }
+
+    /* === Subtle noise (analog hum) === */
+    float n = hash21(cuv * resolution + floor(time * 24.0)) - 0.5;
+    col += n * 0.025;
+
+    /* === Vignette === */
+    float2 c_uv = cuv - 0.5;
+    float vig = 1.0 - dot(c_uv, c_uv) * (1.6 + curve * 4.0);
+    col *= saturate(vig);
+
+    /* Beat brightness lift */
+    col *= 1.0 + drive * 0.05;
+
+    /* Onset whitewash (rare) */
+    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.04;
+
+    col = saturate(col);
+    return float4(col, has_input ? image.Sample(texSampler, cuv).a : 1.0);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSCRTPro(vert_in);
+    }
+}
