@@ -1,7 +1,7 @@
 /*
- * VJLink Sacred Geometry Effect
- * Flower of Life / Metatron's Cube pattern with audio-reactive glow.
- * Bass drives circle pulse, beat drives rotation.
+ * VJLink - Sacred Geometry (Pro v2)
+ * Layered concentric rings + radial spokes forming flower-of-life-style
+ * mandala. Palette-aware, beat-driven pulse, audio-reactive line glow.
  */
 
 uniform float4x4 ViewProj;
@@ -9,148 +9,130 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
 uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-uniform float pattern_scale;   /* pattern size (default 3.0) */
-uniform float line_width;      /* ln_v thickness (default 0.02) */
-uniform float rotation_speed;  /* rotation (default 0.1) */
-uniform float layers;          /* number of ring layers (default 3.0) */
+uniform float pattern_scale;      /* 0.5 - 5, default 1.5 */
+uniform float line_width;         /* 0.005 - 0.1, default 0.018 */
+uniform float rotation_speed;     /* 0 - 3, default 0.2 */
+uniform float layers;             /* 1 - 6, default 4 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float circleSDF(float2 p, float2 center, float radius)
-{
-    return abs(length(p - center) - radius);
-}
-
-float2 rotate2d(float2 p, float a)
-{
-    float c = cos(a);
-    float s = sin(a);
-    return float2(p.x * c - p.y * s, p.x * s + p.y * c);
+float3 palette_sacred(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.55) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.5); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
 float4 PSSacredGeometry(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float scale = max(pattern_scale, 1.0);
-    float line_w = max(line_width, 0.005);
-    float rot_spd = rotation_speed;
-    int num_layers = clamp(int(layers), 1, 6);
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Apply rotation */
-    float rot = time * rot_spd;
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat;
-    rot += beat * 0.1 * bands.x;
-    p = rotate2d(p, rot);
+    float scale = max(pattern_scale, 0.3);
+    float lw_base = max(line_width, 0.003);
+    int n_layers = clamp((int)layers, 1, 6);
 
-    p *= scale;
+    float r = length(p);
+    float ang = atan2(p.y, p.x);
 
-    float d = 1e10;
-    float glow_accum = 0.0;
+    /* Global rotation */
+    ang += time * rotation_speed * 0.5 + bass * 0.4;
 
-    /* Flower of Life: center circle + 6 surrounding + more layers */
-    float radius = 1.0 + bands.x * 0.1;
+    float3 col = float3(0.02, 0.02, 0.04);
 
-    /* Center circle */
-    float dc = circleSDF(p, float2(0.0, 0.0), radius);
-    d = min(d, dc);
-    glow_accum += 0.003 / (dc + 0.01);
+    /* Build flower-of-life: 6 circles arranged in hex around center + center circle */
+    /* For each layer, the radius grows */
+    for (int li = 0; li < 6; li++) {
+        if (li >= n_layers) break;
+        float fl = (float)li;
 
-    /* Surrounding rings */
-    for (int layer = 1; layer <= 6; layer++) {
-        if (layer > num_layers) break;
+        /* Layer radius */
+        float layer_r = (fl + 1.0) * 0.18 * scale;
 
-        int ring_count = layer * 6;
-        float ring_dist = float(layer) * radius;
+        /* Number of petals: 6 * (li+1) for flower-of-life */
+        int petals = 6 + li * 6;
 
-        for (int i = 0; i < 36; i++) {
-            if (i >= ring_count) break;
-
-            float angle = float(i) / float(ring_count) * 6.28318;
-            float2 center = float2(cos(angle), sin(angle)) * ring_dist;
-
-            float dd = circleSDF(p, center, radius);
-            d = min(d, dd);
-            glow_accum += 0.002 / (dd + 0.01);
+        /* Distance from each petal center */
+        float min_petal_d = 1e9;
+        for (int pi = 0; pi < 18; pi++) {
+            if (pi >= petals) break;
+            float fp = (float)pi;
+            float petal_ang = (fp / (float)petals) * 6.28318 + ang * 0.0;
+            float2 petal_pos = float2(cos(petal_ang), sin(petal_ang)) * layer_r;
+            /* Apply rotation to petal position */
+            float ca = cos(time * rotation_speed * 0.5 + bass * 0.4);
+            float sa = sin(time * rotation_speed * 0.5 + bass * 0.4);
+            petal_pos = float2(petal_pos.x * ca - petal_pos.y * sa,
+                               petal_pos.x * sa + petal_pos.y * ca);
+            float d = length(p - petal_pos) - layer_r * 1.0;
+            if (abs(d) < abs(min_petal_d)) min_petal_d = d;
         }
+
+        /* Line for petal edge */
+        float lw = lw_base * (1.0 + drive * 0.5);
+        float petal_line = exp(-abs(min_petal_d) / lw * 3.0);
+        float layer_fade = 1.0 - fl / 6.0;
+
+        float hue = frac(fl * 0.16 + time * 0.05 + r * 0.1);
+        float3 layer_col = palette_sacred((int)palette_id, hue);
+        col += layer_col * petal_line * layer_fade * (0.5 + treble * 0.5 + beat_4 * bass * 0.3);
     }
 
-    /* Lines from center to outer circles (Metatron's Cube hint) */
-    for (int i = 0; i < 6; i++) {
-        float angle = float(i) / 6.0 * 6.28318;
-        float2 dir = float2(cos(angle), sin(angle));
+    /* Center bright orb pulsing on beat */
+    float center = exp(-r * 8.0) * (0.6 + bass * 0.6 + kick_onset * 0.8);
+    col += palette_sacred((int)palette_id, time * 0.07) * center;
 
-        /* Line distance */
-        float t = dot(p, dir);
-        float2 proj = dir * t;
-        float line_d = length(p - proj);
+    /* Outer ring (defining bound) */
+    float outer_r = 0.9 * scale;
+    float outer_ring = exp(-abs(r - outer_r) / lw_base * 2.5);
+    col += palette_sacred((int)palette_id, 0.6) * outer_ring * (0.4 + bass * 0.4);
 
-        /* Only within bounds */
-        if (t > 0.0 && t < float(num_layers) * radius) {
-            d = min(d, line_d);
-        }
-    }
+    /* Onset white wash on lines */
+    float total_line = saturate(length(col) * 0.5);
+    col += float3(1.0, 1.0, 1.0) * onset_strength * total_line * 0.25;
 
-    /* Render lines */
-    float ln_v = 1.0 - smoothstep(0.0, line_w, d);
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, r);
 
-    /* Color based on distance from center */
-    float dist_center = length(p) / max(float(num_layers) * radius, 0.1);
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
 
-    float hue = frac(dist_center * 0.3 + time * 0.02 + bands.y * 0.1);
-    float3 line_col;
-    line_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-    line_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-    line_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-    line_col = saturate(line_col);
-
-    /* Glow */
-    float3 glow_col = line_col * glow_accum * 0.1 * (1.0 + bands.z);
-
-    float3 color = line_col * ln_v * (0.8 + bands.x * 0.5) + glow_col;
-
-    /* Background subtle gradient */
-    color += float3(0.02, 0.01, 0.03) * (1.0 - dist_center * 0.5);
-
-    return float4(color, 1.0);
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSSacredGeometry(vert_in);
+        pixel_shader = PSSacredGeometry(vert_in);
     }
 }

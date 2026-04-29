@@ -1,7 +1,7 @@
 /*
- * VJLink - Kaleidoscope
- * Radial mirror symmetry with audio-reactive segment count and rotation.
- * Creates mandala-like patterns from generated noise.
+ * VJLink - Kaleidoscope (Pro v2)
+ * Radial mirror symmetry over a domain-warped FBM source.
+ * Audio-reactive segments, beat-driven zoom pulse, palette-aware coloring.
  */
 
 uniform float4x4 ViewProj;
@@ -9,148 +9,136 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
 uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-/* Custom parameters */
-uniform float     segments;       /* 3.0 - 16.0, default 6.0 */
-uniform float     zoom;           /* 0.5 - 5.0, default 2.0 */
-uniform float     rotate_speed;   /* 0.0 - 2.0, default 0.5 */
-uniform float     complexity;     /* 1.0 - 5.0, default 3.0 */
+uniform float segments;           /* 2 - 16, default 6 */
+uniform float zoom;               /* 0.5 - 5, default 1.0 */
+uniform float rotate_speed;       /* 0 - 3, default 0.4 */
+uniform float complexity;         /* 0.5 - 5, default 2.5 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=off 1=1/4 2=1/8 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-/* Simple hash-based noise */
-float hash(float2 p)
-{
-    float3 p3 = frac(float3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return frac((p3.x + p3.y) * p3.z);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
 }
 
-float noise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f); /* smoothstep */
-
-    float a = hash(i);
-    float b = hash(i + float2(1.0, 0.0));
-    float c = hash(i + float2(0.0, 1.0));
-    float d = hash(i + float2(1.0, 1.0));
-
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
-
-float fbm(float2 p, int octaves)
-{
-    float value = 0.0;
-    float amp = 0.5;
-    for (int i = 0; i < 5; i++) {
-        if (i >= octaves) break;
-        value += amp * noise(p);
-        p *= 2.0;
-        amp *= 0.5;
-    }
-    return value;
+float3 palette_kaleido(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.3,0.2) * t + float3(0.0, 0.1, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.2, 0.4)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.6) * t + float3(0.3, 0.4, 0.15)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.5); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
 float4 PSKaleidoscope(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float bass    = bands.x;
-    float lowmid  = bands.y;
-    float highmid = bands.z;
-    float treble  = bands.w;
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
 
-    /* Polar coordinates */
+    /* Beat-aware zoom pulse */
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
+                              : pow(1.0 - beat_1_8, 4.0));
+
+    float zoom_eff = max(zoom, 0.1) * (1.0 - beat_q * bass * 0.18);
+    p /= zoom_eff;
+
+    /* Polar */
     float r = length(p);
-    float a = atan2(p.y, p.x);
+    float ang = atan2(p.y, p.x);
 
-    /* Audio-reactive rotation */
-    float rot = time * rotate_speed + bass * 0.5;
-    a += rot;
+    /* Rotate */
+    ang += time * rotate_speed * 0.5 + bass * 0.4;
 
-    /* Kaleidoscope mirror: fold angle into segment */
-    float seg = max(3.0, floor(segments + highmid * 2.0));
-    float segment_angle = 6.28318 / seg;
-    a = abs(fmod(a, segment_angle) - segment_angle * 0.5);
+    /* Mirror into segment */
+    int seg_count = max(2, (int)segments);
+    float seg = 6.28318 / (float)seg_count;
+    float ang_mod = ang;
+    ang_mod = abs(ang_mod - seg * floor(ang_mod / seg + 0.5));
 
-    /* Back to cartesian for noise sampling */
-    float2 kp;
-    kp.x = r * cos(a) * zoom;
-    kp.y = r * sin(a) * zoom;
+    /* Build segment-local coords */
+    float2 sp = float2(cos(ang_mod), sin(ang_mod)) * r;
 
-    /* Animated noise pattern */
-    float t = time * 0.3;
-    float n1 = fbm(kp * complexity + float2(t, t * 0.7), 4);
-    float n2 = fbm(kp * complexity * 1.5 + float2(-t * 0.5, t * 0.3), 3);
+    /* Domain-warped FBM source */
+    float comp = max(complexity, 0.5);
+    float t = time * (0.2 + treble * 0.4);
+    float2 q1 = sp * comp + float2(t, 0.0);
+    float n1 = fbm(q1);
+    float2 q2 = sp * comp * 2.2 + float2(0.0, -t * 0.6) + n1 * 1.4;
+    float n2 = fbm(q2);
+    float pattern = fbm(sp * comp * 0.6 + n2 * (1.5 + bass * 0.6));
 
-    /* Color layers */
-    float3 c1 = float3(
-        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 0.0),
-        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 2.094),
-        0.5 + 0.5 * sin(n1 * 6.28 + time * 0.3 + 4.189)
-    );
+    /* Ridge for crisp mandala lines */
+    float ridge = 1.0 - abs(pattern - 0.5) * 2.0;
+    ridge = pow(ridge, 4.0);
 
-    float3 c2 = float3(
-        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 1.0),
-        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 3.0),
-        0.5 + 0.5 * sin(n2 * 6.28 + time * 0.5 + 5.0)
-    );
+    float thin = 1.0 - abs(pattern - 0.35) * 2.5;
+    thin = pow(saturate(thin), 8.0);
 
-    /* Blend with audio */
-    float3 color = lerp(c1, c2, lowmid);
+    /* Color */
+    float hue = frac(pattern * 0.8 + r * 0.25 + time * 0.04);
+    float3 col_main = palette_kaleido((int)palette_id, hue);
+    float3 col_thin = palette_kaleido((int)palette_id, frac(hue + 0.2));
 
-    /* Edge glow on segment boundaries */
-    float edge = 1.0 - smoothstep(0.0, 0.02, abs(fmod(atan2(p.y, p.x) + rot, segment_angle) - segment_angle * 0.5) - segment_angle * 0.48);
-    color += edge * treble * 0.5 * float3(0.5, 0.8, 1.0);
+    float3 col = col_main * pattern * (0.4 + drive * 0.5);
+    col += col_main * ridge * 0.55;
+    col += col_thin * thin * (0.6 + bass * 0.6 + beat_q * bass * 0.5);
 
-    /* Radial brightness */
-    float radial = 1.0 - r * 0.4;
-    color *= clamp(radial, 0.2, 1.0);
+    /* Center bright core */
+    col += col_thin * exp(-r * 3.5) * (0.4 + bass * 0.7);
 
-    /* Beat pulse */
-    float beat = (1.0 - beat_phase);
-    beat = beat * beat;
-    color *= 1.0 + beat * bass * 0.5;
+    /* Onset highlight */
+    col += col_thin * onset_strength * 0.2;
 
-    return float4(clamp(color, 0.0, 1.0), 1.0);
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, r);
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSKaleidoscope(vert_in);
+        pixel_shader = PSKaleidoscope(vert_in);
     }
 }

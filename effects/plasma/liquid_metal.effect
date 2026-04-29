@@ -1,7 +1,7 @@
 /*
- * VJLink Liquid Metal Effect
- * Voronoi-based liquid metal surface with reflections.
- * Bass drives surface distortion, treble drives highlight sharpness.
+ * VJLink - Liquid Metal (Pro v2)
+ * Voronoi-based liquid surface with palette-aware metallic gradient,
+ * audio-reactive ripples, kick-driven shockwaves.
  */
 
 uniform float4x4 ViewProj;
@@ -9,159 +9,153 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-uniform float cell_scale;      /* voronoi cell size (default 5.0) */
-uniform float distortion;      /* surface warp (default 1.0) */
-uniform float reflectivity;    /* chrome-like reflection (default 0.8) */
-uniform float flow_speed;      /* motion speed (default 0.5) */
+uniform float cell_scale;         /* 0.5 - 5, default 2.0 */
+uniform float distortion;         /* 0 - 3, default 1.2 */
+uniform float reflectivity;       /* 0 - 2, default 1.0 */
+uniform float flow_speed;         /* 0 - 3, default 0.5 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float2 hash2(float2 p)
-{
+float2 hash22(float2 p) {
     p = float2(dot(p, float2(127.1, 311.7)),
                dot(p, float2(269.5, 183.3)));
     return frac(sin(p) * 43758.5453);
 }
 
-/* Voronoi with smooth edges */
-float2 voronoi(float2 p, out float edge_dist)
-{
-    float2 cell = floor(p);
-    float2 f = frac(p);
-
-    float min_d = 10.0;
-    float second_d = 10.0;
-    float2 closest = float2(0.0, 0.0);
-
-    for (int j = -1; j <= 1; j++) {
-        for (int i = -1; i <= 1; i++) {
-            float2 neighbor = float2(float(i), float(j));
-            float2 cell_id = cell + neighbor;
-            float2 point = hash2(cell_id);
-
-            /* Animate cell centers */
-            float speed = max(flow_speed, 0.1);
-            point = 0.5 + 0.4 * sin(time * speed * 0.5 + 6.28 * point + bands.x);
-
-            float2 diff = neighbor + point - f;
-            float d = length(diff);
-
-            if (d < min_d) {
-                second_d = min_d;
-                min_d = d;
-                closest = cell_id;
-            } else if (d < second_d) {
-                second_d = d;
-            }
-        }
+float3 palette_metal(int pid, float t) {
+    if (pid == 1) {
+        /* Hardtechno red metal */
+        return lerp(float3(0.05, 0.0, 0.0),
+                    lerp(float3(0.7, 0.05, 0.05), float3(1.0, 0.5, 0.3), t), pow(t, 0.7));
     }
-
-    edge_dist = second_d - min_d;
-    return closest;
+    if (pid == 2) {
+        /* Rawstyle copper */
+        return lerp(float3(0.06, 0.02, 0.0),
+                    lerp(float3(0.7, 0.3, 0.05), float3(1.0, 0.85, 0.5), t), pow(t, 0.6));
+    }
+    if (pid == 3) {
+        /* Acid */
+        return lerp(float3(0.02, 0.06, 0.0),
+                    lerp(float3(0.4, 0.7, 0.1), float3(0.95, 1.0, 0.6), t), pow(t, 0.65));
+    }
+    if (pid == 4) {
+        /* Cyber chrome */
+        return lerp(float3(0.0, 0.04, 0.08),
+                    lerp(float3(0.1, 0.55, 0.85), float3(0.7, 0.95, 1.0), t), pow(t, 0.6));
+    }
+    if (pid == 5) {
+        /* Mono chrome */
+        float v = pow(t, 1.4);
+        return float3(v, v, v);
+    }
+    /* Default purple metal */
+    return lerp(float3(0.05, 0.0, 0.08),
+                lerp(float3(0.5, 0.1, 0.7), float3(0.95, 0.7, 1.0), t), pow(t, 0.65));
 }
 
 float4 PSLiquidMetal(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float scale = max(cell_scale, 1.0);
-    float dist_amt = distortion + bands.x * 0.5;
-    float reflect = saturate(reflectivity);
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Warp coordinates */
-    float2 warp;
-    warp.x = sin(p.y * 2.0 + time * 0.3) * dist_amt * 0.2;
-    warp.y = cos(p.x * 2.0 + time * 0.4) * dist_amt * 0.2;
-    p += warp;
+    float t = time * flow_speed * 0.4;
+    float scale = max(cell_scale, 0.5);
+
+    /* Distort UV with audio-driven noise */
+    float2 distort = float2(
+        sin(t * 1.2 + p.y * 3.0) * 0.2,
+        cos(t * 0.9 + p.x * 4.0) * 0.2
+    ) * (max(distortion, 0.0) + bass * 0.4);
+
+    float2 cell_uv = (p + distort) * scale * 1.5;
 
     /* Voronoi */
-    float edge;
-    float2 cell_id = voronoi(p * scale, edge);
+    float2 fl = floor(cell_uv);
+    float2 fr = frac(cell_uv);
+    float min_d = 1e9;
+    float min2_d = 1e9;
+    float2 min_seed = float2(0.0, 0.0);
 
-    /* Cell color from hash */
-    float cell_hash = frac(sin(dot(cell_id, float2(43.27, 17.93))) * 1847.39);
+    for (int yi = -1; yi <= 1; yi++) {
+        for (int xi = -1; xi <= 1; xi++) {
+            float2 nb = float2((float)xi, (float)yi);
+            float2 cell = fl + nb;
+            float2 seed = hash22(cell);
+            seed = 0.5 + 0.45 * sin(seed * 6.28318 + t);
+            float2 diff = nb + seed - fr;
+            float d = length(diff);
+            if (d < min_d) { min2_d = min_d; min_d = d; min_seed = seed; }
+            else if (d < min2_d) min2_d = d;
+        }
+    }
 
-    /* Metallic surface */
-    float surface = 1.0 - edge;
-    surface = pow(surface, 0.5); /* soften */
+    /* Edge-aware shading */
+    float edge = min2_d - min_d;
+    float edge_glow = smoothstep(0.0, 0.06, edge);
+    edge_glow = 1.0 - edge_glow;
 
-    /* Normal estimation via voronoi gradient */
-    float eps = 0.01;
-    float edge_x, edge_y;
-    voronoi((p + float2(eps, 0.0)) * scale, edge_x);
-    voronoi((p + float2(0.0, eps)) * scale, edge_y);
+    /* "Reflection" via cell distance gradient */
+    float metal_t = saturate(1.0 - min_d * 1.4);
+    metal_t = pow(metal_t, 1.0 + reflectivity);
 
-    float2 grad = float2(edge_x - edge, edge_y - edge) / eps;
-    float3 normal = normalize(float3(-grad * 3.0 * dist_amt, 1.0));
+    float3 col = palette_metal((int)palette_id, metal_t);
 
-    /* Lighting */
-    float3 light_dir = normalize(float3(0.5, 0.8, 1.0));
-    float diff = max(dot(normal, light_dir), 0.0);
+    /* Bright edges (chrome highlight) */
+    col += palette_metal((int)palette_id, 1.0) * edge_glow * (0.5 + treble * 0.4) * reflectivity;
 
-    float3 view_dir = float3(0.0, 0.0, 1.0);
-    float3 half_vec = normalize(light_dir + view_dir);
-    float spec_power = 16.0 + bands.w * 48.0;
-    float spec = pow(max(dot(normal, half_vec), 0.0), spec_power);
+    /* Highlight specular dots */
+    col += float3(1.0, 1.0, 1.0) * pow(edge_glow, 6.0) * 0.3;
 
-    /* Chrome/metal colors */
-    float3 base_color = lerp(float3(0.6, 0.65, 0.7), float3(0.9, 0.85, 0.8), cell_hash);
+    /* Kick shockwave: ring expanding from center */
+    float r = length(p);
+    float wave_r = kick_onset * 1.6;
+    float wave = exp(-abs(r - wave_r) * 6.0) * kick_onset * 0.4;
+    col += palette_metal((int)palette_id, 0.9) * wave;
 
-    /* Environment reflection (fake) */
-    float fresnel = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0);
-    float3 env_col = float3(0.2 + bands.y * 0.3, 0.3, 0.5 + bands.z * 0.3);
+    /* Beat brightening */
+    col *= 1.0 + beat_4 * bass * 0.18 * drive;
 
-    float3 color = base_color * (diff * 0.6 + 0.4);
-    color += float3(1.0, 0.95, 0.9) * spec * reflect;
-    color += env_col * fresnel * reflect;
+    /* Onset highlight */
+    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.12;
 
-    /* Edge highlight */
-    float edge_glow = exp(-edge * 8.0) * 0.3;
-    float3 edge_col = float3(0.5, 0.7, 1.0) * edge_glow;
-    color += edge_col;
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, r);
 
-    /* Beat pulse */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    color += float3(0.3, 0.4, 0.5) * beat * bands.x * 0.3;
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
 
-    return float4(color, 1.0);
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSLiquidMetal(vert_in);
+        pixel_shader = PSLiquidMetal(vert_in);
     }
 }

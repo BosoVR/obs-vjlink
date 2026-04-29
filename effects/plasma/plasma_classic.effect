@@ -1,7 +1,7 @@
 /*
- * VJLink - Classic Plasma (FBM Warp)
- * Multi-layer fractional brownian motion with domain warping.
- * Organic, evolving plasma with deep color and audio reactivity.
+ * VJLink - Plasma Classic (Pro v2)
+ * Domain-warped FBM plasma with audio-reactive flow,
+ * palette-aware coloring, beat-pulse highlights.
  */
 
 uniform float4x4 ViewProj;
@@ -9,184 +9,132 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
 uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     rms;
 uniform float     palette_id;
-uniform float     audio_drive;
-uniform float     bpm;
 
-/* Custom parameters */
-uniform float     plasma_scale;   /* 1.0 - 10.0, default 4.0 */
-uniform float     color_speed;    /* 0.1 - 5.0, default 1.0 */
-uniform float     distortion;     /* 0.0 - 2.0, default 0.5 */
-uniform float     saturation;     /* 0.0 - 2.0, default 1.2 */
+uniform float plasma_scale;       /* 0.5 - 8, default 3.0 */
+uniform float color_speed;        /* 0 - 3, default 0.4 */
+uniform float distortion;         /* 0 - 3, default 1.2 */
+uniform float saturation;         /* 0 - 2, default 1.0 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-/* Value noise with smooth interpolation */
-float hash21(float2 p)
-{
-    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return frac((p3.x + p3.y) * p3.z);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
 }
-
-float noise2d(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f); /* smoothstep */
-
-    float a = hash21(i);
-    float b = hash21(i + float2(1.0, 0.0));
-    float c = hash21(i + float2(0.0, 1.0));
-    float d = hash21(i + float2(1.0, 1.0));
-
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
-
-/* FBM: 5 octaves for rich organic detail */
-float fbm(float2 p)
-{
-    float v = 0.0;
-    float amp = 0.5;
+float fbm5(float2 p) {
+    float v = 0.0, a = 0.5;
     float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < 5; i++) {
-        v += amp * noise2d(p);
-        p = mul(p, rot) * 2.01;
-        amp *= 0.5;
-    }
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p = mul(p, rot) * 2.05; a *= 0.5; }
     return v;
 }
 
-/* Cosine palette for rich colors */
-float3 palette(float t, float3 a, float3 b, float3 c, float3 d)
-{
-    return a + b * cos(6.28318 * (c * t + d));
+float3 palette_plasma(int pid, float t) {
+    if (pid == 1) {
+        /* Hardtechno: deep red plasma */
+        float3 a = float3(0.6, 0.0, 0.0);
+        float3 b = float3(1.0, 0.15, 0.05);
+        float3 c = float3(1.0, 0.7, 0.4);
+        if (t < 0.5) return lerp(a, b, t * 2.0);
+        return lerp(b, c, (t - 0.5) * 2.0);
+    }
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,0.7) * t + float3(0.25, 0.30, 0.20)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.7,1.0) * t + float3(0.5, 0.25, 0.0)));
+    if (pid == 5) { float v = pow(t, 1.6); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
-float4 PSPlasma(VertInOut vert_in) : TARGET
+float4 PSPlasmaClassic(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
-    p *= plasma_scale * 0.5;
+    p.x *= aspect;
 
-    float bass    = bands.x;
-    float lowmid  = bands.y;
-    float highmid = bands.z;
-    float treble  = bands.w;
+    float bass = bands.x;
+    float bass_raw = bands_raw.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6 + rms * 0.3);
 
-    float t = time * 0.3 * color_speed;
-    float dist = distortion * (1.0 + bass * 1.5);
+    float bs = beat_sync;
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_q = (bs < 0.5) ? beat
+                  : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
+                              : pow(1.0 - beat_1_8, 4.0));
 
-    /* Beat envelope */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
+    float scale = max(plasma_scale, 0.3);
+    float dist = max(distortion, 0.0);
+    float t = time * (0.3 + color_speed * 0.5) + kick_onset * 0.4;
 
-    /* === Domain warping: warp p through multiple FBM layers === */
-
-    /* First warp layer */
     float2 q = float2(
-        fbm(p + float2(0.0, 0.0) + t * 0.4),
-        fbm(p + float2(5.2, 1.3) + t * 0.3)
+        fbm5(p * scale + float2(0.0, t * 0.8)),
+        fbm5(p * scale + float2(5.2, 1.3) + t * 0.6)
     );
-
-    /* Second warp layer (warp of warp = deep organic shapes) */
     float2 r = float2(
-        fbm(p + q * dist * 4.0 + float2(1.7, 9.2) + t * 0.15 + bass * 0.5),
-        fbm(p + q * dist * 4.0 + float2(8.3, 2.8) + t * 0.12 + treble * 0.3)
+        fbm5(p * scale + q * (1.6 + dist + bass * 1.0) + float2(1.7, 9.2) + t * 0.9),
+        fbm5(p * scale + q * (1.6 + dist + bass * 1.0) + float2(8.3, 2.8) + t * 0.95)
     );
+    float density = fbm5(p * scale + r * (2.0 + dist * 0.5 + bass_raw * 0.8));
 
-    /* Final noise value from double-warped coordinates */
-    float f = fbm(p + r * dist * 4.0 + t * 0.1);
+    float ridge = 1.0 - abs(density - 0.5) * 2.0;
+    ridge = pow(ridge, 2.5);
+    float thin_ridge = 1.0 - abs(density - 0.32) * 2.5;
+    thin_ridge = pow(saturate(thin_ridge), 6.0);
 
-    /* === Color: cosine palette with audio-driven shifts === */
+    float hue = frac(density * 0.9 + t * 0.04 + length(r) * 0.18);
+    float3 col_main = palette_plasma((int)palette_id, hue);
+    float3 col_filament = palette_plasma((int)palette_id, frac(hue + 0.18));
 
-    /* Palette A: deep neon (cyan/magenta/orange) */
-    float3 col_a = palette(f + t * 0.05 + bass * 0.15,
-        float3(0.5, 0.5, 0.5),
-        float3(0.5, 0.5, 0.5),
-        float3(1.0, 1.0, 1.0),
-        float3(0.0, 0.33, 0.67)
-    );
+    float3 col = col_main * ridge * (0.5 + drive * 0.6);
+    col += col_filament * thin_ridge * (0.4 + bass * 1.0 + beat_q * bass * 0.6);
 
-    /* Palette B: warm fire (red/yellow/violet) */
-    float3 col_b = palette(f * 1.3 + t * 0.08 + lowmid * 0.2,
-        float3(0.5, 0.5, 0.5),
-        float3(0.5, 0.5, 0.5),
-        float3(1.0, 0.7, 0.4),
-        float3(0.0, 0.15, 0.2)
-    );
+    float grad_proxy = abs(density - 0.5) * 2.0;
+    float edge = smoothstep(0.4, 0.8, 1.0 - grad_proxy);
+    col += col_main * edge * 0.18;
 
-    /* Blend between palettes based on warp intensity */
-    float blend = smoothstep(0.3, 0.7, length(r) * 0.5);
-    float3 color = lerp(col_a, col_b, blend);
+    float sat = max(saturation, 0.0);
+    float lum = dot(col, float3(0.299, 0.587, 0.114));
+    col = lerp(float3(lum, lum, lum), col, 0.6 + sat);
 
-    /* Saturation control */
-    float lum = dot(color, float3(0.299, 0.587, 0.114));
-    color = lerp(float3(lum, lum, lum), color, saturation);
+    col *= 1.0 + kick_onset * 0.45;
+    col += col_filament * onset_strength * 0.18;
 
-    /* Brightness from noise structure */
-    float brightness = 0.6 + f * 0.4 + length(q) * 0.15;
-    color *= brightness;
+    float r_len = length(p);
+    col += col_filament * exp(-r_len * 1.6) * bass * beat * 0.35;
 
-    /* Add glow in warped regions (where r is large = heavily distorted) */
-    float warp_glow = smoothstep(0.3, 1.0, length(r) * 0.7);
-    color += color * warp_glow * 0.3 * (1.0 + bass);
+    col *= smoothstep(2.0, 0.5, r_len);
 
-    /* Edge highlight from FBM gradient */
-    float fx = fbm(p + r * dist * 4.0 + t * 0.1 + float2(0.01, 0.0));
-    float fy = fbm(p + r * dist * 4.0 + t * 0.1 + float2(0.0, 0.01));
-    float edge = length(float2(fx - f, fy - f)) * 50.0;
-    edge = smoothstep(0.0, 1.0, edge);
-    color += float3(1.0, 0.8, 0.9) * edge * 0.15 * highmid;
+    col = col / (1.0 + col * 0.45);
+    col = saturate(col);
 
-    /* Beat flash */
-    color += float3(1.0, 0.7, 0.4) * beat * bass * 0.4;
-
-    /* HDR tonemap */
-    color = color / (1.0 + color * 0.5);
-
-    /* Subtle vignette */
-    float2 vuv = vert_in.uv;
-    float vig = 1.0 - dot((vuv - 0.5) * 1.2, (vuv - 0.5) * 1.2);
-    color *= saturate(vig);
-
-    color = color / (1.0 + color * 0.45);
-    color = saturate(color);
-    float __a = max(max(color.r, color.g), color.b);
-    return float4(color, __a);
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSPlasma(vert_in);
+        pixel_shader = PSPlasmaClassic(vert_in);
     }
 }

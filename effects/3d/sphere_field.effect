@@ -1,7 +1,7 @@
 /*
- * VJLink Sphere Field Effect
- * Raymarched field of spheres with audio-reactive pulsing.
- * Bass drives sphere size, treble adds glow intensity.
+ * VJLink - Sphere Field (Pro v2)
+ * Raymarched repeating sphere field with palette-aware coloring,
+ * kick-driven sphere pulse, beat-locked motion.
  */
 
 uniform float4x4 ViewProj;
@@ -9,151 +9,153 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-/* Custom params */
-uniform float sphere_count;    /* grid dimension (default 5) */
-uniform float sphere_spacing;  /* spacing between spheres (default 2.5) */
-uniform float cam_distance;    /* camera distance (default 8.0) */
-uniform float glow_intensity;  /* glow strength (default 1.5) */
+uniform float sphere_count;       /* 2 - 20, default 8 (visual density only) */
+uniform float sphere_spacing;     /* 0.5 - 5, default 2.0 */
+uniform float cam_distance;       /* 1 - 10, default 5.0 */
+uniform float glow_intensity;     /* 0 - 3, default 1.2 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float sdSphere(float3 p, float r)
-{
-    return length(p) - r;
+float3 palette_sphere(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.3,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.5) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.5); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
-float sceneSDF(float3 p)
-{
-    float grid = max(sphere_spacing, 1.0);
-    float count = max(sphere_count, 2.0);
+float sdSphere(float3 p, float r) { return length(p) - r; }
 
-    /* Repeat space */
+/* Repeating sphere field SDF */
+float sceneSDF(float3 p, float spacing, float pulse_r)
+{
     float3 q = p;
-    q.xz = fmod(abs(q.xz) + grid * 0.5, grid) - grid * 0.5;
-    q.y  = fmod(abs(q.y) + grid * 0.5, grid) - grid * 0.5;
-
+    /* Fold space into repeating cells */
+    q = q - spacing * round(q / spacing);
     /* Audio-reactive radius */
-    float base_r = 0.4 + bands.x * 0.4;
-
-    /* Beat pulse */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat;
-    base_r += beat * 0.2;
-
-    /* Limit to finite grid */
-    float bound = count * grid * 0.5;
-    float box = max(max(abs(p.x) - bound, abs(p.y) - bound), abs(p.z) - bound);
-
-    return max(sdSphere(q, base_r), box);
+    float r = 0.4 + pulse_r;
+    return sdSphere(q, r);
 }
 
-float3 calcNormal(float3 p)
+float3 calcNormal(float3 p, float spacing, float pulse_r)
 {
-    float2 e = float2(0.001, 0.0);
-    return normalize(float3(
-        sceneSDF(p + e.xyy) - sceneSDF(p - e.xyy),
-        sceneSDF(p + e.yxy) - sceneSDF(p - e.yxy),
-        sceneSDF(p + e.yyx) - sceneSDF(p - e.yyx)
-    ));
+    float h = 0.001;
+    float2 k = float2(1.0, -1.0);
+    return normalize(
+        k.xyy * sceneSDF(p + k.xyy * h, spacing, pulse_r) +
+        k.yyx * sceneSDF(p + k.yyx * h, spacing, pulse_r) +
+        k.yxy * sceneSDF(p + k.yxy * h, spacing, pulse_r) +
+        k.xxx * sceneSDF(p + k.xxx * h, spacing, pulse_r)
+    );
 }
 
 float4 PSSphereField(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float dist = max(cam_distance, 3.0);
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Orbiting camera */
-    float angle = time * 0.3;
-    float3 ro = float3(cos(angle) * dist, 2.0 + sin(time * 0.2), sin(angle) * dist);
-    float3 ta = float3(0.0, 0.0, 0.0);
+    float spacing = max(sphere_spacing, 0.5);
+    float pulse_r = bass * 0.18 + kick_onset * 0.22 + beat_4 * bass * 0.1;
 
-    float3 ww = normalize(ta - ro);
-    float3 uu = normalize(cross(ww, float3(0.0, 1.0, 0.0)));
-    float3 vv = cross(uu, ww);
+    /* Camera */
+    float cam_z = -max(cam_distance, 1.0);
+    float t = time * 0.4 + bass * 0.3;
+    float3 ro = float3(sin(t * 0.5) * 0.5, cos(t * 0.4) * 0.4, cam_z + sin(t) * 0.5);
+    float3 rd = normalize(float3(p, 1.5));
 
-    float3 rd = normalize(p.x * uu + p.y * vv + 1.5 * ww);
+    /* Camera tilt */
+    float ca = cos(t * 0.2), sa = sin(t * 0.2);
+    rd.xz = float2(rd.x * ca - rd.z * sa, rd.x * sa + rd.z * ca);
 
     /* Raymarch */
-    float t = 0.0;
-    float3 color = float3(0.0, 0.0, 0.0);
-    float glow = 0.0;
+    float total_dist = 0.0;
+    int iter = 0;
+    bool hit = false;
+    float3 hit_pos = float3(0.0, 0.0, 0.0);
 
-    for (int i = 0; i < 80; i++) {
-        float3 pos = ro + rd * t;
-        float d = sceneSDF(pos);
-
-        /* Accumulate glow near surfaces */
-        glow += 0.02 / (0.1 + d * d);
-
-        if (d < 0.002) {
-            float3 n = calcNormal(pos);
-            float3 light_dir = normalize(float3(0.5, 0.8, -0.3));
-            float diff = max(dot(n, light_dir), 0.0);
-            float spec = pow(max(dot(reflect(-light_dir, n), -rd), 0.0), 32.0);
-
-            /* Audio-reactive color */
-            float hue = frac(length(pos.xz) * 0.1 + time * 0.1 + bands.y * 0.5);
-            float3 base_col;
-            base_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-            base_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-            base_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-            base_col = saturate(base_col);
-
-            color = base_col * (diff * 0.8 + 0.2) + float3(1.0, 1.0, 1.0) * spec * 0.5;
-            break;
-        }
-
-        t += d;
-        if (t > 50.0) break;
+    for (int i = 0; i < 64; i++) {
+        if (i >= 64) break;
+        float3 pos = ro + rd * total_dist;
+        float d = sceneSDF(pos, spacing, pulse_r);
+        if (d < 0.001) { hit = true; hit_pos = pos; iter = i; break; }
+        if (total_dist > 30.0) break;
+        total_dist += d;
+        iter = i;
     }
 
-    /* Add glow */
-    float glow_str = max(glow_intensity, 0.0);
-    float3 glow_col = float3(0.3 + bands.x * 0.7, 0.1 + bands.z * 0.4, 0.5 + bands.w * 0.5);
-    color += glow_col * glow * 0.015 * glow_str;
+    float3 col = float3(0.01, 0.01, 0.025);
 
-    /* Tone mapping */
-    color = color / (1.0 + color);
+    if (hit) {
+        float3 n = calcNormal(hit_pos, spacing, pulse_r);
+        float3 light_dir = normalize(float3(0.6, 0.7, -0.5));
+        float diff = max(dot(n, light_dir), 0.0);
+        float spec = pow(max(dot(reflect(-light_dir, n), -rd), 0.0), 32.0);
 
-    return float4(color, 1.0);
+        /* Cell-id-based hue */
+        float3 cell_id = round(hit_pos / spacing);
+        float hue = frac(dot(cell_id, float3(0.7, 1.3, 0.9)) * 0.1 + time * 0.02);
+        float3 sphere_col = palette_sphere((int)palette_id, hue);
+
+        col = sphere_col * (0.25 + diff * 0.85);
+        col += float3(1.0, 1.0, 1.0) * spec * 0.7;
+        /* Audio glow */
+        col += sphere_col * (kick_onset * 0.4 + beat_4 * bass * 0.3);
+    }
+
+    /* Ambient distance fog */
+    col = lerp(col, float3(0.01, 0.01, 0.03), saturate(total_dist / 30.0));
+
+    /* Volumetric glow accumulation along ray (cheap approximation) */
+    float glow_acc = 0.0;
+    for (int g = 0; g < 12; g++) {
+        float3 gp = ro + rd * (1.0 + (float)g * 1.5);
+        float gd = sceneSDF(gp, spacing, pulse_r);
+        glow_acc += exp(-abs(gd) * 5.0) * 0.04;
+    }
+    float3 glow_col = palette_sphere((int)palette_id, time * 0.06);
+    col += glow_col * glow_acc * glow_intensity * (0.5 + drive * 0.5);
+
+    /* Onset whitewash */
+    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.12;
+
+    /* Vignette */
+    col *= smoothstep(2.4, 0.5, length(p));
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSSphereField(vert_in);
+        pixel_shader = PSSphereField(vert_in);
     }
 }

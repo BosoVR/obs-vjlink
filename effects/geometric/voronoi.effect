@@ -1,7 +1,7 @@
 /*
- * VJLink Voronoi Effect
- * Animated Voronoi diagram with audio-reactive cell coloring.
- * Bass drives cell animation speed, highmid drives edge glow.
+ * VJLink - Voronoi (Pro v2)
+ * Animated Voronoi cells with palette-aware coloring,
+ * beat-driven cell pulse, audio-reactive edge glow.
  */
 
 uniform float4x4 ViewProj;
@@ -9,141 +9,130 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-uniform float cell_count;      /* grid density (default 6.0) */
-uniform float edge_width;      /* edge thickness (default 0.05) */
-uniform float animation_speed; /* cell motion (default 0.5) */
-uniform float color_mode;      /* 0=rainbow, 1=monochrome (default 0.0) */
+uniform float cell_count;         /* 3 - 30, default 14 */
+uniform float edge_width;         /* 0.005 - 0.15, default 0.04 */
+uniform float animation_speed;    /* 0 - 3, default 0.5 */
+uniform float color_mode;         /* 0=palette 1=cell-id 2=distance */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float2 hash2(float2 p)
-{
+float2 hash22(float2 p) {
     p = float2(dot(p, float2(127.1, 311.7)),
                dot(p, float2(269.5, 183.3)));
     return frac(sin(p) * 43758.5453);
+}
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_voronoi(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.55) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.4); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
 float4 PSVoronoi(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
-    float2 p = uv;
-    p.x *= resolution.x / resolution.y;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
 
-    float count = max(cell_count, 2.0);
-    float edge_w = max(edge_width, 0.001);
-    float speed = animation_speed + bands.x * 0.3;
-    float mode = saturate(color_mode);
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    p *= count;
+    float n = max(cell_count, 3.0);
+    float2 cell_uv = p * n * 0.4;
 
-    float2 cell = floor(p);
-    float2 f = frac(p);
+    float t = time * animation_speed * 0.5;
 
-    float min_d = 10.0;
-    float second_d = 10.0;
-    float2 closest_id = float2(0.0, 0.0);
-    float2 closest_point = float2(0.0, 0.0);
+    float2 fl = floor(cell_uv);
+    float2 fr = frac(cell_uv);
 
-    for (int j = -1; j <= 1; j++) {
-        for (int i = -1; i <= 1; i++) {
-            float2 neighbor = float2(float(i), float(j));
-            float2 cell_id = cell + neighbor;
-            float2 rnd = hash2(cell_id);
+    float min_d = 1e9;
+    float min2_d = 1e9;
+    float2 min_id = float2(0.0, 0.0);
 
-            float2 point = 0.5 + 0.45 * sin(time * speed * 0.5 + 6.28318 * rnd);
-            float2 diff = neighbor + point - f;
+    for (int yi = -1; yi <= 1; yi++) {
+        for (int xi = -1; xi <= 1; xi++) {
+            float2 nb = float2((float)xi, (float)yi);
+            float2 cell = fl + nb;
+            float2 seed = hash22(cell);
+            float2 anim = float2(
+                sin(t * (0.6 + seed.x * 1.4) + cell.x * 1.7),
+                cos(t * (0.5 + seed.y * 1.3) + cell.y * 2.1)
+            ) * 0.5;
+            seed = 0.5 + 0.5 * sin(seed * 6.28318 + t + anim);
+            float2 diff = nb + seed - fr;
             float d = length(diff);
-
             if (d < min_d) {
-                second_d = min_d;
+                min2_d = min_d;
                 min_d = d;
-                closest_id = cell_id;
-                closest_point = diff;
-            } else if (d < second_d) {
-                second_d = d;
+                min_id = cell;
+            } else if (d < min2_d) {
+                min2_d = d;
             }
         }
     }
 
-    float edge = second_d - min_d;
-    float edge_line = 1.0 - smoothstep(0.0, edge_w, edge);
+    float edge_dist = min2_d - min_d;
+    float ew = max(edge_width, 0.005) * (1.0 - bass * 0.3);
+    float edge = 1.0 - smoothstep(0.0, ew, edge_dist);
 
-    /* Cell color */
-    float cell_hash = frac(sin(dot(closest_id, float2(43.27, 17.93))) * 1847.39);
+    float cell_seed = hash11(min_id.x * 17.3 + min_id.y * 31.7);
+    float hue;
+    int cm = (int)color_mode;
+    if (cm == 0) hue = frac(cell_seed + time * 0.04);
+    else if (cm == 1) hue = cell_seed;
+    else hue = saturate(min_d * 1.5);
 
-    float3 cell_col;
-    if (mode < 0.5) {
-        /* Rainbow mode */
-        float hue = frac(cell_hash + time * 0.05 + bands.y * 0.1);
-        cell_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-        cell_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-        cell_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-        cell_col = saturate(cell_col);
-    } else {
-        /* Monochrome mode */
-        float val = cell_hash * 0.5 + 0.3;
-        cell_col = float3(val, val, val);
-    }
+    float3 col = palette_voronoi((int)palette_id, hue);
 
-    /* Distance-based shading within cells */
-    float cell_shade = 1.0 - min_d * 0.5;
-    cell_col *= cell_shade;
+    float cell_v = 0.4 + (1.0 - min_d) * 0.5;
+    cell_v *= 1.0 + beat_4 * bass * 0.4 * drive;
+    float cell_beat = step(0.85 - kick_onset * 0.3, cell_seed);
+    cell_v *= 1.0 + cell_beat * kick_onset * 0.6;
 
-    /* Audio reactivity: cells pulse with different bands */
-    float band_idx = frac(cell_hash * 4.0);
-    float band_val = 0.0;
-    if (band_idx < 0.25) band_val = bands.x;
-    else if (band_idx < 0.5) band_val = bands.y;
-    else if (band_idx < 0.75) band_val = bands.z;
-    else band_val = bands.w;
-    cell_col *= (0.7 + band_val * 0.6);
+    col *= cell_v;
 
-    /* Edge color */
-    float3 edge_col = float3(1.0, 1.0, 1.0) * (1.0 + bands.z * 0.5);
+    col += palette_voronoi((int)palette_id, hue + 0.15) * edge * (0.6 + treble * 0.6);
+    col += float3(1.0, 1.0, 1.0) * pow(edge, 4.0) * 0.25;
 
-    float3 color = lerp(cell_col, edge_col, edge_line);
+    col += float3(1.0, 0.9, 1.0) * onset_strength * edge * 0.4;
 
-    /* Beat flash */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    color += edge_col * edge_line * beat * bands.x * 0.5;
+    col *= smoothstep(2.4, 0.5, length(p));
 
-    return float4(color, 1.0);
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSVoronoi(vert_in);
+        pixel_shader = PSVoronoi(vert_in);
     }
 }

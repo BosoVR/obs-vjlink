@@ -1,7 +1,7 @@
 /*
- * VJLink Lava Lamp Effect
- * Metaball-like noise blobs floating upward with warm color palette.
- * Bass drives blob size, lowmid drives flow speed.
+ * VJLink - Lava Lamp (Pro v2)
+ * Floating metaball blobs with palette-aware coloring,
+ * audio-reactive flow speed and blob size, beat-driven heat pulses.
  */
 
 uniform float4x4 ViewProj;
@@ -9,131 +9,140 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-uniform float blob_scale;      /* blob size (default 3.0) */
-uniform float flow_speed;      /* upward flow (default 0.5) */
-uniform float warmth;          /* warm vs cool palette (default 0.7) */
-uniform float glow_amount;     /* edge glow (default 1.0) */
+uniform float blob_scale;         /* 0.5 - 5, default 2.0 */
+uniform float flow_speed;         /* 0 - 3, default 0.6 */
+uniform float warmth;             /* 0 - 2, default 1.0 */
+uniform float glow_amount;        /* 0 - 2, default 0.7 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float hash(float2 p)
-{
-    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
-
-float noise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
     f = f * f * (3.0 - 2.0 * f);
-    float a = hash(i);
-    float b = hash(i + float2(1.0, 0.0));
-    float c = hash(i + float2(0.0, 1.0));
-    float d = hash(i + float2(1.0, 1.0));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
 }
 
-float metaball(float2 p, float2 center, float radius)
-{
-    float d = length(p - center);
-    return radius * radius / (d * d + 0.001);
+float3 palette_lava(int pid, float t) {
+    if (pid == 1) {
+        /* Hardtechno: deep red lava */
+        return lerp(float3(0.05, 0.0, 0.0),
+                    lerp(float3(1.0, 0.1, 0.05), float3(1.0, 0.6, 0.2), t), pow(t, 0.6));
+    }
+    if (pid == 2) {
+        /* Rawstyle: orange hot */
+        return lerp(float3(0.04, 0.0, 0.0),
+                    lerp(float3(1.0, 0.4, 0.05), float3(1.0, 0.9, 0.4), t), pow(t, 0.5));
+    }
+    if (pid == 3) {
+        /* Acid: yellow-green */
+        return lerp(float3(0.0, 0.05, 0.0),
+                    lerp(float3(0.6, 1.0, 0.1), float3(0.95, 1.0, 0.5), t), pow(t, 0.55));
+    }
+    if (pid == 4) {
+        /* Cyber */
+        return lerp(float3(0.0, 0.02, 0.05),
+                    lerp(float3(0.05, 0.85, 1.0), float3(0.6, 0.3, 1.0), t), pow(t, 0.55));
+    }
+    if (pid == 5) {
+        /* Mono */
+        float v = pow(t, 1.4);
+        return float3(v, v, v);
+    }
+    /* Default warm lava */
+    return lerp(float3(0.04, 0.0, 0.02),
+                lerp(float3(1.0, 0.25, 0.05), float3(1.0, 0.8, 0.4), t), pow(t, 0.55));
 }
 
 float4 PSLavaLamp(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float scale = max(blob_scale, 1.0);
-    float speed = flow_speed + bands.y * 0.3;
-    float warm = saturate(warmth);
+    float bass = bands.x;
+    float lowmid = bands.y;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
 
-    /* Multiple metaballs with organic motion */
-    float field = 0.0;
+    /* Flow upward, slowed/sped by audio */
+    float t = time * (flow_speed * (0.5 + lowmid * 0.7) + 0.2);
 
-    for (int i = 0; i < 7; i++) {
-        float fi = float(i);
-        float phase = fi * 0.897;
+    /* Two layers of blob fields */
+    float2 q1 = p * blob_scale + float2(sin(t * 0.4) * 0.3, -t);
+    float blobs1 = fbm(q1);
 
-        float2 center;
-        center.x = sin(time * speed * (0.3 + fi * 0.1) + phase) * 0.6;
-        center.y = sin(time * speed * (0.2 + fi * 0.08) + phase * 1.3) * 0.8
-                   + cos(time * speed * 0.15 + fi) * 0.3;
+    float2 q2 = p * blob_scale * 1.6 + float2(cos(t * 0.3) * 0.4, -t * 0.6);
+    float blobs2 = fbm(q2 + blobs1 * 0.7);
 
-        float radius = (0.15 + 0.1 * sin(fi * 2.3)) * scale * 0.3;
-        radius += bands.x * 0.05; /* bass = bigger blobs */
+    /* Combine with bass-driven swelling */
+    float density = blobs1 * 0.6 + blobs2 * 0.4 + bass * 0.18;
 
-        field += metaball(p, center, radius);
-    }
+    /* Sharpen into "blobs" */
+    float blob_mask = smoothstep(0.4, 0.65, density);
+    float core = smoothstep(0.55, 0.85, density);
 
-    /* Noise distortion */
-    float2 np = p * 3.0 + float2(time * 0.1, time * speed * 0.3);
-    float n = noise(np) * 0.3;
-    field += n * 0.5;
+    float heat = saturate(density + bass_raw * 0.2 + kick_onset * 0.15);
 
-    /* Threshold to create blob shapes */
-    float blob = smoothstep(0.8, 1.2, field);
-    float edge = smoothstep(0.6, 0.8, field) - blob;
+    /* Color */
+    float warm_t = saturate(heat * warmth);
+    float3 col = palette_lava((int)palette_id, warm_t);
 
-    /* Color palette: lava warm tones */
-    float3 deep_col = lerp(float3(0.5, 0.0, 0.1), float3(0.0, 0.1, 0.4), 1.0 - warm);
-    float3 mid_col = lerp(float3(1.0, 0.3, 0.0), float3(0.0, 0.5, 1.0), 1.0 - warm);
-    float3 hot_col = lerp(float3(1.0, 0.8, 0.2), float3(0.5, 0.8, 1.0), 1.0 - warm);
+    /* Multiply by mask for blob shape */
+    col *= blob_mask;
 
-    float3 color = deep_col * 0.3;
-    color = lerp(color, mid_col, edge * max(glow_amount, 0.0));
-    color = lerp(color, hot_col, blob);
+    /* Bright core highlights */
+    col += palette_lava((int)palette_id, 1.0) * core * 0.55;
 
-    /* Inner glow variation */
-    float inner_var = noise(p * 5.0 + float2(0.0, time * 0.2));
-    color += hot_col * blob * inner_var * 0.3;
+    /* Edge glow around blobs (heat shimmer) */
+    float edge = abs(density - 0.5) * 2.0;
+    edge = 1.0 - smoothstep(0.0, 0.18, edge);
+    col += palette_lava((int)palette_id, 0.7) * edge * glow_amount * 0.4;
 
-    /* Beat pulse */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    color += mid_col * beat * 0.2 * bands.x;
+    /* Beat-driven heat pulse — entire lava brightens on kick */
+    col *= 1.0 + kick_onset * 0.4 + onset_strength * 0.15;
 
-    /* Background gradient */
-    float bg_grad = 1.0 - length(p) * 0.3;
-    color *= saturate(bg_grad);
+    /* Subtle bottom darkening (heat rises) */
+    col *= 0.7 + smoothstep(-1.2, 1.0, p.y) * 0.4;
 
-    return float4(color, 1.0);
+    /* Vignette */
+    col *= smoothstep(2.0, 0.4, length(p));
+
+    /* HDR tonemap */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSLavaLamp(vert_in);
+        pixel_shader = PSLavaLamp(vert_in);
     }
 }

@@ -53,7 +53,19 @@ float4 PSStrobeInvert(VertInOut vert_in) : TARGET
     float3 inverted = 1.0 - src.rgb;
     float3 color = lerp(src.rgb, inverted, invert_amount);
     float out_alpha = max(max(color.r, color.g), color.b);
-    return float4(color, out_alpha);
+    /* HDR Reinhard polish */
+
+    float3 _vjp_c = saturate((color) / (1.0 + (color) * 0.4));
+
+    /* Saturation boost */
+
+    float _vjp_lum = dot(_vjp_c, float3(0.299, 0.587, 0.114));
+
+    _vjp_c = lerp(float3(_vjp_lum, _vjp_lum, _vjp_lum), _vjp_c, 1.18);
+
+    _vjp_c = saturate(_vjp_c);
+
+    return float4(_vjp_c, max(max(max(_vjp_c.r, _vjp_c.g), _vjp_c.b), 0.0));
 }
 
 technique Draw

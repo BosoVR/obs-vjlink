@@ -1,7 +1,7 @@
 /*
- * VJLink Galaxy Tunnel Effect
- * Raymarched star-field tunnel with volumetric nebula.
- * Bass drives nebula intensity, treble drives star brightness.
+ * VJLink - Galaxy Tunnel (Pro v2)
+ * Star field flying through volumetric nebula tunnel,
+ * palette-aware nebula color, kick-driven warp pulse.
  */
 
 uniform float4x4 ViewProj;
@@ -9,153 +9,135 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-uniform float fly_speed;       /* camera speed (default 1.5) */
-uniform float star_density;    /* star count factor (default 1.0) */
-uniform float nebula_density;  /* nebula brightness (default 0.8) */
-uniform float color_speed;     /* color cycling (default 0.2) */
+uniform float fly_speed;          /* 0.1 - 5, default 1.0 */
+uniform float star_density;       /* 0.1 - 3, default 1.2 */
+uniform float nebula_density;     /* 0 - 2, default 0.7 */
+uniform float color_speed;        /* 0 - 3, default 0.4 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float hash(float3 p)
-{
-    p = frac(p * float3(443.897, 441.423, 437.195));
-    p += dot(p, p.yzx + 19.19);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash31(float3 p) {
+    p = frac(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
     return frac((p.x + p.y) * p.z);
 }
-
-float noise3d(float3 p)
-{
-    float3 i = floor(p);
-    float3 f = frac(p);
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
     f = f * f * (3.0 - 2.0 * f);
-
-    float n = lerp(
-        lerp(lerp(hash(i), hash(i + float3(1,0,0)), f.x),
-             lerp(hash(i + float3(0,1,0)), hash(i + float3(1,1,0)), f.x), f.y),
-        lerp(lerp(hash(i + float3(0,0,1)), hash(i + float3(1,0,1)), f.x),
-             lerp(hash(i + float3(0,1,1)), hash(i + float3(1,1,1)), f.x), f.y),
-        f.z);
-    return n;
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
 }
-
-float fbm3d(float3 p)
-{
-    float v = 0.0;
-    float a = 0.5;
-    for (int i = 0; i < 5; i++) {
-        v += a * noise3d(p);
-        p *= 2.0;
-        a *= 0.5;
-    }
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
     return v;
 }
 
-/* Star layer */
-float stars(float2 uv, float layer)
-{
-    float2 cell = floor(uv);
-    float2 f = frac(uv) - 0.5;
-
-    float h = hash(float3(cell, layer));
-    float2 offset = float2(hash(float3(cell + 100.0, layer)),
-                           hash(float3(cell + 200.0, layer))) - 0.5;
-
-    float d = length(f - offset * 0.7);
-    float brightness = pow(h, 3.0);
-    float star = brightness * exp(-d * d * 80.0);
-
-    return star;
+float3 palette_galaxy(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.5) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.5); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
 float4 PSGalaxyTunnel(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float speed = max(fly_speed, 0.1) + bands.x * 0.5;
-    float z_pos = time * speed;
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Tunnel warp: bend toward center */
-    float r = length(p);
-    float a = atan2(p.y, p.x);
+    float spd = max(fly_speed, 0.1) * (1.0 + bass * 1.0 + kick_onset * 0.3);
+    float depth = time * spd;
 
-    float3 color = float3(0.0, 0.0, 0.0);
+    /* Polar coords */
+    float r = max(length(p), 0.001);
+    float ang = atan2(p.y, p.x);
+    /* Subtle warp on kick */
+    ang += kick_onset * 0.2 * sin(r * 4.0);
 
-    /* Star layers at different depths */
-    float star_dens = max(star_density, 0.1);
-    for (int i = 0; i < 4; i++) {
-        float fi = float(i);
-        float depth = 1.0 + fi * 0.5;
-        float2 star_uv = p * (10.0 + fi * 5.0) * star_dens;
-        star_uv += float2(cos(a + fi) * z_pos * 0.3, sin(a + fi) * z_pos * 0.3);
+    /* Nebula tunnel walls */
+    float u_ang = ang / 3.14159 * 0.5 + 0.5;
+    float2 nebula_uv = float2(u_ang * 6.0, 1.0 / r * 0.4 + depth * 0.5);
+    float nebula = fbm(nebula_uv);
+    nebula = pow(nebula, 1.4);
 
-        float s = stars(star_uv, fi);
-        float3 star_col = float3(0.8 + 0.2 * sin(fi), 0.9, 1.0) * s;
-        star_col *= (1.0 + bands.w * 2.0); /* treble = brighter stars */
-        color += star_col / depth;
+    float depth_fade = exp(-r * 0.6) * smoothstep(0.05, 0.4, r);
+    float far_glow = smoothstep(0.5, 0.05, r);
+
+    /* === Stars === */
+    float3 col = float3(0.005, 0.005, 0.015);
+    int star_layers = 4;
+    for (int sl = 0; sl < 4; sl++) {
+        float fl = (float)sl;
+        float layer_depth = depth + fl * 0.7;
+        /* Star grid in tunnel-space */
+        float2 sg_uv = float2(u_ang * (8.0 + fl * 4.0), 1.0 / r * (0.5 + fl * 0.3) + layer_depth);
+        float2 sg_id = floor(sg_uv);
+        float2 sg_f = frac(sg_uv) - 0.5;
+        float seed = hash21(sg_id);
+        float exists = step(0.9 - star_density * 0.06, seed);
+        /* Star pos in cell, slight motion */
+        float2 spos = float2(seed - 0.5, hash21(sg_id + 17.3) - 0.5) * 0.5;
+        float dist = length(sg_f - spos);
+        float size = 0.025 + seed * 0.05;
+        float star = exp(-dist / size * 6.0) * exists;
+        float twinkle = 0.7 + sin(time * 3.0 + seed * 30.0) * 0.3;
+
+        col += float3(0.9 + seed * 0.1, 0.9, 1.0) * star * twinkle * (0.7 - fl * 0.12) * depth_fade;
     }
 
-    /* Nebula volume */
-    float neb_dens = max(nebula_density, 0.0);
-    float3 nebula_pos = float3(p * 2.0, z_pos * 0.2);
-    float nebula = fbm3d(nebula_pos);
-    nebula = pow(nebula, 1.5) * neb_dens;
+    /* === Nebula === */
+    float hue = frac(depth * 0.02 * color_speed + nebula * 0.4 + r * 0.1);
+    float3 nebula_col = palette_galaxy((int)palette_id, hue);
+    col += nebula_col * nebula * nebula_density * 0.6 * depth_fade;
 
-    float hue = frac(time * color_speed + r * 0.3 + bands.y * 0.2);
-    float3 neb_col;
-    neb_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-    neb_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-    neb_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-    neb_col = saturate(neb_col);
+    /* Outer ring fades */
+    col *= smoothstep(2.5, 0.4, r);
 
-    color += neb_col * nebula * (1.0 + bands.x * 1.5);
+    /* Vanishing point glow */
+    col += nebula_col * far_glow * (0.5 + bass * 0.6 + beat_4 * 0.3);
+    col += float3(1.0, 0.95, 1.0) * far_glow * 0.18;
 
-    /* Tunnel radial glow */
-    float tunnel_glow = exp(-r * 2.0) * 0.15;
-    color += float3(0.3, 0.2, 0.5) * tunnel_glow * (1.0 + bands.x);
+    /* Onset whitewash */
+    col += float3(1.0, 0.9, 1.0) * onset_strength * 0.15;
 
-    /* Beat flash */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    color += float3(0.2, 0.15, 0.3) * beat * bands.x * 0.5;
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
 
-    return float4(color, 1.0);
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSGalaxyTunnel(vert_in);
+        pixel_shader = PSGalaxyTunnel(vert_in);
     }
 }

@@ -1,7 +1,7 @@
 /*
- * VJLink Particle Storm Effect
- * Screen-space particle swarm driven by layered noise and audio.
- * Bass drives intensity, treble drives turbulence.
+ * VJLink - Particle Storm (Pro v2)
+ * Layered moving particle field with palette-aware coloring,
+ * kick-driven bursts and turbulence-modulated motion.
  */
 
 uniform float4x4 ViewProj;
@@ -9,146 +9,131 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
-uniform float     beat_phase;
 uniform float4    bands_raw;
-uniform float     kick_onset;
-uniform float     snare_onset;
-uniform float     hat_onset;
+uniform float     beat_phase;
 uniform float     beat_1_4;
-uniform float     beat_1_8;
-uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     onset_strength;
 uniform float     palette_id;
-uniform float     audio_drive;
 
-/* Custom params */
-uniform float storm_intensity; /* overall brightness (default 1.5) */
-uniform float turbulence;      /* noise complexity (default 3.0) */
-uniform float particle_speed;  /* flow speed (default 1.0) */
-uniform float color_shift;     /* hue rotation speed (default 0.2) */
+uniform float storm_intensity;    /* 0 - 3, default 1.2 */
+uniform float turbulence;         /* 0 - 5, default 2.0 */
+uniform float particle_speed;     /* 0 - 5, default 1.5 */
+uniform float color_shift;        /* 0 - 1, default 0.0 */
+uniform float audio_drive;        /* 0 - 2, default 1.0 */
 
-sampler_state texSampler {
-    Filter   = Linear;
-    AddressU = Clamp;
-    AddressV = Clamp;
-};
-
-struct VertInOut {
-    float4 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
 
 VertInOut VSDefault(VertInOut vert_in)
 {
-    VertInOut vert_out;
-    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
-    vert_out.uv  = vert_in.uv;
-    return vert_out;
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
 }
 
-float hash(float2 p)
-{
-    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_storm(int pid, float t) {
+    if (pid == 1) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.4,0.2) * t + float3(0.0, 0.12, 0.18)));
+    if (pid == 2) return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,0.6,0.2) * t + float3(0.0, 0.18, 0.32)));
+    if (pid == 3) return 0.5 + 0.5 * cos(6.28318 * (float3(0.55,1.0,0.5) * t + float3(0.25, 0.32, 0.18)));
+    if (pid == 4) return 0.5 + 0.5 * cos(6.28318 * (float3(0.6,1.0,1.0) * t + float3(0.55, 0.25, 0.1)));
+    if (pid == 5) { float v = pow(t, 1.4); return float3(v, v, v); }
+    return 0.5 + 0.5 * cos(6.28318 * (float3(1.0,1.0,1.0) * t + float3(0.0, 0.33, 0.67)));
 }
 
-float noise(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash(i);
-    float b = hash(i + float2(1.0, 0.0));
-    float c = hash(i + float2(0.0, 1.0));
-    float d = hash(i + float2(1.0, 1.0));
-    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-}
-
-float fbm(float2 p, int octaves)
-{
-    float val = 0.0;
-    float amp = 0.5;
-    for (int i = 0; i < 6; i++) {
-        if (i >= octaves) break;
-        val += amp * noise(p);
-        p *= 2.0;
-        amp *= 0.5;
-    }
-    return val;
-}
-
-/* Curl-noise inspired 2D flow */
-float2 flowField(float2 p, float t)
-{
-    float turb = max(turbulence, 1.0);
-    float n1 = fbm(p * turb + float2(t * 0.3, 0.0), 4);
-    float n2 = fbm(p * turb + float2(0.0, t * 0.3) + float2(50.0, 50.0), 4);
-    return float2(n1 - 0.5, n2 - 0.5) * 2.0;
-}
-
-float4 PSStorm(VertInOut vert_in) : TARGET
+float4 PSParticleStorm(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
-    p.x *= resolution.x / resolution.y;
+    p.x *= aspect;
 
-    float intensity = max(storm_intensity, 0.5);
-    float speed = max(particle_speed, 0.1);
-    float hue_speed = color_shift;
+    float bass = bands.x;
+    float treble = bands.w;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.7);
+    float beat = pow(1.0 - beat_phase, 3.0);
+    float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    float3 color = float3(0.0, 0.0, 0.0);
+    float intens = max(storm_intensity, 0.0);
+    float spd = max(particle_speed, 0.0);
+    float turb = max(turbulence, 0.0);
 
-    /* Multiple particle layers */
+    float3 col = float3(0.01, 0.01, 0.02);
+
+    /* 4 layers of particles, different scales + speeds */
     for (int layer = 0; layer < 4; layer++) {
-        float fl = float(layer);
-        float layer_scale = 1.0 + fl * 0.5;
-        float layer_speed = speed * (1.0 + fl * 0.3);
+        float fl = (float)layer;
+        float layer_scale = 8.0 + fl * 12.0; /* 8, 20, 32, 44 */
+        float layer_speed = (0.4 + fl * 0.3) * spd * (1.0 + bass * 0.4);
 
-        /* Advect position through flow field */
-        float2 pos = p * layer_scale;
-        float2 flow = flowField(pos * 0.5, time * layer_speed);
+        /* Turbulent flow direction */
+        float ang = sin(time * 0.3 + fl * 1.7) * 1.5 + cos(time * 0.5 + fl * 2.3) * 0.8;
+        float2 flow = float2(cos(ang), sin(ang)) * layer_speed * 0.05;
 
-        /* Audio modulation */
-        flow += float2(bands.x * 0.5, bands.y * 0.3) * sin(time * 2.0 + fl);
+        float2 grid_p = (p + flow * time) * layer_scale;
+        /* Add bass-driven turbulent offset */
+        grid_p += float2(
+            sin(time * (0.6 + fl) + p.y * (3.0 + fl) + bass * 4.0),
+            cos(time * (0.5 + fl) + p.x * (4.0 + fl) + treble * 3.0)
+        ) * turb * 0.08;
 
-        pos += flow * 0.5;
+        float2 cell_id = floor(grid_p);
+        float2 cell_f = frac(grid_p) - 0.5;
 
-        /* Point-like particles from high-freq noise */
-        float n = noise(pos * 8.0 + float2(time * layer_speed * 2.0, fl * 100.0));
-        n = pow(n, 4.0 + bands.w * 4.0) * intensity;
+        float seed = hash21(cell_id + fl * 31.7);
+        /* Particle exists threshold: more on bass */
+        float exists = step(0.78 - drive * 0.18 - intens * 0.1, seed);
 
-        /* Flow lines: directional streaks */
-        float2 streak_uv = pos * 3.0 + flow * time * 0.5;
-        float streak = noise(streak_uv);
-        streak = pow(streak, 3.0) * 0.5;
+        /* Particle position within cell, animated */
+        float2 ppos = float2(
+            sin(time * 1.5 + seed * 6.28),
+            cos(time * 1.7 + seed * 6.28)
+        ) * 0.35;
 
-        /* Layer color with hue shift */
-        float hue = frac(fl * 0.25 + time * hue_speed + bands.y * 0.2);
-        float3 layer_col;
-        layer_col.r = abs(hue * 6.0 - 3.0) - 1.0;
-        layer_col.g = 2.0 - abs(hue * 6.0 - 2.0);
-        layer_col.b = 2.0 - abs(hue * 6.0 - 4.0);
-        layer_col = saturate(layer_col);
+        float dist = length(cell_f - ppos);
+        /* Particle size varies + grows on kick */
+        float size = 0.04 + seed * 0.06 + kick_onset * 0.025;
+        float particle = exp(-dist / size * 6.0) * exists;
 
-        color += layer_col * (n + streak * 0.3) * (1.0 + bands.x * 0.5);
+        /* Tail/trail */
+        float trail = exp(-dist / size * 2.5) * exists * 0.18;
+
+        float hue = frac(seed * 0.5 + color_shift + time * 0.02 + fl * 0.12);
+        float3 pcol = palette_storm((int)palette_id, hue);
+
+        /* Layer fade (depth) */
+        float layer_brightness = 1.0 - fl * 0.18;
+
+        col += pcol * (particle + trail) * intens * layer_brightness *
+               (0.6 + drive * 0.6 + beat_4 * bass * 0.4);
     }
 
-    /* Beat flash */
-    float beat = 1.0 - beat_phase;
-    beat = beat * beat * beat;
-    color += float3(0.3, 0.3, 0.5) * beat * bands.x * 0.5;
+    /* Beat burst — bright streak shockwave from center on kick */
+    float r = length(p);
+    float burst = exp(-abs(r - kick_onset * 0.8) * 8.0) * kick_onset * 0.5;
+    col += palette_storm((int)palette_id, time * 0.1) * burst;
 
-    /* Central glow */
-    float center = exp(-length(p) * 1.5) * 0.2 * (1.0 + bands.x);
-    color += float3(0.4, 0.3, 0.6) * center;
+    /* Onset whitewash */
+    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.12;
 
-    color = color / (1.0 + color * 0.5);
-    return float4(color, 1.0);
+    /* Vignette */
+    col *= smoothstep(2.4, 0.4, r);
+
+    /* HDR */
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
 }
 
-technique Draw
-{
-    pass
-    {
+technique Draw {
+    pass {
         vertex_shader = VSDefault(vert_in);
-        pixel_shader  = PSStorm(vert_in);
+        pixel_shader = PSParticleStorm(vert_in);
     }
 }
