@@ -2,6 +2,9 @@
     "effect_id": "dna_helix",
     "name": "DNA Helix",
     "category": "tunnel",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Raymarched double helix with cross-links and audio-reactive pulsing",
     "author": "VJLink",
     "params": [

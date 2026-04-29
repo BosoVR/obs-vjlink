@@ -2,6 +2,9 @@
     "id": "color_grade",
     "name": "Color Grade",
     "category": "postprocess",
+    "role": "post",
+    "requires_input": false,
+    "performance_group": "content_fx",
     "description": "Post-processing: brightness, contrast, saturation, hue, vignette",
     "params": [
         { "name": "pp_brightness", "label": "Brightness", "type": "float", "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },

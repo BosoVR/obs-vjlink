@@ -2,6 +2,9 @@
     "effect_id": "beat_flash",
     "name": "Beat Flash",
     "category": "audio_viz",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "audio_visualizer",
     "description": "Beat-synchronized strobe with configurable flash color and decay",
     "author": "VJLink",
     "params": [

@@ -9,13 +9,21 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
 
 /* Custom parameters */
 uniform float     tunnel_speed;    /* 0.1 - 5.0, default 1.0 */
 uniform float     rotation_speed;  /* 0.0 - 3.0, default 0.3 */
 uniform float     ring_count;      /* 2.0 - 20.0, default 8.0 */
 uniform float     color_intensity; /* 0.5 - 3.0, default 1.5 */
+uniform float     audio_drive;     /* 0 - 2, default 1.0 */
+uniform float     beat_sync;       /* 0=continuous 1=1/4 2=1/8 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -72,12 +80,16 @@ float4 PSTunnel(VertInOut vert_in) : TARGET
     float highmid = bands.z;
     float treble  = bands.w;
 
-    /* Beat envelope */
-    float beat = 1.0 - beat_phase;
+    /* Beat envelope (sync-aware) */
+    float bs = beat_sync;
+    float bphase = (bs < 0.5) ? beat_phase
+                  : (bs < 1.5 ? beat_1_4 : beat_1_8);
+    float beat = 1.0 - bphase;
     beat = beat * beat * beat;
 
-    /* Camera setup: fly through tunnel */
-    float fly_speed = tunnel_speed * (1.0 + bass * 1.5);
+    /* Camera setup: fly through tunnel — kick onset adds extra punch */
+    float drive = max(audio_drive, 0.0);
+    float fly_speed = tunnel_speed * (1.0 + bass * 1.5 * drive + kick_onset * 0.6);
     float cam_z = time * fly_speed * 3.0;
 
     /* Camera wobble from audio */

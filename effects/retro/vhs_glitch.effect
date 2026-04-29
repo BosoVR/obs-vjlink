@@ -10,13 +10,16 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
 
 uniform float tracking_error;  /* horizontal shift (default 0.02) */
 uniform float noise_intensity; /* tape noise (default 0.3) */
 uniform float color_bleed;     /* chroma smearing (default 0.005) */
 uniform float jitter;          /* vertical jitter (default 0.002) */
 uniform float has_input_source; /* 1.0 when used as filter */
+uniform float band_activation;  /* 0-1 when used as per-band trigger */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -64,23 +67,10 @@ float3 vhsPattern(float2 uv, float t, float bass, float treble)
     float n = hash2d(uv * 200.0 + floor(t * 30.0));
     col = float3(n, n, n) * 0.15;
 
-    /* Color bars (classic TV test pattern) */
-    float bar_x = floor(uv.x * 7.0) / 7.0;
-    float3 bar_colors[7];
-    bar_colors[0] = float3(1.0, 1.0, 1.0);
-    bar_colors[1] = float3(1.0, 1.0, 0.0);
-    bar_colors[2] = float3(0.0, 1.0, 1.0);
-    bar_colors[3] = float3(0.0, 1.0, 0.0);
-    bar_colors[4] = float3(1.0, 0.0, 1.0);
-    bar_colors[5] = float3(1.0, 0.0, 0.0);
-    bar_colors[6] = float3(0.0, 0.0, 1.0);
-    int bar_idx = clamp((int)(uv.x * 7.0), 0, 6);
-    float3 bar = bar_colors[bar_idx];
-
-    /* Distorted color bars with VHS artifacts */
-    float distort = noise1d(uv.y * 20.0 + t * 3.0) * 0.05;
-    float bar_blend = smoothstep(0.3, 0.7, uv.y + distort);
-    col = lerp(bar * 0.4, col, bar_blend);
+    /* Neutral tape signal: no test bars, just soft monochrome bleed. */
+    float signal = noise1d(uv.y * 18.0 + t * 2.2);
+    float vignette = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.88, uv.x);
+    col += float3(0.18, 0.20, 0.19) * signal * vignette;
 
     /* Tracking lines */
     float track_y = frac(t * 0.15);
@@ -109,7 +99,24 @@ float4 PSVhs(VertInOut vert_in) : TARGET
 
     if (!has_input) {
         /* No source to process — output transparent */
-        return float4(0.0, 0.0, 0.0, 0.0);
+        float activation = max(band_activation,
+            max(onset_strength, max(bands_raw.x, bands_raw.w) * 0.4));
+        float3 pattern = vhsPattern(uv, time, bands.x, bands.w);
+
+        float scanline = floor(uv.y * resolution.y);
+        float tracking_noise = noise1d(scanline * 0.35 + time * 4.0);
+        float tear = step(0.94 - activation * 0.08,
+                          hash2d(float2(scanline, floor(time * 28.0))));
+        float2 tear_uv = uv;
+        tear_uv.x += (tracking_noise - 0.5) * tracking_error * 4.0 * tear;
+
+        float3 tear_col = vhsPattern(saturate(tear_uv), time + 0.07,
+                                     bands.x, bands.w);
+        pattern = lerp(pattern, tear_col, tear * 0.75);
+
+        float alpha = saturate(0.18 + activation * 0.72);
+        alpha *= 0.65 + tear * 0.35;
+        return float4(saturate(pattern), alpha);
     }
 
     float src_alpha = image.Sample(texSampler, uv).a;

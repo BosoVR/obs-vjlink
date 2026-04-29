@@ -209,9 +209,14 @@ static void extract_bands(struct vjlink_audio_engine *engine)
 
 	/* Mix RMS and peak, apply per-band gain + user sensitivity */
 	struct vjlink_context *ctx = vjlink_get_context();
+	float master_gain = ctx->audio_master_gain;
+	if (master_gain < 0.01f)
+		master_gain = 0.01f;
+	if (master_gain > 5.0f)
+		master_gain = 5.0f;
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
 		float mixed = rms_vals[i] * 0.6f + peak_vals[i] * 0.4f;
-		mixed *= band_gains[i];
+		mixed *= band_gains[i] * master_gain;
 		float sens = ctx->band_sensitivity[i];
 		if (sens > 0.01f)
 			mixed *= sens;
@@ -224,8 +229,13 @@ static void extract_bands(struct vjlink_audio_engine *engine)
 
 	/* Smooth with attack/decay */
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
+		float fall = ctx->audio_fall_rate;
+		if (fall < 0.01f)
+			fall = 0.01f;
+		if (fall > 0.50f)
+			fall = 0.50f;
 		float rate = (raw[i] > engine->bands_smoothed[i])
-			? ATTACK_RATE : DECAY_RATE;
+			? ATTACK_RATE : fall;
 		engine->bands_smoothed[i] += rate * (raw[i] - engine->bands_smoothed[i]);
 
 		/* Peak hold with slow decay */
@@ -244,6 +254,29 @@ static void extract_bands(struct vjlink_audio_engine *engine)
 		engine->chronotensity[i] += energy * CHRONO_RISE_RATE;
 		if (engine->chronotensity[i] > CHRONO_MAX)
 			engine->chronotensity[i] -= CHRONO_MAX; /* wrap */
+	}
+
+	/* Per-band onset detection: spike when raw band exceeds smoothed by margin.
+	 * - kick from bass, snare from low+highmid combo, hat from treble. */
+	{
+		float kick_diff = raw[VJLINK_BAND_BASS] - engine->bands_smoothed[VJLINK_BAND_BASS];
+		float snare_diff = ((raw[VJLINK_BAND_LOWMID] + raw[VJLINK_BAND_HIGHMID]) * 0.5f)
+		                 - ((engine->bands_smoothed[VJLINK_BAND_LOWMID]
+		                   + engine->bands_smoothed[VJLINK_BAND_HIGHMID]) * 0.5f);
+		float hat_diff = raw[VJLINK_BAND_TREBLE] - engine->bands_smoothed[VJLINK_BAND_TREBLE];
+
+		float kick = kick_diff > 0.05f ? kick_diff * 4.0f : 0.0f;
+		float snare = snare_diff > 0.04f ? snare_diff * 4.0f : 0.0f;
+		float hat = hat_diff > 0.04f ? hat_diff * 4.0f : 0.0f;
+
+		if (kick > 1.0f) kick = 1.0f;
+		if (snare > 1.0f) snare = 1.0f;
+		if (hat > 1.0f) hat = 1.0f;
+
+		/* Decay last frame's value, take max with new */
+		ctx->kick_onset = (ctx->kick_onset * 0.78f > kick) ? ctx->kick_onset * 0.78f : kick;
+		ctx->snare_onset = (ctx->snare_onset * 0.72f > snare) ? ctx->snare_onset * 0.72f : snare;
+		ctx->hat_onset = (ctx->hat_onset * 0.65f > hat) ? ctx->hat_onset * 0.65f : hat;
 	}
 }
 
@@ -379,12 +412,27 @@ void vjlink_audio_engine_process(struct vjlink_audio_engine *engine,
 				VJLINK_FFT_SIZE / 2 + 1);
 
 			struct vjlink_context *ctx = vjlink_get_context();
-			ctx->beat_phase = vjlink_bpm_detector_get_beat_phase(engine->bpm);
+			float old_phase = ctx->beat_phase;
+			float new_phase = vjlink_bpm_detector_get_beat_phase(engine->bpm);
+			ctx->beat_phase = new_phase;
 			ctx->bpm = vjlink_bpm_detector_get_bpm(engine->bpm);
 			ctx->beat_confidence = vjlink_bpm_detector_get_confidence(engine->bpm);
 
 			/* Store onset strength for effects */
 			engine->onset_strength = vjlink_bpm_detector_get_onset_strength(engine->bpm);
+
+			/* BPM-derived subdivisions. beat_phase wraps 0->1 each beat;
+			 * we count beats and derive 1/8, 1/16, 2-beat, 4-beat phases. */
+			if (new_phase < old_phase) {
+				ctx->beat_count++;
+			}
+			ctx->beat_1_4 = new_phase;
+			float p2 = new_phase * 2.0f;
+			ctx->beat_1_8 = p2 - (float)((int)p2);
+			float p4 = new_phase * 4.0f;
+			ctx->beat_1_16 = p4 - (float)((int)p4);
+			ctx->beat_2_1 = ((float)(ctx->beat_count & 1) + new_phase) * 0.5f;
+			ctx->beat_4_1 = ((float)(ctx->beat_count & 3) + new_phase) * 0.25f;
 		}
 
 		/* Update band history */

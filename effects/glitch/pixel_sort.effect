@@ -11,7 +11,10 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
 
 uniform float sort_threshold;  /* brightness threshold (default 0.5) */
 uniform float sort_direction;  /* 0=vertical, 1=horizontal (default 0.0) */
@@ -126,8 +129,9 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float bass = bands.x;
-    float treble = bands.w;
+    float bass = max(bands.x, bands_raw.x);
+    float treble = max(bands.w, bands_raw.w);
+    float transient = saturate(max(onset_strength, bass - bands.y * 0.35));
 
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
@@ -141,13 +145,13 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
     }
 
     /* === Filter mode: aggressive pixel sorting === */
-    float threshold = sort_threshold - bass * 0.3;
+    float threshold = sort_threshold - bass * 0.24 - transient * 0.14;
     float direction = saturate(sort_direction);
-    float max_len = max(sort_length, 0.01) + bass * 0.15;
-    float intens = saturate(sort_intensity);
+    float max_len = max(sort_length, 0.01) + bass * 0.12 + transient * 0.12;
+    float intens = saturate(sort_intensity * (1.0 + transient * 0.35 + rms * 0.15));
 
     /* Beat burst extends sort dramatically */
-    max_len += beat * 0.4 * bass;
+    max_len += beat * 0.30 * bass + transient * 0.18;
 
     float4 original = image.Sample(texSampler, uv);
     float lum = luminance(original.rgb);
@@ -213,7 +217,7 @@ float4 PSPixelSort(VertInOut vert_in) : TARGET
     float3 result = lerp(sorted_color.rgb, avg_streak, 0.4);
 
     /* Chromatic separation on sorted pixels */
-    float chroma_shift = bass * 0.003;
+    float chroma_shift = (bass + transient) * 0.003;
     float r_shift = image.Sample(texSampler, uv + sort_dir * 2.0 + float2(chroma_shift, 0.0)).r;
     float b_shift = image.Sample(texSampler, uv + sort_dir * 2.0 - float2(chroma_shift, 0.0)).b;
     result.r = lerp(result.r, r_shift, 0.2 * intens);

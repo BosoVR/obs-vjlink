@@ -1,0 +1,135 @@
+/*
+ * VJLink - Glitch Basic
+ * Clean content glitch for live use: horizontal tears, block jumps,
+ * RGB offsets, and audio-triggered digital hits.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
+
+uniform float glitch_amount;
+uniform float tear_size;
+uniform float block_amount;
+uniform float rgb_amount;
+uniform float noise_amount;
+uniform float has_input_source;
+uniform float band_activation;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float3 overlayPattern(float2 uv, float drive)
+{
+    float line = floor(uv.y * (45.0 + drive * 65.0));
+    float h = hash11(line + floor(time * 24.0));
+    float active = step(0.78 - drive * 0.25, h);
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    float snow = hash21(uv * resolution + floor(time * 90.0));
+    float3 col = float3(0.0, 0.0, 0.0);
+    col += float3(0.95, 0.95, 1.0) * active * (0.18 + scan * 0.12);
+    col += (snow - 0.5) * 0.18 * drive;
+    col.r += active * drive * 0.25;
+    col.b += active * drive * 0.18;
+    return saturate(col);
+}
+
+float4 PSGlitchBasic(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float beat = 1.0 - beat_phase;
+    beat = beat * beat * beat;
+    float transient = max(onset_strength, max(bands_raw.x, bands_raw.w) * 0.45);
+    float drive = saturate(glitch_amount + band_activation +
+                           bands.x * 0.35 + beat * bands.x +
+                           transient * 0.55 + rms * 0.15);
+
+    bool has_input = (has_input_source > 0.5);
+    if (!has_input) {
+        float3 overlay = overlayPattern(uv, drive);
+        float alpha = saturate(0.12 + drive * 0.68);
+        return float4(overlay, alpha);
+    }
+
+    float2 guv = uv;
+
+    float line_count = max(8.0, 18.0 / max(tear_size, 0.05));
+    float line_id = floor(uv.y * line_count);
+    float line_hash = hash11(line_id + floor(time * 18.0));
+    float line_active = step(0.82 - drive * 0.25, line_hash);
+    guv.x += (line_hash - 0.5) * 0.12 * drive * line_active;
+
+    float2 block_grid = floor(uv * float2(12.0, 7.0));
+    float block_hash = hash21(block_grid + floor(time * 10.0));
+    float block_active = step(0.88 - block_amount * drive * 0.35, block_hash);
+    float2 block_shift = float2(
+        hash21(block_grid + 11.0) - 0.5,
+        hash21(block_grid + 29.0) - 0.5
+    ) * 0.09 * drive * block_active;
+    guv += block_shift;
+    guv = saturate(guv);
+
+    float chroma = rgb_amount * (0.002 + drive * 0.015);
+    float2 chroma_dir = normalize(float2(0.7 + bands.z, 0.2 + bands.w));
+    float r = image.Sample(texSampler, saturate(guv + chroma_dir * chroma)).r;
+    float g = image.Sample(texSampler, guv).g;
+    float b = image.Sample(texSampler, saturate(guv - chroma_dir * chroma)).b;
+    float a = image.Sample(texSampler, uv).a;
+
+    float3 col = float3(r, g, b);
+    float snow = hash21(uv * resolution + floor(time * 120.0));
+    col = lerp(col, float3(snow, snow, snow), noise_amount * drive * step(0.965 - drive * 0.12, snow));
+
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    col -= scan * 0.05 * drive;
+    col = saturate(col);
+
+    return float4(col, a);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSGlitchBasic(vert_in);
+    }
+}

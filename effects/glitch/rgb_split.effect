@@ -183,8 +183,7 @@ float4 PSRgbSplit(VertInOut vert_in) : TARGET
 
     col = col / (1.0 + col * 0.45);
     col = saturate(col);
-    float __a = max(max(col.r, col.g), col.b);
-    return float4(col, __a);
+    return float4(col, a_ch);
 }
 
 technique Draw

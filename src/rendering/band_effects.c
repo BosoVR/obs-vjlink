@@ -19,6 +19,9 @@ void vjlink_band_effects_init(struct vjlink_band_effects *bfx,
 		bfx->slots[i].render_target = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
 		bfx->slots[i].threshold = 0.3f;
 		bfx->slots[i].intensity = 1.0f;
+		bfx->slots[i].attack = 0.65f;
+		bfx->slots[i].release = 0.18f;
+		bfx->slots[i].hold_frames = 6.0f;
 		bfx->slots[i].blend_mode = VJLINK_BLEND_ADD;
 		bfx->slots[i].blend_alpha = 1.0f;
 	}
@@ -27,6 +30,19 @@ void vjlink_band_effects_init(struct vjlink_band_effects *bfx,
 	bfx->composite_target2 = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
 	bfx->initialized = true;
 	blog(LOG_INFO, "[VJLink] Band effects initialized (%ux%u)", width, height);
+}
+
+void vjlink_band_effects_set_slot_response(struct vjlink_band_effects *bfx,
+                                           int band, float attack,
+                                           float release, float hold_frames)
+{
+	if (!bfx || band < 0 || band >= VJLINK_NUM_BANDS)
+		return;
+
+	struct vjlink_band_slot *slot = &bfx->slots[band];
+	slot->attack = fmaxf(0.01f, fminf(1.0f, attack));
+	slot->release = fmaxf(0.01f, fminf(1.0f, release));
+	slot->hold_frames = fmaxf(0.0f, fminf(60.0f, hold_frames));
 }
 
 void vjlink_band_effects_destroy(struct vjlink_band_effects *bfx)
@@ -147,6 +163,8 @@ void vjlink_band_effects_update(struct vjlink_band_effects *bfx)
 		struct vjlink_band_slot *slot = &bfx->slots[i];
 		if (!slot->enabled) {
 			slot->current_activation = 0.0f;
+			slot->target_activation = 0.0f;
+			slot->hold_remaining = 0.0f;
 			continue;
 		}
 
@@ -162,7 +180,20 @@ void vjlink_band_effects_update(struct vjlink_band_effects *bfx)
 				activation = 1.0f;
 		}
 
-		slot->current_activation = activation;
+		slot->target_activation = activation;
+		if (activation > 0.001f) {
+			slot->hold_remaining = slot->hold_frames;
+		} else if (slot->hold_remaining > 0.0f) {
+			slot->hold_remaining -= 1.0f;
+			activation = slot->current_activation;
+		}
+
+		float rate = (activation > slot->current_activation)
+			? slot->attack : slot->release;
+		slot->current_activation +=
+			(activation - slot->current_activation) * rate;
+		if (slot->current_activation < 0.001f)
+			slot->current_activation = 0.0f;
 	}
 
 	/* Log band activations every ~5 seconds at 60fps (300 frames) */
@@ -217,6 +248,10 @@ static void render_band_slot(struct vjlink_band_effects *bfx,
 	 * bind_uniforms which sets fallback texture for unbound params) */
 	vjlink_effect_bind_uniforms(slot->entry, input_tex, NULL,
 	                            bfx->width, bfx->height);
+
+	if (slot->entry->p_has_input)
+		gs_effect_set_float(slot->entry->p_has_input,
+		                    input_tex ? 1.0f : 0.0f);
 
 	/* Bind band_activation uniform */
 	if (slot->entry->p_band_activation)

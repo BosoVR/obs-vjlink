@@ -41,6 +41,13 @@ void vjlink_media_layers_destroy(struct vjlink_media_layers *ml)
 		}
 	}
 
+	if (ml->composite_target) {
+		obs_enter_graphics();
+		gs_texrender_destroy(ml->composite_target);
+		obs_leave_graphics();
+		ml->composite_target = NULL;
+	}
+
 	ml->initialized = false;
 }
 
@@ -138,13 +145,14 @@ static float compute_media_opacity(struct vjlink_media_layer *layer)
 	}
 }
 
-void vjlink_media_layers_render(struct vjlink_media_layers *ml,
-                                 uint32_t canvas_w, uint32_t canvas_h)
+static bool render_media_layers_internal(struct vjlink_media_layers *ml,
+                                         uint32_t canvas_w,
+                                         uint32_t canvas_h)
 {
 	if (!ml || !ml->initialized)
-		return;
+		return false;
 
-	struct vjlink_context *ctx = vjlink_get_context();
+	bool drew_any = false;
 
 	for (int i = 0; i < VJLINK_MAX_MEDIA_LAYERS; i++) {
 		struct vjlink_media_layer *layer = &ml->layers[i];
@@ -152,7 +160,7 @@ void vjlink_media_layers_render(struct vjlink_media_layers *ml,
 			continue;
 
 		/* Update GIF animation */
-		gs_image_file_tick(&layer->image, ctx->elapsed_time);
+		gs_image_file_tick(&layer->image, 0.016667f);
 		gs_image_file_update_texture(&layer->image);
 
 		/* Compute audio-reactive opacity */
@@ -163,6 +171,8 @@ void vjlink_media_layers_render(struct vjlink_media_layers *ml,
 		gs_texture_t *tex = layer->image.texture;
 		if (!tex)
 			continue;
+
+		drew_any = true;
 
 		/* Calculate position and size */
 		float img_w = (float)gs_texture_get_width(tex) * layer->scale;
@@ -206,4 +216,44 @@ void vjlink_media_layers_render(struct vjlink_media_layers *ml,
 		gs_matrix_pop();
 		gs_blend_state_pop();
 	}
+
+	return drew_any;
+}
+
+void vjlink_media_layers_render(struct vjlink_media_layers *ml,
+                                 uint32_t canvas_w, uint32_t canvas_h)
+{
+	render_media_layers_internal(ml, canvas_w, canvas_h);
+}
+
+gs_texture_t *vjlink_media_layers_render_texture(struct vjlink_media_layers *ml,
+                                                 uint32_t canvas_w,
+                                                 uint32_t canvas_h)
+{
+	if (!ml || !ml->initialized)
+		return NULL;
+
+	if (!ml->composite_target)
+		ml->composite_target = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+
+	if (!ml->composite_target)
+		return NULL;
+
+	gs_texrender_reset(ml->composite_target);
+	if (!gs_texrender_begin(ml->composite_target, canvas_w, canvas_h))
+		return NULL;
+
+	struct vec4 clear_color;
+	vec4_zero(&clear_color);
+	gs_clear(GS_CLEAR_COLOR, &clear_color, 0.0f, 0);
+
+	gs_ortho(0.0f, (float)canvas_w, 0.0f, (float)canvas_h,
+	         -100.0f, 100.0f);
+	gs_matrix_identity();
+
+	bool drew_any = render_media_layers_internal(ml, canvas_w, canvas_h);
+
+	gs_texrender_end(ml->composite_target);
+
+	return drew_any ? gs_texrender_get_texture(ml->composite_target) : NULL;
 }

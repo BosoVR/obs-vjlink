@@ -75,6 +75,19 @@ struct vjlink_context {
     volatile float   beat_confidence;
     volatile float   rms;
 
+    /* Per-band onset detection (kick=bass, snare=lowmid+highmid, hat=treble) */
+    volatile float   kick_onset;     /* 0-1 spike on bass transient */
+    volatile float   snare_onset;    /* 0-1 spike on mid transient */
+    volatile float   hat_onset;      /* 0-1 spike on treble transient */
+
+    /* BPM-derived phase subdivisions (0..1, wraps every N beats) */
+    volatile float   beat_1_4;       /* phase across 1 beat   (= beat_phase) */
+    volatile float   beat_1_8;       /* phase across 1/2 beat (twice per beat) */
+    volatile float   beat_1_16;      /* phase across 1/4 beat */
+    volatile float   beat_2_1;       /* phase across 2 beats  (half-time) */
+    volatile float   beat_4_1;       /* phase across 4 beats  (one bar)   */
+    volatile uint32_t beat_count;    /* monotonic beat counter */
+
     /* LFO values (updated on render thread) */
     float            lfo_values[VJLINK_NUM_LFOS];
 
@@ -114,6 +127,14 @@ struct vjlink_context {
     int              active_preset_index;
     char             active_effect_id[64]; /* current effect for UI sync */
     float            band_sensitivity[4]; /* user gain per band, default 1.0 */
+    float            audio_master_gain;    /* global gain before band normalize */
+    float            audio_fall_rate;      /* smoothed band decay/fall speed */
+    int              palette_id;           /* 0=Default 1=Hardtechno 2=Rawstyle 3=Acid 4=Cyber 5=Mono */
+    float            macro_energy;          /* 0..1 — Performance macro: drives intensity/contrast */
+    float            macro_chaos;           /* 0..1 — Performance macro: glitch/noise/distortion */
+    float            macro_speed;           /* 0..1 — Performance macro: speed multiplier */
+    float            macro_color;           /* 0..1 — Performance macro: hue/saturation shift */
+    float            strobe_safety_max;     /* 0..1 — Max strobe brightness, 1.0 = no limit */
 
     /* WebSocket -> Compositor param override (applied on render thread) */
 #define VJLINK_MAX_PENDING_PARAMS 32

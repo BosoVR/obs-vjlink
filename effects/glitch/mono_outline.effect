@@ -1,0 +1,120 @@
+/*
+ * VJLink - Mono Outline (Pro)
+ * Brutalist edge-detect filter for content. Black/white extreme contrast,
+ * audio-reactive edge thickness, beat-driven invert.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     palette_id;
+uniform float     has_input_source;
+uniform float     band_activation;
+
+uniform float edge_thickness;     /* 0.0005-0.01, default 0.0025 */
+uniform float threshold;          /* 0-1, default 0.25 */
+uniform float invert_on_beat;     /* 0=off 1=on */
+uniform float audio_drive;        /* 0-2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+
+float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+
+float3 palette_outline(int pid, float t) {
+    if (pid == 1) return lerp(float3(1,1,1), float3(1.0, 0.05, 0.08), t);
+    if (pid == 2) return lerp(float3(1,1,1), float3(1.0, 0.4, 0.05), t);
+    if (pid == 3) return lerp(float3(1,1,1), float3(0.65, 1.0, 0.1), t);
+    if (pid == 4) return lerp(float3(1,1,1), float3(0.05, 0.85, 1.0), t);
+    if (pid == 5) return float3(1,1,1);
+    return lerp(float3(1,1,1), float3(0.95, 0.15, 0.6), t);
+}
+
+float4 PSMonoOutline(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    bool has_input = (has_input_source > 0.5);
+
+    float bass = bands.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.7 + band_activation * 0.6);
+
+    float bs = beat_sync;
+    float beat = (bs < 0.5) ? pow(1.0 - beat_phase, 3.0) : pow(1.0 - beat_1_4, 3.0);
+
+    float thick = edge_thickness * (1.0 + drive * 1.5);
+    float thresh = threshold * (1.0 - kick_onset * 0.4);
+
+    if (!has_input) {
+        /* Generator fallback: high-contrast geometric shapes from PRNG */
+        float aspect = resolution.x / max(resolution.y, 1.0);
+        float2 p = (uv - 0.5) * 2.0;
+        p.x *= aspect;
+        float r = length(p);
+        float ang = atan2(p.y, p.x);
+        float lines = abs(sin(ang * 8.0 + time * 0.5 * (0.5 + bass)));
+        lines *= smoothstep(0.1, 0.5, r) * smoothstep(1.5, 0.7, r);
+        float ring = step(0.7, lines);
+        float invert_flag = (invert_on_beat > 0.5 && beat > 0.5) ? 1.0 : 0.0;
+        float v = abs(ring - invert_flag);
+        float3 col = palette_outline((int)palette_id, beat) * v;
+        return float4(col, v);
+    }
+
+    /* Sobel edge detection */
+    float2 px = 1.0 / resolution;
+    float tl = lum(image.Sample(texSampler, uv + px * float2(-1, -1)).rgb);
+    float t_ = lum(image.Sample(texSampler, uv + px * float2( 0, -1)).rgb);
+    float tr = lum(image.Sample(texSampler, uv + px * float2( 1, -1)).rgb);
+    float l_ = lum(image.Sample(texSampler, uv + px * float2(-1,  0)).rgb);
+    float r_ = lum(image.Sample(texSampler, uv + px * float2( 1,  0)).rgb);
+    float bl = lum(image.Sample(texSampler, uv + px * float2(-1,  1)).rgb);
+    float b_ = lum(image.Sample(texSampler, uv + px * float2( 0,  1)).rgb);
+    float br = lum(image.Sample(texSampler, uv + px * float2( 1,  1)).rgb);
+
+    float gx = -tl - 2.0 * l_ - bl + tr + 2.0 * r_ + br;
+    float gy = -tl - 2.0 * t_ - tr + bl + 2.0 * b_ + br;
+    float edge = sqrt(gx * gx + gy * gy);
+
+    /* Threshold + thickening (audio scales) */
+    float edge_v = smoothstep(thresh, thresh + thick * 80.0, edge);
+
+    /* Invert on beat */
+    float invert_flag = (invert_on_beat > 0.5 && beat > 0.6) ? 1.0 : 0.0;
+    float v = abs(edge_v - invert_flag);
+
+    /* Choose output: outline color from palette */
+    float3 col_outline = palette_outline((int)palette_id, beat * drive);
+    float3 col = col_outline * v;
+
+    /* Add bottom darkness so edges stand out */
+    col -= 0.02 * (1.0 - v);
+    col = saturate(col);
+
+    return float4(col, v);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSMonoOutline(vert_in);
+    }
+}

@@ -2,6 +2,9 @@
     "effect_id": "crt_scanlines",
     "name": "CRT Scanlines",
     "category": "retro",
+    "role": "filter",
+    "requires_input": false,
+    "performance_group": "content_fx",
     "description": "CRT monitor simulation with scanlines, screen curvature, and RGB phosphor mask",
     "author": "VJLink",
     "params": [

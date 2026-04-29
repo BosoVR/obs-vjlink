@@ -9,12 +9,21 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     chronotensity;
+uniform float     onset_strength;
+uniform float     rms;
+uniform float     band_activation;
 
 uniform float column_count;    /* number of columns (default 40.0) */
 uniform float fall_speed;      /* drop speed (default 2.0) */
 uniform float trail_length;    /* glow trail (default 0.5) */
 uniform float brightness;      /* overall brightness (default 1.0) */
+uniform float audio_drive;     /* audio speed/glow response (default 1.0) */
+uniform float density;         /* character fill density (default 0.65) */
+uniform float head_glow;       /* bright leading heads (default 1.0) */
+uniform float color_mode;      /* 0 green, 1 cyan, 2 magenta, 3 acid */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -43,15 +52,32 @@ float hash(float2 p)
 /* Pseudo-character pattern within a cell */
 float charGlyph(float2 local_uv, float seed)
 {
-    /* Generate a simple glyph from hash-based pattern */
-    int gx = int(local_uv.x * 3.0);
-    int gy = int(local_uv.y * 5.0);
+    float2 p = local_uv * 2.0 - 1.0;
+    float edge = 1.0 - smoothstep(0.86, 1.0, max(abs(p.x), abs(p.y)));
+    float2 cell = floor(local_uv * float2(3.0, 5.0));
+    float h = hash(cell + seed);
 
-    if (gx < 0 || gx >= 3 || gy < 0 || gy >= 5)
-        return 0.0;
+    float v = 1.0 - smoothstep(0.14, 0.20, abs(p.x));
+    float hline = 1.0 - smoothstep(0.13, 0.19, abs(p.y));
+    float diag = 1.0 - smoothstep(0.15, 0.22, abs(p.x - p.y));
+    float dots = step(0.48, h);
+    float glyph = max(dots, max(v * step(0.60, h), max(hline * step(0.70, h), diag * step(0.80, h))));
+    return glyph * edge;
+}
 
-    float h = hash(float2(float(gx + gy * 3), seed));
-    return step(0.45, h);
+float3 palette(float mode, float drive)
+{
+    float3 green = float3(0.0, 0.85, 0.24);
+    float3 cyan = float3(0.0, 0.85, 1.0);
+    float3 magenta = float3(1.0, 0.1, 0.65);
+    float3 acid = float3(0.8 + drive * 0.2, 1.0, 0.05);
+
+    float m = floor(mode + 0.5);
+    float3 c = green;
+    c = lerp(c, cyan, step(0.5, m) * (1.0 - step(1.5, m)));
+    c = lerp(c, magenta, step(1.5, m) * (1.0 - step(2.5, m)));
+    c = lerp(c, acid, step(2.5, m));
+    return c;
 }
 
 float4 PSMatrixRain(VertInOut vert_in) : TARGET
@@ -59,9 +85,11 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
     float2 uv = vert_in.uv;
 
     float cols = max(column_count, 10.0);
-    float speed = fall_speed + bands.x * 1.0;
-    float trail = max(trail_length, 0.1);
+    float drive = saturate(max(max(bands_raw.x, onset_strength), band_activation));
+    float speed = max(fall_speed, 0.1) * (1.0 + drive * max(audio_drive, 0.0) * 1.75);
+    float trail = max(trail_length, 0.1) * (1.0 + bands.y * 0.35 + drive * 0.25);
     float bright = max(brightness, 0.1);
+    float fill = saturate(density);
 
     /* Column grid */
     float col_width = 1.0 / cols;
@@ -77,11 +105,12 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
 
     /* Each column has different speed and offset */
     float col_hash = hash(float2(col_idx, 0.0));
-    float col_speed = speed * (0.5 + col_hash);
+    float col_pulse = 0.75 + hash(float2(col_idx, 13.7)) * 0.65;
+    float col_speed = speed * col_pulse;
     float col_offset = col_hash * 50.0;
 
     /* Falling head position */
-    float head_row = fmod(time * col_speed * 10.0 + col_offset, 100.0);
+    float head_row = fmod(time * col_speed * 10.0 + col_offset + chronotensity * 4.0, 100.0);
 
     /* Current row's distance from head */
     float row_count = 1.0 / char_height;
@@ -90,34 +119,36 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
 
     /* Trail fade */
     float fade = 1.0 - saturate(dist_from_head / (trail * row_count));
-    fade = pow(fade, 2.0);
+    fade = pow(fade, 1.75);
 
     /* Character change based on time and treble */
-    float char_seed = floor(time * (2.0 + bands.w * 5.0) + col_hash * 100.0);
+    float char_rate = 2.0 + bands.w * 7.0 + bands_raw.w * 4.0 + onset_strength * 5.0;
+    float char_seed = floor(time * char_rate + col_hash * 100.0);
     char_seed = hash(float2(col_idx, row_idx + char_seed));
 
     /* Render character */
     float glyph = charGlyph(cell_uv, char_seed);
+    glyph *= step(1.0 - fill, hash(float2(col_idx * 2.0, row_idx + char_seed * 17.0)));
 
     /* Color: classic green with brighter head */
     float is_head = (dist_from_head < 1.0) ? 1.0 : 0.0;
 
-    float3 green = float3(0.0, 0.8, 0.2);
-    float3 white = float3(0.8, 1.0, 0.8);
+    float3 base = palette(color_mode, drive);
+    float3 white = lerp(float3(0.75, 1.0, 0.75), float3(1.0, 1.0, 1.0), saturate(color_mode / 3.0));
 
-    float3 color = lerp(green, white, is_head * 0.8);
-    color *= glyph * fade * bright;
+    float head = is_head * saturate(head_glow);
+    float3 color = lerp(base, white, head * 0.85);
+    color *= glyph * fade * bright * (1.0 + rms * 0.45);
 
     /* Audio glow on specific columns */
     float audio_col = frac(col_hash * 7.0);
-    if (audio_col < 0.3) {
-        color *= (1.0 + bands.x * 1.5);
-    }
+    float audio_col_mask = step(audio_col, 0.26 + drive * 0.18);
+    color *= 1.0 + audio_col_mask * drive * max(audio_drive, 0.0) * 1.15;
 
     /* Beat flash: briefly brighten all */
     float beat = 1.0 - beat_phase;
     beat = beat * beat * beat;
-    color += green * beat * 0.1 * bands.x * glyph;
+    color += base * beat * (0.10 + drive * 0.22) * glyph;
 
     /* Subtle scanline */
     float scanline = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;

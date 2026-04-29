@@ -2,6 +2,9 @@
     "effect_id": "fire_emitter",
     "name": "Fire Emitter",
     "category": "particle",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Procedural fire with heat colormap, sparks, and audio-reactive flame height",
     "author": "VJLink",
     "params": [

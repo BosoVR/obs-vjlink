@@ -1,0 +1,153 @@
+/*
+ * VJLink - Smoke Volume (Pro)
+ * Volumetric smoke with light shafts. Bass-driven density,
+ * onset-driven brightness pulses. Underground rave atmosphere.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     onset_strength;
+uniform float     kick_onset;
+uniform float     palette_id;
+
+uniform float density;            /* 0.5-3, default 1.5 */
+uniform float light_count;        /* 1-6, default 3 */
+uniform float drift_speed;        /* 0-2, default 0.5 */
+uniform float audio_drive;        /* 0-2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+
+float fbm5(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
+}
+
+float3 palette_smoke(int pid) {
+    if (pid == 1) return float3(1.0, 0.15, 0.15);   /* Hardtechno red */
+    if (pid == 2) return float3(1.0, 0.5, 0.1);     /* Rawstyle orange */
+    if (pid == 3) return float3(0.65, 1.0, 0.15);   /* Acid */
+    if (pid == 4) return float3(0.1, 0.85, 1.0);    /* Cyber */
+    if (pid == 5) return float3(0.95, 0.95, 1.0);   /* Mono */
+    return float3(0.8, 0.4, 1.0);                    /* Default purple */
+}
+
+float4 PSSmokeVolume(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float bass_raw = bands_raw.x;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6);
+
+    float bs = beat_sync;
+    float beat;
+    if (bs < 0.5) beat = pow(1.0 - beat_phase, 3.0);
+    else if (bs < 1.5) beat = pow(1.0 - beat_1_4, 3.0);
+    else beat = pow(1.0 - beat_1_8, 3.0);
+
+    /* Smoke FBM with drift */
+    float2 drift = float2(time * drift_speed * 0.05, time * drift_speed * 0.08);
+    float smoke = fbm5(uv * 3.5 + drift);
+    smoke = pow(smoke, 1.6);
+    smoke *= max(density, 0.5);
+    smoke *= 0.6 + bass_raw * 0.6;
+
+    /* === Light shafts radiating from top === */
+    float3 light_color = palette_smoke((int)palette_id);
+    float lc = clamp(light_count, 1.0, 6.0);
+    int lci = (int)lc;
+
+    float shaft_intensity = 0.0;
+    [unroll(6)] for (int i = 0; i < 6; i++) {
+        if (i >= lci) break;
+        float fi = (float)i;
+        float phase = fi / lc;
+        float src_x = (phase - 0.5) * 1.6;
+        float2 src = float2(src_x, 1.2);
+
+        /* Sway */
+        float ang = sin(time * 0.3 + fi * 1.7) * 0.4 + cos(time * 0.5 + fi) * 0.15;
+        float2 dir = normalize(float2(sin(ang), -1.0));
+
+        float2 d = p - src;
+        float along = dot(d, dir);
+        if (along < 0.0) continue;
+
+        float2 perp_v = d - dir * along;
+        float pd = length(perp_v);
+        float beam_w = 0.08 + along * 0.18;
+
+        float halo = exp(-pd * 3.5 / beam_w);
+        float fog_modulate = fbm5(p * 4.0 + time * 0.1 + fi * 3.0);
+        float beam = halo * (0.4 + fog_modulate * 0.6);
+
+        float depth_fade = exp(-along * 0.3);
+        float flicker = 0.8 + sin(time * 8.0 + fi * 2.0) * 0.2;
+
+        shaft_intensity += beam * depth_fade * flicker *
+                           (0.4 + bass * 0.5 + beat * bass * 0.4);
+    }
+
+    /* Compose */
+    float3 col = float3(0.015, 0.01, 0.02);
+
+    /* Base smoke (dim with bass color) */
+    col += light_color * smoke * 0.18;
+
+    /* Light shafts (visible due to smoke) */
+    col += light_color * shaft_intensity * (0.7 + smoke * 0.6);
+
+    /* Center kick glow */
+    float r = length(p);
+    float kick_glow = exp(-r * 2.0) * kick_onset * 0.6;
+    col += light_color * kick_glow;
+
+    /* Onset overall flash through smoke */
+    col += light_color * onset_strength * 0.18 * (smoke + 0.3);
+
+    /* Edge vignette */
+    col *= smoothstep(2.0, 0.4, r);
+
+    col = col / (1.0 + col * 0.4);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSSmokeVolume(vert_in);
+    }
+}

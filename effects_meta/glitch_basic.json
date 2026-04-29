@@ -1,0 +1,17 @@
+{
+    "effect_id": "glitch_basic",
+    "name": "Glitch Basic",
+    "category": "glitch",
+    "role": "filter",
+    "requires_input": false,
+    "performance_group": "post_glitch",
+    "description": "Clean live glitch with horizontal tears, RGB offsets, block jumps, and audio-triggered hits",
+    "author": "VJLink",
+    "params": [
+        { "id": "glitch_amount", "name": "Glitch Amount", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01 },
+        { "id": "tear_size", "name": "Tear Size", "type": "float", "default": 0.35, "min": 0.05, "max": 1.0, "step": 0.01 },
+        { "id": "block_amount", "name": "Blocks", "type": "float", "default": 0.45, "min": 0.0, "max": 1.0, "step": 0.01 },
+        { "id": "rgb_amount", "name": "RGB Split", "type": "float", "default": 0.55, "min": 0.0, "max": 1.0, "step": 0.01 },
+        { "id": "noise_amount", "name": "Noise", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01 }
+    ]
+}

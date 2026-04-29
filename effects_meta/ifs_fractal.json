@@ -2,6 +2,9 @@
     "effect_id": "ifs_fractal",
     "name": "IFS Fractal",
     "category": "fractal",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Iterated Function System fractal with folding, rotation, and audio-reactive transformation",
     "author": "VJLink",
     "params": [

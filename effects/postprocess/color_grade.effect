@@ -11,7 +11,10 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
 
 uniform float     has_input_source; /* 1.0 when used as filter */
 
@@ -94,7 +97,8 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     hsv.x = frac(hsv.x + pp_hue_shift);
 
     /* Saturation */
-    hsv.y *= pp_saturation;
+    float audio_lift = saturate(max(onset_strength, bands_raw.x) * 0.10 + rms * 0.08);
+    hsv.y *= pp_saturation * (1.0 + audio_lift);
 
     /* Back to RGB */
     color = hsv2rgb(hsv);
@@ -107,6 +111,10 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     float vig = 1.0 - dot(vig_uv, vig_uv) * pp_vignette * 2.0;
     vig = clamp(vig, 0.0, 1.0);
     color *= vig;
+
+    /* Very small musical lift so Color Grade can live in an AudioLink chain
+     * without turning into a flash effect. */
+    color *= 1.0 + audio_lift * 0.35;
 
     float out_alpha = has_input ? src.a : max(max(color.r, color.g), color.b);
     return float4(clamp(color, 0.0, 1.0), out_alpha);

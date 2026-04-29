@@ -2,6 +2,9 @@
   "id": "logo_runner",
   "name": "Logo Runner",
   "category": "geometric",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
   "params": [
     { "name": "direction", "label": "Direction (0=LR 1=RL 2=BL-TR 3=TR-BL 4=Rand)", "type": "float", "default": 0.0, "min": 0.0, "max": 4.0, "step": 1.0 },
     { "name": "logo_scale", "label": "Logo Scale", "type": "float", "default": 0.15, "min": 0.02, "max": 0.5, "step": 0.01 },

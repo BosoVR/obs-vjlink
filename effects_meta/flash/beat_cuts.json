@@ -1,0 +1,16 @@
+{
+  "id": "beat_cuts",
+  "name": "Beat Cuts",
+  "category": "flash",
+  "role": "filter",
+  "requires_input": false,
+  "performance_group": "trigger",
+  "genre": ["hardtechno", "uptempo", "rawstyle"],
+  "description": "BPM-quantized hard cuts on 1/4, 1/8, 1/16. Disciplined techno strobe",
+  "params": [
+    { "name": "cut_division", "label": "Division (0=1/4 1=1/8 2=1/16 3=2/1 4=4/1)", "type": "float", "default": 1.0, "min": 0.0, "max": 4.0, "step": 1.0 },
+    { "name": "pattern", "label": "Pattern (0=Alt 1=Tri 2=4on4 3=Off)", "type": "float", "default": 0.0, "min": 0.0, "max": 3.0, "step": 1.0 },
+    { "name": "intensity", "label": "Intensity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "color_invert", "label": "Color Invert", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+  ]
+}

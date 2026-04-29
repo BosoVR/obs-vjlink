@@ -2,6 +2,9 @@
   "id": "laser_scan",
   "name": "Laser Scan",
   "category": "audio_viz",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "audio_visualizer",
   "description": "Pro laser beams with sharp core + halo + scatter haze, multiple scan modes",
   "params": [
     { "name": "line_count", "label": "Line Count", "type": "float", "default": 5.0, "min": 1.0, "max": 16.0, "step": 1.0 },

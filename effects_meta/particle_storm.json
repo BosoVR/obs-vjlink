@@ -2,6 +2,9 @@
     "effect_id": "particle_storm",
     "name": "Particle Storm",
     "category": "particle",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Multi-layer particle swarm with curl-noise flow and audio-reactive turbulence",
     "author": "VJLink",
     "params": [

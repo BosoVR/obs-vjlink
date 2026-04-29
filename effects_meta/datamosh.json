@@ -2,6 +2,9 @@
     "effect_id": "datamosh",
     "name": "Datamosh",
     "category": "glitch",
+    "role": "filter",
+    "requires_input": true,
+    "performance_group": "post_glitch",
     "description": "Frame-difference compression artifacts with audio-triggered block displacement",
     "author": "VJLink",
     "params": [

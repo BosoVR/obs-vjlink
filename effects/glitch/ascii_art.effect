@@ -10,12 +10,17 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
 
 uniform float char_size;       /* character cell size in pixels (default 8.0) */
 uniform float color_preserve;  /* keep original color vs green (default 0.5) */
 uniform float contrast;        /* contrast boost (default 1.5) */
 uniform float bg_brightness;   /* background brightness (default 0.05) */
+uniform float audio_drive;     /* audio boost amount (default 0.8) */
+uniform float glyph_sharpness; /* dot/line sharpness (default 0.7) */
 uniform float has_input_source; /* 1.0 when used as filter */
 
 sampler_state texSampler {
@@ -42,43 +47,32 @@ float luminance(float3 c)
     return dot(c, float3(0.299, 0.587, 0.114));
 }
 
-/*
- * Pseudo-character rendering via bit patterns.
- * Maps brightness to increasingly dense dot patterns.
- */
+/* Fast pseudo-character rendering.
+ * Avoid integer arrays/bit operations because they compile slowly on some
+ * OBS graphics backends and made ASCII Art feel like it was hanging. */
 float charPattern(float2 local_uv, float brightness)
 {
-    /* 10 density levels represented as 3x5 dot patterns */
-    int level = int(brightness * 9.99);
+    float2 p = local_uv * 2.0 - 1.0;
+    float q = max(abs(p.x), abs(p.y));
+    float edge = 1.0 - smoothstep(0.86, 1.0, q);
 
-    /* Quantize local UV to 3x5 grid */
-    int gx = int(local_uv.x * 3.0);
-    int gy = int(local_uv.y * 5.0);
+    float2 grid = floor(local_uv * float2(3.0, 5.0));
+    float rnd = frac(sin(dot(grid, float2(37.31, 91.73))) * 43758.5453);
+    float dots = step(0.72 - brightness * 0.34, rnd);
 
-    if (gx < 0 || gx >= 3 || gy < 0 || gy >= 5)
-        return 0.0;
+    float line_w = lerp(0.115, 0.205, saturate(glyph_sharpness));
+    float vertical = 1.0 - smoothstep(line_w, line_w + 0.045, abs(p.x));
+    float horizontal = 1.0 - smoothstep(line_w, line_w + 0.045, abs(p.y));
+    float diag_a = 1.0 - smoothstep(line_w, line_w + 0.055, abs(p.x - p.y));
+    float diag_b = 1.0 - smoothstep(line_w, line_w + 0.055, abs(p.x + p.y));
+    float dense = max(max(vertical, horizontal), max(diag_a, diag_b));
 
-    int bit_idx = gy * 3 + gx;
+    float sparse = dots * smoothstep(0.08, 0.22, brightness);
+    float mid = max(dots, max(horizontal * 0.8, diag_a * 0.65));
+    float glyph = lerp(sparse, mid, smoothstep(0.22, 0.58, brightness));
+    glyph = lerp(glyph, dense, smoothstep(0.58, 0.95, brightness));
 
-    /* Pattern lookup: increasing density
-     * Each int encodes a 3x5 character (15 bits) */
-    int patterns[10] = {
-        0,        /* level 0: empty */
-        256,      /* level 1: single dot */
-        4228,     /* level 2: period-like */
-        4836,     /* level 3: colon-like */
-        5765,     /* level 4: minus-like */
-        11565,    /* level 5: plus-like */
-        15239,    /* level 6: asterisk */
-        23487,    /* level 7: hash */
-        31599,    /* level 8: at-sign dense */
-        32767     /* level 9: full block */
-    };
-
-    int pattern = patterns[clamp(level, 0, 9)];
-    int bit = (pattern >> bit_idx) & 1;
-
-    return float(bit);
+    return glyph * edge;
 }
 
 float4 PSAscii(VertInOut vert_in) : TARGET
@@ -118,8 +112,11 @@ float4 PSAscii(VertInOut vert_in) : TARGET
     /* Luminance with contrast */
     lum = saturate((lum - 0.5) * contr + 0.5);
 
-    /* Audio boost */
-    lum *= (1.0 + bands.x * 0.3);
+    /* Audio boost: Bass increases density, transients brighten glyphs. */
+    float audio = max(max(bands_raw.x, bands.x), onset_strength);
+    lum *= 1.0 + audio * max(audio_drive, 0.0);
+    lum += rms * 0.10;
+    lum = saturate(lum);
 
     /* Get character pixel */
     float char_px = charPattern(cell_uv, lum);

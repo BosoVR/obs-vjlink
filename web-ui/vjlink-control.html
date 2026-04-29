@@ -6,10 +6,13 @@
 <title>VJLink Control</title>
 <style>
   :root {
-    --bg: #0a0a0f;
-    --surface: #12121a;
-    --surface2: #1a1a28;
-    --border: #2a2a3a;
+    /* Berghain-inspired dark palette */
+    --bg: #050507;
+    --surface: #0d0d12;
+    --surface2: #15151c;
+    --surface3: #1c1c26;
+    --border: #2a2a36;
+    --border-strong: #3a3a4a;
     --accent: #7c3aed;
     --accent2: #a855f7;
     --accent-glow: rgba(124, 58, 237, 0.4);
@@ -18,12 +21,19 @@
     --green: #10b981;
     --orange: #f59e0b;
     --red: #ef4444;
+    --warning: #fb7185;
     --text: #e2e8f0;
     --text-dim: #64748b;
     --bass-color: #ef4444;
     --lowmid-color: #f59e0b;
     --highmid-color: #10b981;
     --treble-color: #06b6d4;
+    /* Genre palette accents (mirror backend palette_id) */
+    --pal-hardtechno: #ff0a14;
+    --pal-rawstyle: #ff5a0e;
+    --pal-acid: #b3ff19;
+    --pal-cyber: #0fd9ff;
+    --pal-mono: #ffffff;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,9 +41,17 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
     overflow-x: hidden;
     min-height: 100vh;
+    letter-spacing: 0.2px;
+  }
+  /* Headlines + labels: tight uppercase brutalist look */
+  .section-title, .pro-stat-label, .control-label, .band-slider-label,
+  .header h1, .panel-title {
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 700;
   }
 
   /* === HEADER === */
@@ -95,6 +113,38 @@
     align-items: center;
     gap: 8px;
   }
+
+  .mode-switch {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .mode-switch button {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.4px;
+  }
+
+  .mode-switch button.active {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 0 10px rgba(124,58,237,0.25);
+  }
+
+  .pro-only { display: none; }
+  body.pro-mode .pro-only { display: block; }
+  body.pro-mode .pro-only.pro-grid { display: grid; }
 
   .status-text {
     font-size: 11px;
@@ -188,6 +238,17 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    transition: transform 0.12s, filter 0.12s;
+  }
+
+  .band.triggered {
+    transform: translateY(-2px);
+    filter: brightness(1.25);
+  }
+
+  .band.triggered .band-bar-wrap {
+    border-color: currentColor;
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
   }
 
   .band-bar-wrap {
@@ -902,6 +963,255 @@
     color: var(--accent);
   }
 
+  .source-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .source-toolbar select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  .filter-tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .filter-tools select {
+    grid-column: 1 / -1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .pro-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .pro-panel-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .pro-stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 0;
+  }
+
+  .pro-stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 3px;
+  }
+
+  .pro-stat-value {
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* === Color Palette Selector === */
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .pal-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .pal-btn:hover { border-color: var(--accent); color: var(--text); }
+  .pal-btn.active {
+    border-color: var(--accent);
+    color: var(--text);
+    box-shadow: 0 0 12px var(--accent-glow);
+    background: var(--surface3);
+  }
+  .pal-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.5);
+  }
+
+  /* === Macro Knobs === */
+  .macro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .macro-knob {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+  }
+  .macro-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    margin-bottom: 4px;
+  }
+  .macro-value {
+    font-size: 16px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .macro-knob input[type="range"] {
+    width: 100%;
+  }
+
+  /* === Performance Pads === */
+  .pad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .perf-pad {
+    aspect-ratio: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    padding: 6px 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.1s;
+    letter-spacing: 0.5px;
+    overflow: hidden;
+  }
+  .perf-pad:hover { border-color: var(--accent); }
+  .perf-pad:active, .perf-pad.flashing {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent2);
+    box-shadow: 0 0 14px var(--accent-glow);
+    transform: scale(0.96);
+  }
+  .perf-pad.assigned { border-color: var(--accent); }
+  .pad-key {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-dim);
+    line-height: 1;
+  }
+  .perf-pad.assigned .pad-key { color: var(--accent2); }
+  .perf-pad.flashing .pad-key { color: white; }
+  .pad-name {
+    font-size: 9px;
+    line-height: 1.1;
+    word-break: break-word;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-dim);
+  }
+  .perf-pad.assigned .pad-name { color: var(--text); }
+
+  /* === Header Beat-Pulse Indicator === */
+  .beat-pulse {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 0 var(--accent-glow);
+    transition: transform 0.08s ease-out, box-shadow 0.18s;
+    margin-right: 8px;
+  }
+  .beat-pulse.kick {
+    transform: scale(1.6);
+    background: var(--bass-color);
+    box-shadow: 0 0 14px 4px rgba(239,68,68,0.6);
+  }
+
+  /* === Mini FFT visualizer in header === */
+  .header-fft {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 18px;
+    width: 110px;
+    margin-right: 12px;
+  }
+  .header-fft .bar {
+    flex: 1;
+    min-height: 1px;
+    background: linear-gradient(to top, var(--accent), var(--accent2));
+    border-radius: 1px 1px 0 0;
+    transition: height 0.08s ease-out;
+  }
+
+  .mini-btn {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .mini-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent2);
+  }
+
   @media (max-width: 900px) {
     .band-effects-grid { grid-template-columns: repeat(2, 1fr); }
   }
@@ -979,6 +1289,12 @@
     <div class="active-effect-badge" id="activeEffectBadge" title="Active Effect">No Effect</div>
   </div>
   <div class="connection">
+    <div class="header-fft" id="headerFft" title="Live FFT spectrum"></div>
+    <div class="beat-pulse" id="beatPulseDot" title="Beat pulse + kick onset"></div>
+    <div class="mode-switch" title="Switch between simple AudioLink control and Pro VJ workflow">
+      <button id="modeBasicBtn" onclick="setUIMode('basic')">BASIC</button>
+      <button id="modeProBtn" onclick="setUIMode('pro')">PRO</button>
+    </div>
     <input type="text" class="connect-input" id="wsUrl" value="ws://localhost:4455" placeholder="ws://host:port">
     <input type="password" class="connect-input" id="wsPassword" placeholder="Password" style="width:140px">
     <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
@@ -1086,6 +1402,142 @@
       <!-- Mini Spectrum -->
       <div class="spectrum-wrap">
         <canvas id="spectrumCanvas"></canvas>
+      </div>
+
+      <div class="pro-only" style="margin-top:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">Pro Audio Control</span>
+          <button onclick="resetAudioControls()" class="mini-btn" style="padding:3px 8px">Reset</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="band-slider-label"><span>Master Gain</span><span id="audioMasterGainVal">1.00x</span></div>
+            <input type="range" min="25" max="300" value="100" step="5" id="audioMasterGain"
+              oninput="setAudioControlsFromUI()">
+          </div>
+          <div>
+            <div class="band-slider-label"><span>Fall Speed</span><span id="audioFallRateVal">0.08</span></div>
+            <input type="range" min="1" max="50" value="8" step="1" id="audioFallRate"
+              oninput="setAudioControlsFromUI()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pro-panel pro-only">
+      <div class="section-title">Pro Workbench</div>
+      <div class="pro-panel-grid">
+        <div class="pro-stat">
+          <div class="pro-stat-label">Mode</div>
+          <div class="pro-stat-value" id="proModeState">PRO</div>
+        </div>
+        <div class="pro-stat">
+          <div class="pro-stat-label">Scene</div>
+          <div class="pro-stat-value" id="proSceneState">-</div>
+        </div>
+        <div class="pro-stat">
+          <div class="pro-stat-label">Selected Source</div>
+          <div class="pro-stat-value" id="proSourceState">-</div>
+        </div>
+        <div class="pro-stat">
+          <div class="pro-stat-label">Filter FX</div>
+          <div class="pro-stat-value" id="proFilterState">-</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
+        <button class="mini-btn" onclick="applyTriggerPreset('tight')">Tight Trigger</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Hardtechno Trigger</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('smooth')">Smooth Visual</button>
+      </div>
+    </div>
+
+    <!-- ===== COLOR PALETTE SELECTOR ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Genre Palette</span>
+        <span class="pal-hint" style="font-size:9px;color:var(--text-dim);font-weight:400">Affects all palette-aware effects</span>
+      </div>
+      <div class="palette-grid">
+        <button class="pal-btn pal-default active" data-pid="0" onclick="setPalette(0)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#7c3aed,#ec4899)"></span>
+          <span>Default</span>
+        </button>
+        <button class="pal-btn pal-hardtechno" data-pid="1" onclick="setPalette(1)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#ff0a14,#5a0006)"></span>
+          <span>Hardtechno</span>
+        </button>
+        <button class="pal-btn pal-rawstyle" data-pid="2" onclick="setPalette(2)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#ff5a0e,#ffaa00)"></span>
+          <span>Rawstyle</span>
+        </button>
+        <button class="pal-btn pal-acid" data-pid="3" onclick="setPalette(3)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#b3ff19,#3aff80)"></span>
+          <span>Acid</span>
+        </button>
+        <button class="pal-btn pal-cyber" data-pid="4" onclick="setPalette(4)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#0fd9ff,#7c3aed)"></span>
+          <span>Cyber</span>
+        </button>
+        <button class="pal-btn pal-mono" data-pid="5" onclick="setPalette(5)">
+          <span class="pal-swatch" style="background:linear-gradient(135deg,#ffffff,#1a1a1a)"></span>
+          <span>Mono</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== MACRO KNOBS ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title">Performance Macros</div>
+      <div class="macro-grid">
+        <div class="macro-knob">
+          <div class="macro-label" style="color:var(--bass-color)">ENERGY</div>
+          <div class="macro-value" id="macroEnergyVal">50</div>
+          <input type="range" min="0" max="100" value="50" id="macroEnergy"
+            oninput="setMacrosFromUI()">
+        </div>
+        <div class="macro-knob">
+          <div class="macro-label" style="color:var(--orange)">CHAOS</div>
+          <div class="macro-value" id="macroChaosVal">0</div>
+          <input type="range" min="0" max="100" value="0" id="macroChaos"
+            oninput="setMacrosFromUI()">
+        </div>
+        <div class="macro-knob">
+          <div class="macro-label" style="color:var(--green)">SPEED</div>
+          <div class="macro-value" id="macroSpeedVal">50</div>
+          <input type="range" min="0" max="100" value="50" id="macroSpeed"
+            oninput="setMacrosFromUI()">
+        </div>
+        <div class="macro-knob">
+          <div class="macro-label" style="color:var(--cyan)">COLOR</div>
+          <div class="macro-value" id="macroColorVal">50</div>
+          <input type="range" min="0" max="100" value="50" id="macroColor"
+            oninput="setMacrosFromUI()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PERFORMANCE PADS ===== -->
+    <div class="pro-panel" style="margin-top:12px">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Performance Pads</span>
+        <span style="font-size:9px;color:var(--text-dim);font-weight:400">Hotkeys 1-9, Q W E R</span>
+      </div>
+      <div class="pad-grid" id="padGrid"></div>
+    </div>
+
+    <!-- ===== STROBE SAFETY ===== -->
+    <div class="pro-panel pro-only" style="margin-top:12px">
+      <div class="section-title">Strobe Safety</div>
+      <div style="padding:6px 4px">
+        <div class="band-slider-label">
+          <span>Max Strobe Brightness</span>
+          <span id="strobeSafetyVal">100%</span>
+        </div>
+        <input type="range" min="20" max="100" value="100" id="strobeSafety"
+          oninput="setStrobeSafetyFromUI()">
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;letter-spacing:0.5px">
+          Reduces peak brightness on flash/strobe effects to protect photosensitive viewers.
+        </div>
       </div>
     </div>
 
@@ -1373,7 +1825,7 @@ const effectCategories = {
   particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm','toxic_sludge'] },
   fractal: { label: 'Fractals', effects: ['mandelbrot_zoom','julia_set','ifs_fractal'] },
   geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala'] },
-  glitch: { label: 'Glitch', effects: ['rgb_split','datamosh','pixel_sort','ascii_art'] },
+  glitch: { label: 'Glitch', effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','ascii_art'] },
   retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch','virtual_drug'] },
   '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs'] },
   audio_viz: { label: 'Audio Viz', effects: ['waveform_bars','spectrum_radial','beat_flash','laser_scan'] },
@@ -1387,7 +1839,7 @@ const effectNames = {
   liquid_metal:'Liquid Metal', fire_emitter:'Fire Emitter', galaxy_spiral:'Galaxy Spiral',
   particle_storm:'Particle Storm', mandelbrot_zoom:'Mandelbrot Zoom', julia_set:'Julia Set',
   ifs_fractal:'IFS Fractal', kaleidoscope:'Kaleidoscope', voronoi:'Voronoi',
-  sacred_geometry:'Sacred Geometry', rgb_split:'RGB Split', datamosh:'Datamosh',
+  sacred_geometry:'Sacred Geometry', glitch_basic:'Glitch Basic', rgb_split:'RGB Split', datamosh:'Datamosh',
   pixel_sort:'Pixel Sort', ascii_art:'ASCII Art', matrix_rain:'Matrix Rain',
   crt_scanlines:'CRT Scanlines', vhs_glitch:'VHS Glitch', sphere_field:'Sphere Field',
   torus_knot:'Torus Knot', metaballs:'Metaballs', waveform_bars:'Waveform Bars',
@@ -1403,8 +1855,31 @@ const effectNames = {
 
 /* Effects added recently — shown with NEW badge in UI */
 const NEW_EFFECTS = new Set([
-  'acid_mandala','toxic_sludge','virtual_drug',
+  'acid_mandala','toxic_sludge','virtual_drug','glitch_basic',
 ]);
+
+const effectProGroups = {
+  pro_main: {
+    label: 'Main Visual',
+    note: 'Standalone generators for the main VJ canvas',
+    effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','plasma_classic','lava_lamp','liquid_metal','fire_emitter','galaxy_spiral','particle_storm','mandelbrot_zoom','julia_set','ifs_fractal','kaleidoscope','voronoi','sacred_geometry','sphere_field','torus_knot','metaballs','matrix_rain','waveform_bars','spectrum_radial','laser_scan']
+  },
+  pro_content: {
+    label: 'Content FX',
+    note: 'Filters for media/logo/video input: glitch, VHS, datamosh, feedback',
+    effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','ascii_art','vhs_glitch','crt_scanlines','feedback','displacement','color_grade']
+  },
+  pro_logo: {
+    label: 'Logo FX',
+    note: 'Logo-driven AudioLink style looks',
+    effects: ['beat_blocks','logo_runner','logo_pulse','strobe_grid']
+  },
+  pro_trigger: {
+    label: 'Band Trigger FX',
+    note: 'Best used in Per-Band Effects slots',
+    effects: ['strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','beat_flash','beat_rings']
+  }
+};
 
 // Standard effect parameters (every effect supports these via SetParam)
 const effectParams = {
@@ -1529,6 +2004,13 @@ const effectParams = {
     { name: 'layers', label: 'Layers', min: 1, max: 5, step: 1, default: 3 },
   ],
   // Glitch
+  glitch_basic: [
+    { name: 'glitch_amount', label: 'Amount', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { name: 'tear_size', label: 'Tear Size', min: 0.05, max: 1, step: 0.01, default: 0.35 },
+    { name: 'block_amount', label: 'Blocks', min: 0, max: 1, step: 0.01, default: 0.45 },
+    { name: 'rgb_amount', label: 'RGB Split', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { name: 'noise_amount', label: 'Noise', min: 0, max: 1, step: 0.01, default: 0.25 },
+  ],
   rgb_split: [
     { name: 'split_amount', label: 'Split', min: 0, max: 0.1, step: 0.001, default: 0.01 },
     { name: 'split_angle', label: 'Angle', min: 0, max: 6.28, step: 0.1, default: 0.0 },
@@ -1552,13 +2034,19 @@ const effectParams = {
     { name: 'color_preserve', label: 'Color', min: 0, max: 1, step: 0.01, default: 0.5 },
     { name: 'contrast', label: 'Contrast', min: 0.5, max: 3, step: 0.1, default: 1.5 },
     { name: 'bg_brightness', label: 'BG Brightness', min: 0, max: 0.5, step: 0.01, default: 0.05 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2.5, step: 0.05, default: 0.8 },
+    { name: 'glyph_sharpness', label: 'Glyph Sharpness', min: 0, max: 1, step: 0.05, default: 0.7 },
   ],
   // Retro
   matrix_rain: [
-    { name: 'column_count', label: 'Columns', min: 10, max: 100, step: 5, default: 40 },
-    { name: 'fall_speed', label: 'Speed', min: 0.5, max: 5, step: 0.1, default: 1.5 },
-    { name: 'trail_length', label: 'Trail', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'column_count', label: 'Columns', min: 10, max: 120, step: 2, default: 44 },
+    { name: 'fall_speed', label: 'Speed', min: 0.2, max: 8, step: 0.1, default: 1.8 },
+    { name: 'trail_length', label: 'Trail', min: 0.2, max: 5, step: 0.1, default: 1.8 },
     { name: 'brightness', label: 'Brightness', min: 0.2, max: 3, step: 0.1, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 3, step: 0.05, default: 1.0 },
+    { name: 'density', label: 'Density', min: 0.1, max: 1, step: 0.05, default: 0.65 },
+    { name: 'head_glow', label: 'Head Glow', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'color_mode', label: 'Color Mode', min: 0, max: 3, step: 1, default: 0, options: ['Green','Cyan','Magenta','Acid'] },
   ],
   vhs_glitch: [
     { name: 'tracking_error', label: 'Tracking', min: 0, max: 0.1, step: 0.001, default: 0.02 },
@@ -1763,6 +2251,36 @@ let activePreset = -1;
 let activeEffect = '';
 let activeCategory = 'all';
 let isBlackout = false;
+let uiMode = localStorage.getItem('vjlink_ui_mode') || 'basic';
+let audioControlTimer = null;
+
+function setUIMode(mode) {
+  uiMode = (mode === 'pro') ? 'pro' : 'basic';
+  localStorage.setItem('vjlink_ui_mode', uiMode);
+  document.body.classList.toggle('pro-mode', uiMode === 'pro');
+
+  const basicBtn = document.getElementById('modeBasicBtn');
+  const proBtn = document.getElementById('modeProBtn');
+  if (basicBtn) basicBtn.classList.toggle('active', uiMode !== 'pro');
+  if (proBtn) proBtn.classList.toggle('active', uiMode === 'pro');
+
+  if (uiMode !== 'pro' && effectProGroups[activeCategory])
+    activeCategory = 'all';
+  renderCategories();
+  renderEffects();
+  updateProWorkbench();
+}
+
+function updateProWorkbench() {
+  const scene = document.getElementById('proSceneState');
+  const source = document.getElementById('proSourceState');
+  const filter = document.getElementById('proFilterState');
+  const mode = document.getElementById('proModeState');
+  if (mode) mode.textContent = uiMode.toUpperCase();
+  if (scene) scene.textContent = activeSourceScene === '__all__' ? 'All Scenes' : (activeSourceScene || '-');
+  if (source) source.textContent = selectedSourceName || '-';
+  if (filter) filter.textContent = effectNames[autoFilterEffect] || autoFilterEffect || '-';
+}
 
 // === Spectrum Canvas ===
 const specCanvas = document.getElementById('spectrumCanvas');
@@ -1937,6 +2455,7 @@ async function handleMessage(msg) {
     startPolling();
     fetchSceneSources();
     syncSensitivityFromServer();
+    syncAudioControlsFromServer();
   }
   else if (op === 5) {
     // Event
@@ -2032,11 +2551,20 @@ function updateState(state) {
   const lowmid = state.band_lowmid || 0;
   const highmid = state.band_highmid || 0;
   const treble = state.band_treble || 0;
+  const bandLevels = [bass, lowmid, highmid, treble];
 
   document.getElementById('bandBass').style.height = (bass * 100) + '%';
   document.getElementById('bandLowmid').style.height = (lowmid * 100) + '%';
   document.getElementById('bandHighmid').style.height = (highmid * 100) + '%';
   document.getElementById('bandTreble').style.height = (treble * 100) + '%';
+
+  ['bandBass','bandLowmid','bandHighmid','bandTreble'].forEach((id, i) => {
+    const bar = document.getElementById(id);
+    const bandEl = bar ? bar.closest('.band') : null;
+    const active = bandSlots[i] && bandSlots[i].effect &&
+                   bandLevels[i] >= bandSlots[i].threshold;
+    if (bandEl) bandEl.classList.toggle('triggered', !!active);
+  });
 
   // Band value readouts (percentage)
   document.getElementById('bandBassVal').textContent = (bass * 100).toFixed(0) + '%';
@@ -2212,6 +2740,38 @@ async function resetSensitivity() {
   }
 }
 
+function updateAudioControlLabels(masterGain, fallRate) {
+  const gainVal = document.getElementById('audioMasterGainVal');
+  const fallVal = document.getElementById('audioFallRateVal');
+  if (gainVal) gainVal.textContent = masterGain.toFixed(2) + 'x';
+  if (fallVal) fallVal.textContent = fallRate.toFixed(2);
+}
+
+function setAudioControlsFromUI() {
+  const gainEl = document.getElementById('audioMasterGain');
+  const fallEl = document.getElementById('audioFallRate');
+  const masterGain = Math.max(0.25, Math.min(3.0, parseFloat(gainEl.value) / 100));
+  const fallRate = Math.max(0.01, Math.min(0.50, parseFloat(fallEl.value) / 100));
+  updateAudioControlLabels(masterGain, fallRate);
+
+  if (audioControlTimer) clearTimeout(audioControlTimer);
+  audioControlTimer = setTimeout(() => {
+    sendRequest('SetAudioControls', {
+      master_gain: masterGain,
+      fall_rate: fallRate
+    });
+  }, 70);
+}
+
+async function resetAudioControls() {
+  const gainEl = document.getElementById('audioMasterGain');
+  const fallEl = document.getElementById('audioFallRate');
+  if (gainEl) gainEl.value = 100;
+  if (fallEl) fallEl.value = 8;
+  updateAudioControlLabels(1.0, 0.08);
+  await sendRequest('SetAudioControls', { master_gain: 1.0, fall_rate: 0.08 });
+}
+
 let sensitivitySynced = false;
 async function syncSensitivityFromServer() {
   // One-time sync of sensitivity sliders from server state
@@ -2229,6 +2789,20 @@ async function syncSensitivityFromServer() {
       }
     }
     sensitivitySynced = true;
+  }
+}
+
+async function syncAudioControlsFromServer() {
+  const resp = await sendRequest('GetState');
+  if (resp && resp.responseData) {
+    const d = resp.responseData.responseData || resp.responseData;
+    const gain = d.audio_master_gain || 1.0;
+    const fall = d.audio_fall_rate || 0.08;
+    const gainEl = document.getElementById('audioMasterGain');
+    const fallEl = document.getElementById('audioFallRate');
+    if (gainEl) gainEl.value = Math.round(gain * 100);
+    if (fallEl) fallEl.value = Math.round(fall * 100);
+    updateAudioControlLabels(gain, fall);
   }
 }
 
@@ -2364,17 +2938,23 @@ function captureCurrentSettings() {
   const settings = {
     version: 1,
     timestamp: Date.now(),
+    ui_mode: uiMode,
     active_effect: activeEffect || '',
     logo_path: document.getElementById('logoPathInput')?.value || '',
     logo_path2: document.getElementById('logoPathInput2')?.value || '',
     logo_path3: document.getElementById('logoPathInput3')?.value || '',
     transparent_bg: document.getElementById('toggleTransparentBg')?.checked || false,
     debug_overlay: document.getElementById('toggleDebugOverlay')?.checked || false,
+    audio_master_gain: (parseFloat(document.getElementById('audioMasterGain')?.value || '100') / 100),
+    audio_fall_rate: (parseFloat(document.getElementById('audioFallRate')?.value || '8') / 100),
     /* Band slots with full params */
     bands: bandSlots.map(slot => ({
       effect: slot.effect || '',
       threshold: slot.threshold,
       intensity: slot.intensity,
+      attack: slot.attack,
+      release: slot.release,
+      hold: slot.hold,
       paramCache: Object.assign({}, slot.paramCache || {})
     })),
     /* Audio band mappings (main + band) */
@@ -2408,6 +2988,9 @@ async function applyProfile(settings) {
 
   /* --- Toggles: always force re-apply, since backend state may differ
    *     from what the DOM currently shows (e.g. after a page reload). --- */
+  if (settings.ui_mode)
+    setUIMode(settings.ui_mode);
+
   if (typeof settings.transparent_bg === 'boolean') {
     const el = document.getElementById('toggleTransparentBg');
     if (el) el.checked = settings.transparent_bg;
@@ -2429,6 +3012,18 @@ async function applyProfile(settings) {
     await sendRequest('SetLogo', { path: val, slot: li });
   }
   persistLogoPaths();
+
+  if (typeof settings.audio_master_gain === 'number' ||
+      typeof settings.audio_fall_rate === 'number') {
+    const gain = (typeof settings.audio_master_gain === 'number') ? settings.audio_master_gain : 1.0;
+    const fall = (typeof settings.audio_fall_rate === 'number') ? settings.audio_fall_rate : 0.08;
+    const gainEl = document.getElementById('audioMasterGain');
+    const fallEl = document.getElementById('audioFallRate');
+    if (gainEl) gainEl.value = Math.round(gain * 100);
+    if (fallEl) fallEl.value = Math.round(fall * 100);
+    updateAudioControlLabels(gain, fall);
+    await sendRequest('SetAudioControls', { master_gain: gain, fall_rate: fall });
+  }
 
   /* --- Main effect: always set, even when unchanged or empty.
    *     Empty effect_id clears the chain on the backend. --- */
@@ -2459,16 +3054,22 @@ async function applyProfile(settings) {
   /* --- Band slots: always send all 4 (empty effect_id = clear) --- */
   for (let i = 0; i < 4; i++) {
     const saved = (Array.isArray(settings.bands) ? settings.bands[i] : null)
-                  || { effect: '', threshold: 0.3, intensity: 1.0, paramCache: {} };
+                  || { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, paramCache: {} };
     bandSlots[i].effect = saved.effect || '';
     bandSlots[i].threshold = (typeof saved.threshold === 'number') ? saved.threshold : 0.3;
     bandSlots[i].intensity = (typeof saved.intensity === 'number') ? saved.intensity : 1.0;
+    bandSlots[i].attack = (typeof saved.attack === 'number') ? saved.attack : 0.65;
+    bandSlots[i].release = (typeof saved.release === 'number') ? saved.release : 0.18;
+    bandSlots[i].hold = (typeof saved.hold === 'number') ? saved.hold : 6;
     bandSlots[i].paramCache = Object.assign({}, saved.paramCache || {});
     await sendRequest('SetBandEffect', {
       band: i,
       effect_id: bandSlots[i].effect,
       threshold: bandSlots[i].threshold,
-      intensity: bandSlots[i].intensity
+      intensity: bandSlots[i].intensity,
+      attack: bandSlots[i].attack,
+      release: bandSlots[i].release,
+      hold: bandSlots[i].hold
     });
   }
 
@@ -2707,6 +3308,20 @@ const randomizableParams = [
 let randomIntervals = {}; /* "bandIdx:paramName" -> intervalId */
 let activeBandIndex = -1; /* -1 = main effect, 0-3 = band slot */
 
+function getParamDropdownOptions(p) {
+  if (p.options) return p.options;
+  const named = paramDropdowns[p.name];
+  if (!named || p.step < 1) return null;
+
+  const count = Math.floor((p.max || 0) - (p.min || 0)) + 1;
+  if (count > 0 && named.length < count) {
+    return Array.from({ length: count }, (_, idx) =>
+      named[idx] || `${p.label || 'Mode'} ${idx}`
+    );
+  }
+  return named;
+}
+
 function rndKey(paramName) {
   return (activeBandIndex >= 0 ? activeBandIndex : 'main') + ':' + paramName;
 }
@@ -2806,7 +3421,8 @@ function renderParams() {
     ${name}</div>`;
 
   params.forEach(p => {
-    const isDropdown = paramDropdowns[p.name] && p.step >= 1;
+    const dropdownOptions = getParamDropdownOptions(p);
+    const isDropdown = dropdownOptions && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
 
     html += `<div class="param-slider">
@@ -2826,7 +3442,7 @@ function renderParams() {
 
     if (isDropdown) {
       /* Dropdown select */
-      const options = paramDropdowns[p.name];
+      const options = dropdownOptions;
       html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
         onchange="document.getElementById('paramVal_${p.name}').textContent=this.value;setParam('${p.name}',this.selectedIndex)">`;
       options.forEach((opt, idx) => {
@@ -2915,6 +3531,17 @@ function renderCategories() {
   const container = document.getElementById('categoryBtns');
   container.innerHTML = '';
 
+  if (uiMode === 'pro') {
+    Object.entries(effectProGroups).forEach(([key, group]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn' + (activeCategory === key ? ' active' : '');
+      btn.textContent = group.label;
+      btn.title = group.note;
+      btn.onclick = () => { activeCategory = key; renderCategories(); renderEffects(); };
+      container.appendChild(btn);
+    });
+  }
+
   const allBtn = document.createElement('button');
   allBtn.className = 'cat-btn' + (activeCategory === 'all' ? ' active' : '');
   allBtn.textContent = 'All';
@@ -2934,12 +3561,23 @@ function renderEffects() {
   const grid = document.getElementById('effectsGrid');
   grid.innerHTML = '';
 
-  const categories = activeCategory === 'all'
-    ? Object.entries(effectCategories)
-    : [[activeCategory, effectCategories[activeCategory]]];
+  const categories = effectProGroups[activeCategory]
+    ? [[activeCategory, effectProGroups[activeCategory]]]
+    : (activeCategory === 'all'
+      ? Object.entries(effectCategories)
+      : [[activeCategory, effectCategories[activeCategory]]]);
 
   categories.forEach(([key, cat]) => {
     if (!cat) return;
+    if (cat.note) {
+      const note = document.createElement('div');
+      note.style.gridColumn = '1 / -1';
+      note.style.fontSize = '11px';
+      note.style.color = 'var(--text-dim)';
+      note.style.margin = '0 0 4px 0';
+      note.textContent = cat.note;
+      grid.appendChild(note);
+    }
     cat.effects.forEach(id => {
       const btn = document.createElement('button');
       btn.className = 'effect-btn' + (activeEffect === id ? ' active' : '');
@@ -2967,10 +3605,10 @@ const bandInfo = [
 ];
 
 let bandSlots = [
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
 ];
 
 function renderBandEffects() {
@@ -3007,6 +3645,24 @@ function renderBandEffects() {
         <input type="range" min="0" max="200" value="${slot.intensity*100}" step="1"
           oninput="bandSlots[${i}].intensity=this.value/100;document.getElementById('bandIntensVal_${i}').textContent=this.value+'%';updateBandSlot(${i})">
       </div>
+      <details style="margin-top:4px">
+        <summary style="font-size:10px;color:var(--text-dim);cursor:pointer;font-weight:700">Pro Response</summary>
+        <div style="margin-top:6px">
+          <div class="band-slider-label"><span>Attack</span><span id="bandAttackVal_${i}">${(slot.attack*100).toFixed(0)}%</span></div>
+          <input type="range" min="1" max="100" value="${slot.attack*100}" step="1"
+            oninput="bandSlots[${i}].attack=this.value/100;document.getElementById('bandAttackVal_${i}').textContent=this.value+'%';updateBandSlot(${i})">
+        </div>
+        <div>
+          <div class="band-slider-label"><span>Release</span><span id="bandReleaseVal_${i}">${(slot.release*100).toFixed(0)}%</span></div>
+          <input type="range" min="1" max="100" value="${slot.release*100}" step="1"
+            oninput="bandSlots[${i}].release=this.value/100;document.getElementById('bandReleaseVal_${i}').textContent=this.value+'%';updateBandSlot(${i})">
+        </div>
+        <div>
+          <div class="band-slider-label"><span>Hold</span><span id="bandHoldVal_${i}">${slot.hold.toFixed(0)}f</span></div>
+          <input type="range" min="0" max="60" value="${slot.hold}" step="1"
+            oninput="bandSlots[${i}].hold=parseFloat(this.value);document.getElementById('bandHoldVal_${i}').textContent=this.value+'f';updateBandSlot(${i})">
+        </div>
+      </details>
       <div>
         <div class="band-slider-label"><span>Active</span><span id="bandActVal_${i}">0%</span></div>
         <div class="activation-bar-wrap">
@@ -3055,7 +3711,10 @@ async function setBandEffect(bandIndex) {
     band: bandIndex,
     effect_id: slot.effect,
     threshold: slot.threshold,
-    intensity: slot.intensity
+    intensity: slot.intensity,
+    attack: slot.attack,
+    release: slot.release,
+    hold: slot.hold
   });
   renderBandParams(bandIndex);
 }
@@ -3134,7 +3793,8 @@ function renderBandParams(bandIndex) {
 
   /* Effect-specific params (with dropdowns + RND) */
   params.forEach(p => {
-    const isDropdown = paramDropdowns[p.name] && p.step >= 1;
+    const dropdownOptions = getParamDropdownOptions(p);
+    const isDropdown = dropdownOptions && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
     const rndCached = slot.paramCache['_rnd_' + p.name] || false;
 
@@ -3156,7 +3816,7 @@ function renderBandParams(bandIndex) {
     html += `<span class="control-value" id="paramVal_${p.name}">${displayVal}</span></div>`;
 
     if (isDropdown) {
-      const options = paramDropdowns[p.name];
+      const options = dropdownOptions;
       const selIdx = Math.round(cachedVal);
       html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
         onchange="bandSlots[${bandIndex}].paramCache['${p.name}']=this.selectedIndex;document.getElementById('paramVal_${p.name}').textContent=this.value;setBandParam(${bandIndex},'${p.name}',this.selectedIndex)">`;
@@ -3288,8 +3948,42 @@ async function updateBandSlot(bandIndex) {
     band: bandIndex,
     effect_id: slot.effect,
     threshold: slot.threshold,
-    intensity: slot.intensity
+    intensity: slot.intensity,
+    attack: slot.attack,
+    release: slot.release,
+    hold: slot.hold
   });
+}
+
+async function applyTriggerPreset(kind) {
+  const presets = {
+    tight: [
+      { threshold: 0.48, attack: 0.85, release: 0.28, hold: 3 },
+      { threshold: 0.42, attack: 0.75, release: 0.22, hold: 4 },
+      { threshold: 0.38, attack: 0.70, release: 0.20, hold: 4 },
+      { threshold: 0.36, attack: 0.70, release: 0.18, hold: 3 },
+    ],
+    rave: [
+      { threshold: 0.34, attack: 0.95, release: 0.16, hold: 8 },
+      { threshold: 0.32, attack: 0.80, release: 0.14, hold: 7 },
+      { threshold: 0.30, attack: 0.72, release: 0.13, hold: 6 },
+      { threshold: 0.28, attack: 0.70, release: 0.12, hold: 5 },
+    ],
+    smooth: [
+      { threshold: 0.55, attack: 0.35, release: 0.08, hold: 10 },
+      { threshold: 0.50, attack: 0.32, release: 0.07, hold: 10 },
+      { threshold: 0.45, attack: 0.30, release: 0.07, hold: 9 },
+      { threshold: 0.42, attack: 0.28, release: 0.06, hold: 8 },
+    ],
+  };
+
+  const preset = presets[kind] || presets.tight;
+  for (let i = 0; i < 4; i++) {
+    Object.assign(bandSlots[i], preset[i]);
+    await updateBandSlot(i);
+  }
+  renderBandEffects();
+  renderParams();
 }
 
 function updateBandActivations(state) {
@@ -3308,6 +4002,8 @@ function updateBandActivations(state) {
 // === Scene/Source Discovery ===
 let availableSources = [];
 let availableScenes = [];
+let activeSourceScene = '';
+let autoFilterEffect = 'glitch_basic';
 
 // Track collapsed scenes/groups
 let collapsedScenes = {};
@@ -3322,6 +4018,8 @@ async function fetchSceneSources() {
   if (sceneResp && sceneResp.responseData) {
     const data = sceneResp.responseData;
     const scenes = data.scenes || [];
+    if (data.currentProgramSceneName)
+      activeSourceScene = activeSourceScene || data.currentProgramSceneName;
     console.log('[VJLink] GetSceneList: found', scenes.length, 'scenes');
 
     for (const scene of scenes) {
@@ -3395,21 +4093,49 @@ async function fetchSceneSources() {
     }
   }
 
-  // Deduplicate top-level by name
+  // Deduplicate only repeated scene/source pairs. The same source may
+  // intentionally appear in multiple scenes, and the UI groups by scene.
   const seen = new Set();
   availableSources = availableSources.filter(s => {
-    if (seen.has(s.name)) return false;
-    seen.add(s.name);
+    const key = (s.scene || '') + ':' + s.name;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
+  if (!activeSourceScene && availableScenes.length > 0)
+    activeSourceScene = availableScenes[0];
+
   console.log('[VJLink] Found', availableSources.length, 'sources:', availableSources.map(s => s.name));
   renderMediaContent();
+  updateProWorkbench();
 }
 
 function toggleSceneCollapse(key) {
-  collapsedScenes[key] = !collapsedScenes[key];
+  collapsedScenes[key] = !(collapsedScenes[key] !== false);
   renderMediaContent();
+}
+
+function setActiveSourceScene(sceneName) {
+  activeSourceScene = sceneName;
+  selectedSourceName = '';
+  renderMediaContent();
+  renderSourceTriggerDetail();
+  updateProWorkbench();
+}
+
+function filterableSourcesForScene(sceneName) {
+  return availableSources.filter(s =>
+    (!sceneName || sceneName === '__all__' || s.scene === sceneName) &&
+    !isNonFilterableSource(s)
+  );
+}
+
+function isNonFilterableSource(src) {
+  const type = String(src.type || '').toLowerCase();
+  const name = String(src.name || '').toLowerCase();
+  return src.isGroup || type.includes('audio') || type.includes('scene') ||
+         name.includes('vjlink compositor');
 }
 
 // === Media / Source Triggers ===
@@ -3461,6 +4187,7 @@ function selectSource(name) {
   selectedSourceName = (selectedSourceName === name) ? '' : name;
   renderMediaContent();
   renderSourceTriggerDetail();
+  updateProWorkbench();
 }
 
 function toggleSource(name) {
@@ -3529,6 +4256,14 @@ function renderSourceTriggers(container) {
   let html = '';
 
   // Header with refresh
+  html += `<div class="source-toolbar">`;
+  html += `<select onchange="setActiveSourceScene(this.value)" ${availableScenes.length === 0 ? 'disabled' : ''}>
+    ${availableScenes.map(scene => `<option value="${scene}" ${scene === activeSourceScene ? 'selected' : ''}>${scene}</option>`).join('')}
+    ${availableScenes.length > 1 ? `<option value="__all__" ${activeSourceScene === '__all__' ? 'selected' : ''}>All Scenes</option>` : ''}
+  </select>`;
+  html += `<button class="add-row-btn" onclick="fetchSceneSources()" style="width:auto;padding:3px 10px;font-size:12px">&#x21bb; Refresh</button>`;
+  html += `</div>`;
+
   html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
   if (!connected) {
     html += `<span style="color:var(--red);font-size:12px">Not connected</span>`;
@@ -3540,20 +4275,25 @@ function renderSourceTriggers(container) {
     availableSources.forEach(s => { totalSources++; totalSources += s.children ? s.children.length : 0; });
     html += `<span style="color:var(--green);font-size:11px">${totalSources} sources from ${availableScenes.length} scenes</span>`;
   }
-  html += `<button class="add-row-btn" onclick="fetchSceneSources()" style="width:auto;padding:3px 10px;font-size:12px">&#x21bb; Refresh</button>`;
   html += `</div>`;
+
+  html += renderFilterTools();
 
   if (availableSources.length > 0) {
     // Group by scene
     const byScene = {};
     availableSources.forEach(s => {
+      if (activeSourceScene && activeSourceScene !== '__all__' && s.scene !== activeSourceScene)
+        return;
       if (!byScene[s.scene]) byScene[s.scene] = [];
       byScene[s.scene].push(s);
     });
 
     Object.entries(byScene).forEach(([sceneName, sources]) => {
       const sceneKey = 'scene_' + sceneName;
-      const collapsed = collapsedScenes[sceneKey];
+      const collapsed = activeSourceScene === '__all__'
+        ? collapsedScenes[sceneKey] !== false
+        : false;
       const arrow = collapsed ? '\u25B6' : '\u25BC';
       const activeCount = sources.reduce((n, s) => {
         let c = 0;
@@ -3577,7 +4317,7 @@ function renderSourceTriggers(container) {
           // Render group children
           if (src.isGroup && src.children && src.children.length > 0) {
             const groupKey = 'group_' + src.name;
-            const groupCollapsed = collapsedScenes[groupKey];
+            const groupCollapsed = collapsedScenes[groupKey] !== false;
             const gArrow = groupCollapsed ? '\u25B6' : '\u25BC';
 
             html += `<div onclick="event.stopPropagation();toggleSceneCollapse('${groupKey}')" style="font-size:10px;color:var(--cyan);padding:3px 8px 1px;margin-left:16px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px">
@@ -3603,6 +4343,111 @@ function renderSourceTriggers(container) {
   }
 
   container.innerHTML = html;
+}
+
+function renderFilterTools() {
+  const contentFx = effectProGroups.pro_content.effects;
+  const options = contentFx.map(id =>
+    `<option value="${id}" ${id === autoFilterEffect ? 'selected' : ''}>${effectNames[id] || id}</option>`
+  ).join('');
+  const selectedDisabled = selectedSourceName ? '' : 'disabled';
+  return `<div class="filter-tools">
+    <select onchange="autoFilterEffect=this.value;updateProWorkbench()">${options}</select>
+    <button class="mini-btn" onclick="applyVJLinkFilterToSelected()" ${selectedDisabled}>Filter Selected</button>
+    <button class="mini-btn" onclick="applyVJLinkFilterToScene()">Filter Scene</button>
+    <button class="mini-btn" onclick="applyVJLinkFilterToAll()">Filter All</button>
+    <button class="mini-btn" onclick="removeVJLinkFilterFromSelected()" ${selectedDisabled}>Remove Selected</button>
+  </div>`;
+}
+
+function buildVJLinkFilterSettings(effectId) {
+  const settings = { effect: effectId, transparent_bg: true };
+  const params = effectParams[effectId] || [];
+
+  params.forEach(p => {
+    let value = p.default;
+    if (effectId === activeEffect) {
+      const slider = document.getElementById('paramSlider_' + p.name);
+      const select = document.getElementById('paramSelect_' + p.name);
+      if (slider) value = parseFloat(slider.value);
+      if (select) value = parseFloat(select.value);
+    }
+    settings['ep_' + p.name] = value;
+  });
+
+  return settings;
+}
+
+async function createOrUpdateVJLinkFilter(sourceName, effectId) {
+  if (!sourceName || !effectId) return false;
+  const filterName = 'VJLink FX';
+  const settings = buildVJLinkFilterSettings(effectId);
+
+  const listResp = await sendOBSRequest('GetSourceFilterList', {
+    sourceName: sourceName
+  });
+  const filters = listResp && listResp.responseData
+    ? (listResp.responseData.filters || [])
+    : [];
+  const exists = filters.some(f => f.filterName === filterName);
+
+  if (exists) {
+    const resp = await sendOBSRequest('SetSourceFilterSettings', {
+      sourceName: sourceName,
+      filterName: filterName,
+      filterSettings: settings,
+      overlay: true
+    });
+    return !!resp;
+  }
+
+  const resp = await sendOBSRequest('CreateSourceFilter', {
+    sourceName: sourceName,
+    filterName: filterName,
+    filterKind: 'vjlink_effect_filter',
+    filterSettings: settings
+  });
+  return !!resp;
+}
+
+async function removeVJLinkFilter(sourceName) {
+  if (!sourceName) return false;
+  const resp = await sendOBSRequest('RemoveSourceFilter', {
+    sourceName: sourceName,
+    filterName: 'VJLink FX'
+  });
+  return !!resp;
+}
+
+async function applyVJLinkFilterToSelected() {
+  if (!selectedSourceName) return;
+  await createOrUpdateVJLinkFilter(selectedSourceName, autoFilterEffect);
+  renderMediaContent();
+}
+
+async function removeVJLinkFilterFromSelected() {
+  if (!selectedSourceName) return;
+  await removeVJLinkFilter(selectedSourceName);
+  renderMediaContent();
+}
+
+async function applyVJLinkFilterToScene() {
+  const targets = filterableSourcesForScene(activeSourceScene);
+  for (const src of targets)
+    await createOrUpdateVJLinkFilter(src.name, autoFilterEffect);
+  renderMediaContent();
+}
+
+async function applyVJLinkFilterToAll() {
+  const seen = new Set();
+  const targets = filterableSourcesForScene('__all__').filter(src => {
+    if (seen.has(src.name)) return false;
+    seen.add(src.name);
+    return true;
+  });
+  for (const src of targets)
+    await createOrUpdateVJLinkFilter(src.name, autoFilterEffect);
+  renderMediaContent();
 }
 
 function renderMediaLayers(container) {
@@ -3728,12 +4573,367 @@ async function updateMediaLayer(idx, field, value) {
   });
 }
 
+/* ========================================================================
+ * Pro UI: Color Palette, Macros, Performance Pads, Header FFT, Beat-Pulse
+ * ======================================================================== */
+
+let activePaletteId = 0;
+let macroTimer = null;
+let strobeSafetyTimer = null;
+
+async function setPalette(pid) {
+  activePaletteId = pid;
+  document.querySelectorAll('.pal-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.pid) === pid);
+  });
+  await sendRequest('SetPalette', { palette_id: pid });
+}
+
+function setMacrosFromUI() {
+  const e = parseFloat(document.getElementById('macroEnergy').value) / 100;
+  const c = parseFloat(document.getElementById('macroChaos').value) / 100;
+  const s = parseFloat(document.getElementById('macroSpeed').value) / 100;
+  const co = parseFloat(document.getElementById('macroColor').value) / 100;
+  document.getElementById('macroEnergyVal').textContent = (e * 100).toFixed(0);
+  document.getElementById('macroChaosVal').textContent = (c * 100).toFixed(0);
+  document.getElementById('macroSpeedVal').textContent = (s * 100).toFixed(0);
+  document.getElementById('macroColorVal').textContent = (co * 100).toFixed(0);
+  if (macroTimer) clearTimeout(macroTimer);
+  macroTimer = setTimeout(() => {
+    sendRequest('SetMacros', { energy: e, chaos: c, speed: s, color: co });
+  }, 70);
+}
+
+function setStrobeSafetyFromUI() {
+  const v = parseFloat(document.getElementById('strobeSafety').value) / 100;
+  document.getElementById('strobeSafetyVal').textContent = (v * 100).toFixed(0) + '%';
+  if (strobeSafetyTimer) clearTimeout(strobeSafetyTimer);
+  strobeSafetyTimer = setTimeout(() => {
+    sendRequest('SetMacros', { strobe_safety: v });
+  }, 70);
+}
+
+/* ===== Performance Pads ===== */
+const PAD_HOTKEYS = ['1','2','3','4','5','6','7','8','9','q','w','e'];
+const PAD_STORAGE_KEY = 'vjlink_pads_v1';
+let perfPads = []; /* [{ effect, params, palette }] x 12 */
+
+function loadPerfPads() {
+  try {
+    perfPads = JSON.parse(localStorage.getItem(PAD_STORAGE_KEY) || 'null') || new Array(12).fill(null);
+  } catch (e) { perfPads = new Array(12).fill(null); }
+  if (perfPads.length < 12) perfPads = perfPads.concat(new Array(12 - perfPads.length).fill(null));
+}
+
+function savePerfPads() {
+  try { localStorage.setItem(PAD_STORAGE_KEY, JSON.stringify(perfPads)); }
+  catch (e) {}
+}
+
+function renderPerfPads() {
+  const grid = document.getElementById('padGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const pad = perfPads[i];
+    const div = document.createElement('button');
+    div.className = 'perf-pad' + (pad ? ' assigned' : '');
+    div.dataset.padIdx = i;
+    const name = pad ? (effectNames[pad.effect] || pad.effect) : 'EMPTY';
+    div.innerHTML = `<span class="pad-key">${PAD_HOTKEYS[i].toUpperCase()}</span>
+      <span class="pad-name">${name}</span>`;
+    div.title = pad ? `Click to trigger | Right-click to clear` : 'Click to assign current effect';
+    div.onclick = () => triggerPad(i);
+    div.oncontextmenu = (e) => { e.preventDefault(); clearPad(i); };
+    grid.appendChild(div);
+  }
+}
+
+async function triggerPad(idx) {
+  const pad = perfPads[idx];
+  const padEl = document.querySelectorAll('.perf-pad')[idx];
+  if (!pad) {
+    /* Empty pad: assign current active effect */
+    if (!activeEffect) return;
+    const params = {};
+    const effParams = effectParams[activeEffect] || [];
+    effParams.forEach(p => {
+      const slider = document.getElementById('paramSlider_' + p.name);
+      if (slider) params[p.name] = parseFloat(slider.value);
+    });
+    perfPads[idx] = { effect: activeEffect, params, palette: activePaletteId };
+    savePerfPads();
+    renderPerfPads();
+    return;
+  }
+  /* Assigned: trigger the snapshot */
+  if (padEl) {
+    padEl.classList.add('flashing');
+    setTimeout(() => padEl.classList.remove('flashing'), 200);
+  }
+  await sendRequest('SetEffect', { effect_id: pad.effect });
+  if (typeof pad.palette === 'number') await setPalette(pad.palette);
+  /* Wait for backend to instantiate */
+  await new Promise(r => setTimeout(r, 80));
+  if (pad.params) {
+    for (const [pname, pval] of Object.entries(pad.params)) {
+      await sendRequest('SetParam', { param: pname, value: pval });
+    }
+  }
+  /* Sync UI */
+  activeEffect = pad.effect;
+  renderEffects();
+  renderParams();
+}
+
+function clearPad(idx) {
+  if (!confirm('Clear pad ' + PAD_HOTKEYS[idx].toUpperCase() + '?')) return;
+  perfPads[idx] = null;
+  savePerfPads();
+  renderPerfPads();
+}
+
+/* Hotkey wiring for pads */
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const key = e.key.toLowerCase();
+  const idx = PAD_HOTKEYS.indexOf(key);
+  if (idx >= 0) { e.preventDefault(); triggerPad(idx); return; }
+  /* Also: B for blackout, T for tap BPM, P for prev preset, N for next preset */
+  if (key === 'b') { sendBlackout(); }
+  else if (key === 't') { sendRequest('TapBPM'); }
+});
+
+/* ===== Header FFT visualizer + Beat Pulse ===== */
+const FFT_BARS = 24;
+function renderHeaderFftBars() {
+  const c = document.getElementById('headerFft');
+  if (!c || c.childElementCount === FFT_BARS) return;
+  c.innerHTML = '';
+  for (let i = 0; i < FFT_BARS; i++) {
+    const b = document.createElement('div');
+    b.className = 'bar';
+    b.style.height = '1px';
+    c.appendChild(b);
+  }
+}
+
+function updateHeaderFft(state) {
+  renderHeaderFftBars();
+  const c = document.getElementById('headerFft');
+  if (!c) return;
+  const bars = c.children;
+  /* Use spectrumData (already filled by drawSpectrum) — sample 24 bins */
+  const len = spectrumData ? spectrumData.length : 0;
+  for (let i = 0; i < FFT_BARS; i++) {
+    const idx = Math.floor((i / FFT_BARS) * len);
+    const v = (spectrumData && spectrumData[idx]) ? spectrumData[idx] : 0;
+    const h = Math.max(1, Math.min(18, v * 18));
+    bars[i].style.height = h + 'px';
+  }
+}
+
+function updateBeatPulse(state) {
+  const dot = document.getElementById('beatPulseDot');
+  if (!dot) return;
+  const kick = state.kick_onset || 0;
+  if (kick > 0.3) {
+    dot.classList.add('kick');
+    setTimeout(() => dot.classList.remove('kick'), 100);
+  }
+}
+
+/* Sync palette + macros + strobe-safety from server on connect */
+async function syncProControlsFromServer() {
+  const resp = await sendRequest('GetState');
+  if (resp && resp.responseData) {
+    const d = resp.responseData;
+    if (typeof d.palette_id === 'number') {
+      setPalette(d.palette_id);
+    }
+    if (typeof d.macro_energy === 'number') {
+      document.getElementById('macroEnergy').value = Math.round(d.macro_energy * 100);
+      document.getElementById('macroEnergyVal').textContent = Math.round(d.macro_energy * 100);
+    }
+    if (typeof d.macro_chaos === 'number') {
+      document.getElementById('macroChaos').value = Math.round(d.macro_chaos * 100);
+      document.getElementById('macroChaosVal').textContent = Math.round(d.macro_chaos * 100);
+    }
+    if (typeof d.macro_speed === 'number') {
+      document.getElementById('macroSpeed').value = Math.round(d.macro_speed * 100);
+      document.getElementById('macroSpeedVal').textContent = Math.round(d.macro_speed * 100);
+    }
+    if (typeof d.macro_color === 'number') {
+      document.getElementById('macroColor').value = Math.round(d.macro_color * 100);
+      document.getElementById('macroColorVal').textContent = Math.round(d.macro_color * 100);
+    }
+    if (typeof d.strobe_safety === 'number') {
+      document.getElementById('strobeSafety').value = Math.round(d.strobe_safety * 100);
+      document.getElementById('strobeSafetyVal').textContent = Math.round(d.strobe_safety * 100) + '%';
+    }
+  }
+}
+
+/* Hook into existing updateState to drive Pulse + Header FFT */
+const _origUpdateState = (typeof updateState === 'function') ? updateState : null;
+if (_origUpdateState) {
+  updateState = function(state) {
+    _origUpdateState(state);
+    updateHeaderFft(state);
+    updateBeatPulse(state);
+  };
+}
+
+/* Hook profile capture/apply */
+const _origCaptureSettings = (typeof captureCurrentSettings === 'function') ? captureCurrentSettings : null;
+if (_origCaptureSettings) {
+  captureCurrentSettings = function() {
+    const s = _origCaptureSettings();
+    s.palette_id = activePaletteId;
+    s.macros = {
+      energy: parseFloat(document.getElementById('macroEnergy')?.value || '50') / 100,
+      chaos: parseFloat(document.getElementById('macroChaos')?.value || '0') / 100,
+      speed: parseFloat(document.getElementById('macroSpeed')?.value || '50') / 100,
+      color: parseFloat(document.getElementById('macroColor')?.value || '50') / 100,
+    };
+    s.strobe_safety = parseFloat(document.getElementById('strobeSafety')?.value || '100') / 100;
+    s.perf_pads = perfPads;
+    return s;
+  };
+}
+
+const _origApplyProfile = (typeof applyProfile === 'function') ? applyProfile : null;
+if (_origApplyProfile) {
+  applyProfile = async function(settings) {
+    await _origApplyProfile(settings);
+    if (typeof settings.palette_id === 'number') {
+      await setPalette(settings.palette_id);
+    }
+    if (settings.macros) {
+      const m = settings.macros;
+      const setSlider = (id, valId, v) => {
+        const el = document.getElementById(id);
+        const lbl = document.getElementById(valId);
+        if (el) el.value = Math.round(v * 100);
+        if (lbl) lbl.textContent = Math.round(v * 100);
+      };
+      setSlider('macroEnergy', 'macroEnergyVal', m.energy ?? 0.5);
+      setSlider('macroChaos', 'macroChaosVal', m.chaos ?? 0);
+      setSlider('macroSpeed', 'macroSpeedVal', m.speed ?? 0.5);
+      setSlider('macroColor', 'macroColorVal', m.color ?? 0.5);
+      await sendRequest('SetMacros', m);
+    }
+    if (typeof settings.strobe_safety === 'number') {
+      const el = document.getElementById('strobeSafety');
+      const lbl = document.getElementById('strobeSafetyVal');
+      if (el) el.value = Math.round(settings.strobe_safety * 100);
+      if (lbl) lbl.textContent = Math.round(settings.strobe_safety * 100) + '%';
+      await sendRequest('SetMacros', { strobe_safety: settings.strobe_safety });
+    }
+    if (Array.isArray(settings.perf_pads)) {
+      perfPads = settings.perf_pads;
+      while (perfPads.length < 12) perfPads.push(null);
+      savePerfPads();
+      renderPerfPads();
+    }
+  };
+}
+
+/* Sync on connect */
+const _origConnect = (typeof onWsOpen === 'function') ? onWsOpen : null;
+setTimeout(() => { syncProControlsFromServer(); }, 1500);
+
+/* Add new effects to UI registry so they show up in browser */
+(function registerNewEffects() {
+  /* Add to effectCategories */
+  if (effectCategories.geometric && !effectCategories.geometric.effects.includes('concrete_pulse')) {
+    effectCategories.geometric.effects.push('concrete_pulse');
+  }
+  if (effectCategories.tunnel && !effectCategories.tunnel.effects.includes('industrial_strobe_tunnel')) {
+    effectCategories.tunnel.effects.push('industrial_strobe_tunnel');
+  }
+  if (effectCategories.postprocess && !effectCategories.postprocess.effects.includes('smoke_volume')) {
+    effectCategories.postprocess.effects.push('smoke_volume');
+  }
+  if (effectCategories.glitch && !effectCategories.glitch.effects.includes('mono_outline')) {
+    effectCategories.glitch.effects.push('mono_outline');
+  }
+  if (effectCategories.flash && !effectCategories.flash.effects.includes('beat_cuts')) {
+    effectCategories.flash.effects.push('beat_cuts');
+  }
+
+  /* Add display names */
+  effectNames.concrete_pulse = 'Concrete Pulse';
+  effectNames.industrial_strobe_tunnel = 'Industrial Strobe Tunnel';
+  effectNames.smoke_volume = 'Smoke Volume';
+  effectNames.mono_outline = 'Mono Outline';
+  effectNames.beat_cuts = 'Beat Cuts';
+
+  /* Mark as new */
+  if (typeof NEW_EFFECTS !== 'undefined') {
+    NEW_EFFECTS.add('concrete_pulse');
+    NEW_EFFECTS.add('industrial_strobe_tunnel');
+    NEW_EFFECTS.add('smoke_volume');
+    NEW_EFFECTS.add('mono_outline');
+    NEW_EFFECTS.add('beat_cuts');
+  }
+
+  /* Add to pro groups */
+  if (typeof effectProGroups !== 'undefined') {
+    effectProGroups.pro_main.effects.push('concrete_pulse', 'industrial_strobe_tunnel', 'smoke_volume');
+    effectProGroups.pro_content.effects.push('mono_outline');
+    effectProGroups.pro_trigger.effects.push('beat_cuts');
+  }
+
+  /* Define params */
+  effectParams.concrete_pulse = [
+    { name: 'crack_density', label: 'Crack Density', min: 1, max: 12, step: 1, default: 5 },
+    { name: 'pulse_strength', label: 'Pulse Strength', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'concrete_grain', label: 'Grain', min: 0, max: 1, step: 0.05, default: 0.6 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 3, step: 1, default: 1, options: ['Continuous','1/4','1/8','1/16'] },
+  ];
+  effectParams.industrial_strobe_tunnel = [
+    { name: 'tunnel_speed', label: 'Tunnel Speed', min: 0.1, max: 5, step: 0.1, default: 1.5 },
+    { name: 'ring_count', label: 'Ring Count', min: 4, max: 32, step: 1, default: 16 },
+    { name: 'strobe_amount', label: 'Strobe Amount', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 3, step: 1, default: 1, options: ['Continuous','1/4','1/8','1/16'] },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'distortion', label: 'Distortion', min: 0, max: 1, step: 0.01, default: 0.2 },
+  ];
+  effectParams.smoke_volume = [
+    { name: 'density', label: 'Density', min: 0.5, max: 3, step: 0.1, default: 1.5 },
+    { name: 'light_count', label: 'Light Shafts', min: 1, max: 6, step: 1, default: 3 },
+    { name: 'drift_speed', label: 'Drift Speed', min: 0, max: 2, step: 0.05, default: 0.5 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 0, options: ['Continuous','1/4','1/8'] },
+  ];
+  effectParams.mono_outline = [
+    { name: 'edge_thickness', label: 'Edge Thickness', min: 0.0005, max: 0.01, step: 0.0005, default: 0.0025 },
+    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { name: 'invert_on_beat', label: 'Invert on Beat', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 1, step: 1, default: 0, options: ['Continuous','1/4'] },
+  ];
+  effectParams.beat_cuts = [
+    { name: 'cut_division', label: 'Division', min: 0, max: 4, step: 1, default: 1, options: ['1/4','1/8','1/16','2 Beats','4 Beats'] },
+    { name: 'pattern', label: 'Pattern', min: 0, max: 3, step: 1, default: 0, options: ['Alternate','Triplet','4 on 4','Offbeat'] },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'color_invert', label: 'Color Invert', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+  ];
+})();
+
 // === Init ===
+setUIMode(uiMode);
 renderPresets();
-renderCategories();
-renderEffects();
 renderBandEffects();
 renderMediaContent();
+loadPerfPads();
+renderPerfPads();
+renderHeaderFftBars();
+/* Re-render effects after registerNewEffects() injected the new ones */
+if (typeof renderCategories === 'function') renderCategories();
+if (typeof renderEffects === 'function') renderEffects();
 runDemo();
 </script>
 </body>

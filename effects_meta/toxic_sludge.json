@@ -2,6 +2,9 @@
   "effect_id": "toxic_sludge",
   "name": "Toxic Sludge",
   "category": "particles",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
   "description": "Toxic Sludge \u2014 underground category effect",
   "params": [
     {

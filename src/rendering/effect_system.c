@@ -335,8 +335,23 @@ static void cache_standard_params(struct vjlink_effect_entry *entry)
 	entry->p_resolution = gs_effect_get_param_by_name(e, "resolution");
 	entry->p_time       = gs_effect_get_param_by_name(e, "time");
 	entry->p_bands      = gs_effect_get_param_by_name(e, "bands");
+	entry->p_bands_raw  = gs_effect_get_param_by_name(e, "bands_raw");
+	entry->p_chronotensity = gs_effect_get_param_by_name(e, "chronotensity");
 	entry->p_beat_phase = gs_effect_get_param_by_name(e, "beat_phase");
 	entry->p_bpm        = gs_effect_get_param_by_name(e, "bpm");
+	entry->p_beat_confidence = gs_effect_get_param_by_name(e, "beat_confidence");
+	entry->p_onset_strength = gs_effect_get_param_by_name(e, "onset_strength");
+	entry->p_rms        = gs_effect_get_param_by_name(e, "rms");
+	entry->p_kick_onset = gs_effect_get_param_by_name(e, "kick_onset");
+	entry->p_snare_onset = gs_effect_get_param_by_name(e, "snare_onset");
+	entry->p_hat_onset  = gs_effect_get_param_by_name(e, "hat_onset");
+	entry->p_beat_1_4   = gs_effect_get_param_by_name(e, "beat_1_4");
+	entry->p_beat_1_8   = gs_effect_get_param_by_name(e, "beat_1_8");
+	entry->p_beat_1_16  = gs_effect_get_param_by_name(e, "beat_1_16");
+	entry->p_beat_2_1   = gs_effect_get_param_by_name(e, "beat_2_1");
+	entry->p_beat_4_1   = gs_effect_get_param_by_name(e, "beat_4_1");
+	entry->p_beat_count = gs_effect_get_param_by_name(e, "beat_count");
+	entry->p_palette_id = gs_effect_get_param_by_name(e, "palette_id");
 	entry->p_quality    = gs_effect_get_param_by_name(e, "quality");
 	entry->p_band_activation = gs_effect_get_param_by_name(e, "band_activation");
 	entry->p_has_input = gs_effect_get_param_by_name(e, "has_input_source");
@@ -516,6 +531,20 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 			ctx->bands[2], ctx->bands[3]);
 		gs_effect_set_vec4(entry->p_bands, &bands);
 	}
+	if (entry->p_bands_raw) {
+		struct vec4 bands_raw;
+		vec4_set(&bands_raw,
+			ctx->bands_raw[0], ctx->bands_raw[1],
+			ctx->bands_raw[2], ctx->bands_raw[3]);
+		gs_effect_set_vec4(entry->p_bands_raw, &bands_raw);
+	}
+	if (entry->p_chronotensity) {
+		struct vec4 chrono;
+		vec4_set(&chrono,
+			ctx->chronotensity[0], ctx->chronotensity[1],
+			ctx->chronotensity[2], ctx->chronotensity[3]);
+		gs_effect_set_vec4(entry->p_chronotensity, &chrono);
+	}
 
 	/* Beat phase */
 	if (entry->p_beat_phase)
@@ -524,6 +553,32 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 	/* BPM */
 	if (entry->p_bpm)
 		gs_effect_set_float(entry->p_bpm, ctx->bpm);
+	if (entry->p_beat_confidence)
+		gs_effect_set_float(entry->p_beat_confidence, ctx->beat_confidence);
+	if (entry->p_onset_strength)
+		gs_effect_set_float(entry->p_onset_strength, ctx->onset_strength);
+	if (entry->p_rms)
+		gs_effect_set_float(entry->p_rms, ctx->rms);
+	if (entry->p_kick_onset)
+		gs_effect_set_float(entry->p_kick_onset, ctx->kick_onset);
+	if (entry->p_snare_onset)
+		gs_effect_set_float(entry->p_snare_onset, ctx->snare_onset);
+	if (entry->p_hat_onset)
+		gs_effect_set_float(entry->p_hat_onset, ctx->hat_onset);
+	if (entry->p_beat_1_4)
+		gs_effect_set_float(entry->p_beat_1_4, ctx->beat_1_4);
+	if (entry->p_beat_1_8)
+		gs_effect_set_float(entry->p_beat_1_8, ctx->beat_1_8);
+	if (entry->p_beat_1_16)
+		gs_effect_set_float(entry->p_beat_1_16, ctx->beat_1_16);
+	if (entry->p_beat_2_1)
+		gs_effect_set_float(entry->p_beat_2_1, ctx->beat_2_1);
+	if (entry->p_beat_4_1)
+		gs_effect_set_float(entry->p_beat_4_1, ctx->beat_4_1);
+	if (entry->p_beat_count)
+		gs_effect_set_float(entry->p_beat_count, (float)(ctx->beat_count & 0xFFFF));
+	if (entry->p_palette_id)
+		gs_effect_set_float(entry->p_palette_id, (float)ctx->palette_id);
 
 	/* GPU quality level (0=low, 1=medium, 2=high) */
 	if (entry->p_quality)
@@ -627,8 +682,23 @@ bool vjlink_effect_check_hot_reload(struct vjlink_effect_entry *entry)
 	entry->p_resolution = NULL;
 	entry->p_time = NULL;
 	entry->p_bands = NULL;
+	entry->p_bands_raw = NULL;
+	entry->p_chronotensity = NULL;
 	entry->p_beat_phase = NULL;
 	entry->p_bpm = NULL;
+	entry->p_beat_confidence = NULL;
+	entry->p_onset_strength = NULL;
+	entry->p_rms = NULL;
+	entry->p_kick_onset = NULL;
+	entry->p_snare_onset = NULL;
+	entry->p_hat_onset = NULL;
+	entry->p_beat_1_4 = NULL;
+	entry->p_beat_1_8 = NULL;
+	entry->p_beat_1_16 = NULL;
+	entry->p_beat_2_1 = NULL;
+	entry->p_beat_4_1 = NULL;
+	entry->p_beat_count = NULL;
+	entry->p_palette_id = NULL;
 	entry->p_quality = NULL;
 	entry->p_band_activation = NULL;
 	entry->p_has_input = NULL;

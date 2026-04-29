@@ -2,6 +2,9 @@
     "effect_id": "julia_set",
     "name": "Julia Set",
     "category": "fractal",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Morphing Julia set fractal with audio-driven c parameter and orbit trap coloring",
     "author": "VJLink",
     "params": [

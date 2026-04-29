@@ -1,0 +1,17 @@
+{
+  "id": "mono_outline",
+  "name": "Mono Outline",
+  "category": "glitch",
+  "role": "filter",
+  "requires_input": false,
+  "performance_group": "post_glitch",
+  "genre": ["hardtechno", "industrial", "rawstyle"],
+  "description": "Brutalist Sobel edge-detect: white edges on black, beat-driven inversion",
+  "params": [
+    { "name": "edge_thickness", "label": "Edge Thickness", "type": "float", "default": 0.0025, "min": 0.0005, "max": 0.01, "step": 0.0005 },
+    { "name": "threshold", "label": "Threshold", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "invert_on_beat", "label": "Invert on Beat", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_sync", "label": "Beat Sync (0=Cont 1=1/4)", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+  ]
+}

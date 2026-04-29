@@ -2,6 +2,9 @@
   "id": "beat_rings",
   "name": "Beat Rings",
   "category": "geometric",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
   "params": [
     { "name": "ring_width", "label": "Ring Width", "type": "float", "default": 0.02, "min": 0.005, "max": 0.1, "step": 0.005 },
     { "name": "ring_count", "label": "Ring Count", "type": "float", "default": 4.0, "min": 1.0, "max": 8.0, "step": 1.0 },

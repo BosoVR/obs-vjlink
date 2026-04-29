@@ -2,6 +2,9 @@
     "effect_id": "lava_lamp",
     "name": "Lava Lamp",
     "category": "plasma",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Organic metaball blobs with warm lava color palette and audio-reactive sizing",
     "author": "VJLink",
     "params": [

@@ -2,6 +2,9 @@
   "id": "waveform_bars",
   "name": "Waveform Bars",
   "category": "audio_viz",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "audio_visualizer",
   "description": "Pro spectrum analyzer with multiple modes, styles, color modes",
   "params": [
     { "name": "bar_count", "label": "Bar Count", "type": "float", "default": 64.0, "min": 16.0, "max": 256.0, "step": 1.0 },

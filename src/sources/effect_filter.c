@@ -38,6 +38,7 @@ struct vjlink_effect_filter_data {
 	bool                        needs_update;
 	gs_texrender_t             *input_texrender;  /* captured source */
 	gs_texrender_t             *output_texrender; /* effect output */
+	gs_texrender_t             *prev_texrender;   /* previous captured source */
 	gs_eparam_t                *cached_passthrough_image; /* cached "image" param */
 
 	/* Transparent background: dark areas become see-through */
@@ -85,6 +86,8 @@ static void vjlink_effect_filter_destroy(void *data)
 		gs_texrender_destroy(filter->input_texrender);
 	if (filter->output_texrender)
 		gs_texrender_destroy(filter->output_texrender);
+	if (filter->prev_texrender)
+		gs_texrender_destroy(filter->prev_texrender);
 	obs_leave_graphics();
 
 	free(filter);
@@ -221,6 +224,45 @@ static gs_texrender_t *create_or_reset(gs_texrender_t *tr)
 	return tr;
 }
 
+static void copy_texture_to_texrender(gs_texrender_t **target,
+                                      gs_texture_t *source,
+                                      uint32_t width,
+                                      uint32_t height)
+{
+	if (!source)
+		return;
+
+	*target = create_or_reset(*target);
+	if (!*target)
+		return;
+
+	if (!gs_texrender_begin(*target, width, height))
+		return;
+
+	struct vec4 clear;
+	vec4_zero(&clear);
+	gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
+
+	gs_ortho(0.0f, (float)width, 0.0f, (float)height,
+	         -100.0f, 100.0f);
+	gs_matrix_identity();
+
+	gs_blend_state_push();
+	gs_reset_blend_state();
+	gs_enable_blending(false);
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+
+	gs_effect_t *effect = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+	gs_eparam_t *image = gs_effect_get_param_by_name(effect, "image");
+	gs_effect_set_texture(image, source);
+	while (gs_effect_loop(effect, "Draw")) {
+		gs_draw_sprite(source, 0, width, height);
+	}
+
+	gs_blend_state_pop();
+	gs_texrender_end(*target);
+}
+
 static void vjlink_effect_filter_video_render(void *data, gs_effect_t *obs_effect)
 {
 	UNUSED_PARAMETER(obs_effect);
@@ -317,6 +359,10 @@ static void vjlink_effect_filter_video_render(void *data, gs_effect_t *obs_effec
 	if (!source_tex)
 		return;
 
+	gs_texture_t *prev_source_tex = filter->prev_texrender
+		? gs_texrender_get_texture(filter->prev_texrender)
+		: NULL;
+
 	/*
 	 * ===== Phase 2: Apply VJLink effect into output_texrender =====
 	 */
@@ -340,7 +386,8 @@ static void vjlink_effect_filter_video_render(void *data, gs_effect_t *obs_effec
 		gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
 
 		/* Bind source_tex to BOTH "image" and "input_tex" */
-		vjlink_effect_bind_uniforms(filter->entry, source_tex, NULL,
+		vjlink_effect_bind_uniforms(filter->entry, source_tex,
+		                             prev_source_tex,
 		                             width, height);
 		vjlink_effect_bind_custom_params(filter->entry,
 			(const float (*)[4])filter->param_values);
@@ -357,6 +404,10 @@ static void vjlink_effect_filter_video_render(void *data, gs_effect_t *obs_effec
 	}
 
 	gs_texrender_end(filter->output_texrender);
+
+	/* Store the current source for next frame's prev_tex. */
+	copy_texture_to_texrender(&filter->prev_texrender, source_tex,
+	                          width, height);
 
 	gs_texture_t *output_tex =
 		gs_texrender_get_texture(filter->output_texrender);

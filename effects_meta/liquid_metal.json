@@ -2,6 +2,9 @@
     "effect_id": "liquid_metal",
     "name": "Liquid Metal",
     "category": "plasma",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Chrome-like liquid metal surface with voronoi cells and audio-reactive distortion",
     "author": "VJLink",
     "params": [

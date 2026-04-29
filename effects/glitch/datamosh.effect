@@ -11,7 +11,9 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
 
 uniform float block_size;      /* glitch block size (default 16.0) */
 uniform float intensity;       /* effect strength (default 0.5) */
@@ -160,8 +162,9 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
 
     /* === Filter mode: frame-difference datamosh === */
     float blk = max(block_size, 4.0);
-    float intens = saturate(intensity) + bass * 0.3;
-    float disp = displacement + bass * 0.03;
+    float transient = max(onset_strength, max(bands_raw.x, bands_raw.y));
+    float intens = saturate(intensity) + bass * 0.22 + transient * 0.28;
+    float disp = displacement + bass * 0.025 + transient * 0.018;
     float noise_amt = noise_amount;
 
     /* Block grid */
@@ -176,7 +179,7 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
     /* Displacement on beat / high motion */
     float2 displaced_uv = uv;
 
-    if (block_hash < intens && (diff > 0.1 || beat > 0.5)) {
+    if (block_hash < intens && (diff > 0.08 || beat > 0.5 || transient > 0.45)) {
         float2 shift;
         shift.x = (hash21(block_uv + float2(time, 0.0)) - 0.5) * disp;
         shift.y = (hash21(block_uv + float2(0.0, time)) - 0.5) * disp;
@@ -185,9 +188,11 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
         displaced_uv += shift;
     }
 
+    float base_alpha = image.Sample(texSampler, uv).a;
+
     /* Sample with displacement */
     float4 color;
-    if (block_hash < intens * 0.5 && beat > 0.3) {
+    if (block_hash < intens * 0.5 && (beat > 0.3 || transient > 0.55)) {
         color = prev_tex.Sample(texSampler, displaced_uv);
     } else {
         color = image.Sample(texSampler, displaced_uv);
@@ -195,8 +200,8 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
 
     /* Digital noise */
     float noise = hash21(uv * resolution + float2(time * 1000.0, 0.0));
-    if (noise < noise_amt * treble * 0.3) {
-        color.rgb = float3(noise, noise, noise);
+    if (noise < noise_amt * treble * 0.18 * (0.3 + intens)) {
+        color.rgb = lerp(color.rgb, float3(noise, noise, noise), 0.75);
     }
 
     /* Channel swap in glitched blocks */
@@ -211,7 +216,7 @@ float4 PSDatamosh(VertInOut vert_in) : TARGET
         color.b = image.Sample(texSampler, displaced_uv - float2(chroma, 0.0)).b;
     }
 
-    return color;
+    return float4(saturate(color.rgb), base_alpha);
 }
 
 technique Draw

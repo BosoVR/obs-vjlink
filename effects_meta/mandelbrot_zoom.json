@@ -2,6 +2,9 @@
     "effect_id": "mandelbrot_zoom",
     "name": "Mandelbrot Zoom",
     "category": "fractal",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Continuous zoom into the Mandelbrot set with audio-reactive palette cycling",
     "author": "VJLink",
     "params": [

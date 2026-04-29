@@ -38,6 +38,14 @@ bool vjlink_context_init(void)
 	ctx->elapsed_time = 0.0f;
 	for (int i = 0; i < 4; i++)
 		ctx->band_sensitivity[i] = 1.0f;
+	ctx->audio_master_gain = 1.0f;
+	ctx->audio_fall_rate = 0.08f;
+	ctx->palette_id = 0;
+	ctx->macro_energy = 0.5f;
+	ctx->macro_chaos = 0.0f;
+	ctx->macro_speed = 0.5f;
+	ctx->macro_color = 0.5f;
+	ctx->strobe_safety_max = 1.0f;
 	ctx->initialized = true;
 
 	blog(LOG_INFO, "[VJLink] Context initialized");

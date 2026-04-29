@@ -2,6 +2,9 @@
     "effect_id": "torus_knot",
     "name": "Torus Knot",
     "category": "3d",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Raymarched torus knot with audio-reactive deformation and iridescent coloring",
     "author": "VJLink",
     "params": [

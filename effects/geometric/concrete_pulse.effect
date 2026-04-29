@@ -1,0 +1,166 @@
+/*
+ * VJLink - Concrete Pulse (Pro)
+ * Brutalist concrete surface with audio-reactive cracks and pulse waves.
+ * Designed for Hardtechno/Berghain-style sets — dark, raw, kick-driven.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d audio_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     onset_strength;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     palette_id;
+
+uniform float crack_density;     /* 1-12, default 5 */
+uniform float pulse_strength;    /* 0-2, default 1.0 */
+uniform float concrete_grain;    /* 0-1, default 0.6 */
+uniform float audio_drive;       /* 0-2, default 1.0 */
+uniform float beat_sync;         /* 0=continuous 1=1/4 2=1/8 3=1/16 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float noise(float2 p) {
+    float2 i = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(hash21(i), hash21(i + float2(1,0)), f.x),
+                lerp(hash21(i + float2(0,1)), hash21(i + float2(1,1)), f.x), f.y);
+}
+
+float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.05; a *= 0.5; }
+    return v;
+}
+
+float3 palette_concrete(int pid) {
+    if (pid == 1) return float3(1.0, 0.05, 0.08);   /* Hardtechno red */
+    if (pid == 2) return float3(1.0, 0.35, 0.05);   /* Rawstyle orange */
+    if (pid == 3) return float3(0.7, 1.0, 0.05);    /* Acid yellow-green */
+    if (pid == 4) return float3(0.05, 0.85, 1.0);   /* Cyber cyan */
+    if (pid == 5) return float3(1.0, 1.0, 1.0);     /* Mono white */
+    return float3(0.95, 0.15, 0.6);                  /* Default magenta */
+}
+
+float4 PSConcretePulse(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float bass_raw = bands_raw.x;
+    float beat = pow(1.0 - beat_phase, 3.0);
+
+    /* Beat-quantized pulse */
+    float bs = beat_sync;
+    float pulse_phase;
+    if (bs < 0.5) pulse_phase = beat;
+    else if (bs < 1.5) pulse_phase = pow(1.0 - beat_1_4, 3.0);
+    else if (bs < 2.5) pulse_phase = pow(1.0 - beat_1_8, 3.0);
+    else pulse_phase = pow(1.0 - beat_1_16, 3.0);
+
+    float drive = audio_drive * (0.5 + bass + kick_onset);
+
+    /* === Concrete base (FBM + grain) === */
+    float2 grain_p = uv * resolution * 0.002;
+    float surface = fbm(grain_p * 6.0);
+    surface = surface * 0.7 + 0.3;
+
+    float dirt = fbm(uv * 8.0 + time * 0.02) * 0.15;
+    float fine_grain = hash21(uv * resolution * 0.5) * 0.06 * concrete_grain;
+
+    float3 col = float3(0.04, 0.04, 0.045) + surface * 0.07 + dirt + fine_grain;
+
+    /* === Concrete blocks subtle grid === */
+    float2 block_uv = uv * float2(8.0 * aspect, 6.0);
+    float2 bf = frac(block_uv);
+    float block_edge = smoothstep(0.0, 0.02, min(bf.x, bf.y)) *
+                       smoothstep(0.0, 0.02, min(1.0 - bf.x, 1.0 - bf.y));
+    col *= 0.7 + block_edge * 0.3;
+
+    /* === Cracks radiating from center (bass-driven) === */
+    float crack_count = clamp(crack_density, 1.0, 12.0);
+    float r = length(p);
+    float ang = atan2(p.y, p.x);
+    float angle_norm = (ang + 3.14159) / 6.28318;
+
+    float crack_intensity = 0.0;
+    [unroll(12)] for (int c = 0; c < 12; c++) {
+        if ((float)c >= crack_count) break;
+        float fc = (float)c;
+        float seed = fc * 13.7;
+        float crack_ang = hash11(seed) * 6.28318;
+        float crack_offset = (hash11(seed + 1.3) - 0.5) * 0.6;
+
+        float ang_diff = angle_norm * 6.28318 - crack_ang;
+        ang_diff = atan2(sin(ang_diff), cos(ang_diff));
+
+        /* Crack zigzag noise along ray */
+        float crack_jitter = fbm(float2(r * 8.0 + crack_offset, fc)) - 0.5;
+        ang_diff += crack_jitter * 0.15;
+
+        float crack_width = 0.008 + drive * 0.012;
+        float crack_pulse = 0.0;
+        if (abs(ang_diff) < 0.4 && r > 0.05) {
+            crack_pulse = exp(-abs(ang_diff) / crack_width) *
+                          smoothstep(0.05, 0.2, r) * smoothstep(2.0, 1.0, r);
+        }
+        crack_intensity = max(crack_intensity, crack_pulse);
+    }
+
+    /* Cracks darken the surface, then glow on kick */
+    col -= crack_intensity * 0.25;
+    float3 crack_glow = palette_concrete((int)palette_id);
+    col += crack_glow * crack_intensity * (0.3 + pulse_phase * pulse_strength * (0.6 + drive));
+
+    /* === Center shockwave on kick === */
+    float wave_r = pulse_phase * 1.6;
+    float wave_d = abs(r - wave_r);
+    float wave = exp(-wave_d * 8.0) * pulse_phase * pulse_strength * (0.7 + bass_raw);
+    col += crack_glow * wave * 0.5;
+
+    /* === Vertical scan line on snare === */
+    if (snare_onset > 0.2) {
+        float scan_x = (hash11(floor(time * 10.0)) - 0.5) * 1.2;
+        float scan_d = abs(p.x - scan_x);
+        float scan = exp(-scan_d * 30.0) * snare_onset;
+        col += float3(1.0, 1.0, 1.0) * scan * 0.4;
+    }
+
+    /* Subtle color tint on bass */
+    col += crack_glow * bass * 0.04;
+
+    /* HDR */
+    col = col / (1.0 + col * 0.3);
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSConcretePulse(vert_in);
+    }
+}

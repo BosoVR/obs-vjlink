@@ -2,6 +2,9 @@
   "id": "strobe_hard",
   "name": "Hard Strobe",
   "category": "flash",
+    "role": "overlay",
+    "requires_input": false,
+    "performance_group": "band_trigger",
   "params": [
     { "name": "intensity", "label": "Intensity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01 },
     { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },

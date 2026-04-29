@@ -303,8 +303,30 @@ static void handle_get_state(obs_data_t *request_data,
 	                    (double)ctx->band_sensitivity[2]);
 	obs_data_set_double(response_data, "sens_treble",
 	                    (double)ctx->band_sensitivity[3]);
+	obs_data_set_double(response_data, "audio_master_gain",
+	                    (double)ctx->audio_master_gain);
+	obs_data_set_double(response_data, "audio_fall_rate",
+	                    (double)ctx->audio_fall_rate);
 	obs_data_set_double(response_data, "elapsed_time",
 	                    (double)ctx->elapsed_time);
+
+	/* Pro audio + macro state */
+	obs_data_set_double(response_data, "audio_master_gain",
+	                    (double)ctx->audio_master_gain);
+	obs_data_set_double(response_data, "audio_fall_rate",
+	                    (double)ctx->audio_fall_rate);
+	obs_data_set_int(response_data, "palette_id", ctx->palette_id);
+	obs_data_set_double(response_data, "macro_energy", (double)ctx->macro_energy);
+	obs_data_set_double(response_data, "macro_chaos", (double)ctx->macro_chaos);
+	obs_data_set_double(response_data, "macro_speed", (double)ctx->macro_speed);
+	obs_data_set_double(response_data, "macro_color", (double)ctx->macro_color);
+	obs_data_set_double(response_data, "strobe_safety", (double)ctx->strobe_safety_max);
+	obs_data_set_double(response_data, "kick_onset", (double)ctx->kick_onset);
+	obs_data_set_double(response_data, "snare_onset", (double)ctx->snare_onset);
+	obs_data_set_double(response_data, "hat_onset", (double)ctx->hat_onset);
+	obs_data_set_double(response_data, "beat_1_4", (double)ctx->beat_1_4);
+	obs_data_set_double(response_data, "beat_1_8", (double)ctx->beat_1_8);
+	obs_data_set_double(response_data, "beat_1_16", (double)ctx->beat_1_16);
 
 	/* LFO values */
 	obs_data_t *lfo_data = obs_data_create();
@@ -328,6 +350,9 @@ static void handle_get_state(obs_data_t *request_data,
 			snprintf(key, sizeof(key), "band_%d_effect", i);
 			obs_data_set_string(band_fx_data, key,
 			     ctx->active_band_fx->slots[i].effect_id);
+			snprintf(key, sizeof(key), "band_%d_target", i);
+			obs_data_set_double(band_fx_data, key,
+			     (double)ctx->active_band_fx->slots[i].target_activation);
 		}
 		obs_data_set_obj(response_data, "band_effects", band_fx_data);
 		obs_data_release(band_fx_data);
@@ -352,9 +377,17 @@ static void handle_set_band_effect(obs_data_t *request_data,
 	const char *effect_id = obs_data_get_string(request_data, "effect_id");
 	float threshold = (float)obs_data_get_double(request_data, "threshold");
 	float intensity = (float)obs_data_get_double(request_data, "intensity");
+	float attack = obs_data_has_user_value(request_data, "attack")
+		? (float)obs_data_get_double(request_data, "attack") : 0.65f;
+	float release = obs_data_has_user_value(request_data, "release")
+		? (float)obs_data_get_double(request_data, "release") : 0.18f;
+	float hold = obs_data_has_user_value(request_data, "hold")
+		? (float)obs_data_get_double(request_data, "hold") : 6.0f;
 
 	vjlink_band_effects_set_slot(ctx->active_band_fx, band,
 	                              effect_id, threshold, intensity);
+	vjlink_band_effects_set_slot_response(ctx->active_band_fx, band,
+	                                       attack, release, hold);
 
 	obs_data_set_bool(response_data, "success", true);
 	blog(LOG_INFO, "[VJLink] WebSocket: band %d effect set to '%s'",
@@ -380,6 +413,9 @@ static void handle_get_band_effects(obs_data_t *request_data,
 			obs_data_set_string(band_data, "effect_id", s->effect_id);
 			obs_data_set_double(band_data, "threshold", (double)s->threshold);
 			obs_data_set_double(band_data, "intensity", (double)s->intensity);
+			obs_data_set_double(band_data, "attack", (double)s->attack);
+			obs_data_set_double(band_data, "release", (double)s->release);
+			obs_data_set_double(band_data, "hold", (double)s->hold_frames);
 			obs_data_set_bool(band_data, "enabled", s->enabled);
 			obs_data_set_double(band_data, "activation",
 			                    (double)s->current_activation);
@@ -638,6 +674,81 @@ static void handle_set_sensitivity(obs_data_t *request_data,
 	}
 }
 
+static void handle_set_audio_controls(obs_data_t *request_data,
+                                      obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+
+	struct vjlink_context *ctx = vjlink_get_context();
+
+	if (obs_data_has_user_value(request_data, "master_gain")) {
+		double gain = obs_data_get_double(request_data, "master_gain");
+		if (gain < 0.01)
+			gain = 0.01;
+		if (gain > 5.0)
+			gain = 5.0;
+		ctx->audio_master_gain = (float)gain;
+	}
+
+	if (obs_data_has_user_value(request_data, "fall_rate")) {
+		double fall = obs_data_get_double(request_data, "fall_rate");
+		if (fall < 0.01)
+			fall = 0.01;
+		if (fall > 0.50)
+			fall = 0.50;
+		ctx->audio_fall_rate = (float)fall;
+	}
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_double(response_data, "audio_master_gain",
+	                    (double)ctx->audio_master_gain);
+	obs_data_set_double(response_data, "audio_fall_rate",
+	                    (double)ctx->audio_fall_rate);
+}
+
+static void handle_set_palette(obs_data_t *request_data,
+                                obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	struct vjlink_context *ctx = vjlink_get_context();
+	int pid = (int)obs_data_get_int(request_data, "palette_id");
+	if (pid < 0) pid = 0;
+	if (pid > 5) pid = 5;
+	ctx->palette_id = pid;
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "palette_id", pid);
+}
+
+static void handle_set_macros(obs_data_t *request_data,
+                               obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	struct vjlink_context *ctx = vjlink_get_context();
+
+	if (obs_data_has_user_value(request_data, "energy")) {
+		double v = obs_data_get_double(request_data, "energy");
+		ctx->macro_energy = (float)(v < 0 ? 0 : (v > 1 ? 1 : v));
+	}
+	if (obs_data_has_user_value(request_data, "chaos")) {
+		double v = obs_data_get_double(request_data, "chaos");
+		ctx->macro_chaos = (float)(v < 0 ? 0 : (v > 1 ? 1 : v));
+	}
+	if (obs_data_has_user_value(request_data, "speed")) {
+		double v = obs_data_get_double(request_data, "speed");
+		ctx->macro_speed = (float)(v < 0 ? 0 : (v > 1 ? 1 : v));
+	}
+	if (obs_data_has_user_value(request_data, "color")) {
+		double v = obs_data_get_double(request_data, "color");
+		ctx->macro_color = (float)(v < 0 ? 0 : (v > 1 ? 1 : v));
+	}
+	if (obs_data_has_user_value(request_data, "strobe_safety")) {
+		double v = obs_data_get_double(request_data, "strobe_safety");
+		ctx->strobe_safety_max = (float)(v < 0 ? 0 : (v > 1 ? 1 : v));
+	}
+
+	obs_data_set_bool(response_data, "success", true);
+}
+
 /* --- Band Effect Params --- */
 
 static void handle_set_band_param(obs_data_t *request_data,
@@ -763,6 +874,12 @@ static void register_all_requests(void)
 	                        handle_get_scene_sources, NULL);
 	vendor_request_register(g_vendor, "SetSensitivity",
 	                        handle_set_sensitivity, NULL);
+	vendor_request_register(g_vendor, "SetAudioControls",
+	                        handle_set_audio_controls, NULL);
+	vendor_request_register(g_vendor, "SetPalette",
+	                        handle_set_palette, NULL);
+	vendor_request_register(g_vendor, "SetMacros",
+	                        handle_set_macros, NULL);
 	vendor_request_register(g_vendor, "SetLogo",
 	                        handle_set_logo, NULL);
 	vendor_request_register(g_vendor, "SetTransparentBg",
@@ -789,7 +906,7 @@ void vjlink_websocket_init(void)
 	g_ws_available = true;
 
 	blog(LOG_INFO,
-	     "[VJLink] WebSocket vendor registered (18 request types)");
+	     "[VJLink] WebSocket vendor registered (19 request types)");
 }
 
 /* Called after all OBS modules have loaded (from plugin post-load event) */

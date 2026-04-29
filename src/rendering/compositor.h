@@ -106,7 +106,8 @@ void vjlink_compositor_set_chain_param(struct vjlink_compositor *comp,
  * Must be called from the OBS graphics thread (inside video_render).
  * Returns the final output texture.
  */
-gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp);
+gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp,
+                                       gs_texture_t *base_tex);
 
 /* Get the previous frame texture (for feedback effects) */
 gs_texture_t *vjlink_compositor_get_feedback_tex(struct vjlink_compositor *comp);

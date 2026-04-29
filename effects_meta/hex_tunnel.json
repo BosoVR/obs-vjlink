@@ -2,6 +2,9 @@
     "effect_id": "hex_tunnel",
     "name": "Hex Tunnel",
     "category": "tunnel",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Hexagonal grid tunnel with glowing edges and audio-reactive color cycling",
     "author": "VJLink",
     "params": [

@@ -2,6 +2,9 @@
     "effect_id": "rgb_split",
     "name": "RGB Split",
     "category": "glitch",
+    "role": "filter",
+    "requires_input": false,
+    "performance_group": "post_glitch",
     "description": "Chromatic aberration with audio-reactive split distance and beat bursts",
     "author": "VJLink",
     "params": [

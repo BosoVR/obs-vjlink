@@ -601,9 +601,16 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 		return;
 	}
 
+	/* Render media layers into an offscreen base texture first.
+	 * This lets filter/post effects (glitch, VHS, datamosh, feedback)
+	 * process user media instead of being drawn before it. */
+	gs_texture_t *media_base = vjlink_media_layers_render_texture(
+		&comp->media_layers, comp->width, comp->height);
+
 	/* Render the effect chain (also handles band effects when chain_length==0) */
 	if (comp->renderer) {
-		gs_texture_t *output = vjlink_compositor_render(comp->renderer);
+		gs_texture_t *output = vjlink_compositor_render(comp->renderer,
+		                                                 media_base);
 
 		if (output) {
 			/* Always push a blend state so OBS' default SRC_ALPHA blend
@@ -656,10 +663,6 @@ static void vjlink_compositor_video_render(void *data, gs_effect_t *obs_effect)
 			ctx->compositor_output = NULL;
 		}
 	}
-
-	/* Render media layers (images/GIFs) */
-	vjlink_media_layers_render(&comp->media_layers,
-	                            comp->width, comp->height);
 
 	/* Update OBS source triggers */
 	vjlink_source_triggers_update(&comp->source_triggers);

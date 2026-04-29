@@ -48,6 +48,7 @@ struct vjlink_media_layer {
 struct vjlink_media_layers {
 	struct vjlink_media_layer layers[VJLINK_MAX_MEDIA_LAYERS];
 	uint32_t width, height;
+	gs_texrender_t *composite_target;
 	bool     initialized;
 };
 
@@ -71,6 +72,12 @@ void vjlink_media_layer_clear(struct vjlink_media_layers *ml, int index);
 /* Update and render all media layers (call per frame from graphics thread) */
 void vjlink_media_layers_render(struct vjlink_media_layers *ml,
                                  uint32_t canvas_w, uint32_t canvas_h);
+
+/* Render media layers into an offscreen texture for the compositor chain.
+ * Returns NULL when no media layer is currently visible. */
+gs_texture_t *vjlink_media_layers_render_texture(struct vjlink_media_layers *ml,
+                                                 uint32_t canvas_w,
+                                                 uint32_t canvas_h);
 
 #ifdef __cplusplus
 }

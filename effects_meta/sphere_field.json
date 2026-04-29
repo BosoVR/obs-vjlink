@@ -2,6 +2,9 @@
     "effect_id": "sphere_field",
     "name": "Sphere Field",
     "category": "3d",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Raymarched grid of pulsing spheres with audio-reactive glow",
     "author": "VJLink",
     "params": [

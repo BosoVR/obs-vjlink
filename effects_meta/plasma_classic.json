@@ -2,6 +2,9 @@
     "id": "plasma_classic",
     "name": "Classic Plasma",
     "category": "plasma",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Layered sine wave interference with audio-reactive colors",
     "params": [
         { "name": "plasma_scale", "label": "Scale", "type": "float", "default": 4.0, "min": 1.0, "max": 10.0, "step": 0.1 },

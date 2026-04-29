@@ -12,7 +12,10 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    chronotensity;
 uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
 
 uniform float     has_input_source; /* 1.0 when used as filter */
 
@@ -69,11 +72,12 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
     float2 centered = uv - 0.5;
 
     /* Audio-reactive zoom */
-    float zoom = fb_zoom - bass * 0.01;
+    float energy = max(rms, chronotensity.x * 0.65);
+    float zoom = fb_zoom - bass * 0.008 - onset_strength * 0.006;
     centered *= zoom;
 
     /* Audio-reactive rotation */
-    float rot = fb_rotation + treble * 0.005;
+    float rot = fb_rotation + treble * 0.005 + chronotensity.w * 0.006;
     float cs = cos(rot);
     float sn = sin(rot);
     float2 rotated;
@@ -91,7 +95,7 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
     float3 prev_shifted = hsv2rgb(prev_hsv);
 
     /* Decay: reduce brightness of feedback */
-    float decay = fb_decay * (1.0 + bass * 0.5);
+    float decay = fb_decay * (1.0 + bass * 0.35 + onset_strength * 0.6);
     prev_shifted *= (1.0 - decay);
 
     /* Sample current input */
@@ -118,7 +122,8 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
     /* Beat-reactive decay: faster fade on beat */
     float beat = (1.0 - beat_phase);
     beat = beat * beat * beat;
-    float dynamic_mix = fb_mix * (1.0 - beat * bass * 0.3);
+    float dynamic_mix = fb_mix * (1.0 - beat * bass * 0.22 - onset_strength * 0.16);
+    dynamic_mix = saturate(dynamic_mix + energy * 0.08);
 
     /* Blend: feedback * mix + current * (1-mix) */
     float3 result = prev_shifted * dynamic_mix + current.rgb * (1.0 - dynamic_mix);

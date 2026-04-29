@@ -11,7 +11,10 @@ uniform texture2d audio_tex;
 uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
+uniform float4    bands_raw;
 uniform float     beat_phase;
+uniform float     onset_strength;
+uniform float     rms;
 
 uniform float disp_amount;     /* displacement strength (default 0.05) */
 uniform float disp_scale;      /* noise scale (default 3.0) */
@@ -136,7 +139,9 @@ float4 PSDisplacement(VertInOut vert_in) : TARGET
     float bass = bands.x;
     float treble = bands.w;
 
-    float amount = disp_amount + bass * disp_amount * 2.0;
+    float transient = max(onset_strength, max(bands_raw.x, bands_raw.z));
+    float amount = disp_amount + bass * disp_amount * 1.65 +
+                   transient * disp_amount * 1.35 + rms * disp_amount;
     float scale = max(disp_scale, 0.5);
     float speed = disp_speed;
     int detail = clamp(int(disp_detail), 1, 6);
@@ -144,7 +149,7 @@ float4 PSDisplacement(VertInOut vert_in) : TARGET
     /* Beat burst */
     float beat = 1.0 - beat_phase;
     beat = beat * beat * beat;
-    amount += beat * disp_amount * 3.0 * bass;
+    amount += beat * disp_amount * 2.4 * bass + transient * disp_amount * 1.2;
 
     /* Noise-based displacement field */
     float2 np = uv * scale + float2(time * speed, time * speed * 0.7);

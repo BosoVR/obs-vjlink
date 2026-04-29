@@ -1,0 +1,17 @@
+{
+  "id": "concrete_pulse",
+  "name": "Concrete Pulse",
+  "category": "geometric",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "main_visual",
+  "genre": ["hardtechno", "industrial", "techno"],
+  "description": "Brutalist concrete surface with kick-driven cracks and shockwaves",
+  "params": [
+    { "name": "crack_density", "label": "Crack Density", "type": "float", "default": 5.0, "min": 1.0, "max": 12.0, "step": 1.0 },
+    { "name": "pulse_strength", "label": "Pulse Strength", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "concrete_grain", "label": "Grain", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_sync", "label": "Beat Sync (0=Cont 1=1/4 2=1/8 3=1/16)", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 1.0 }
+  ]
+}

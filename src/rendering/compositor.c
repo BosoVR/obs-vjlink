@@ -244,14 +244,25 @@ void vjlink_compositor_set_chain_param(struct vjlink_compositor *comp,
 static void render_effect_node(struct vjlink_compositor *comp,
                                struct vjlink_effect_node *node,
                                gs_texture_t *input_tex,
-                               gs_texture_t *prev_tex)
+                               gs_texture_t *prev_tex,
+                               bool has_real_input)
 {
 	if (!node->entry || !node->enabled)
 		return;
 
 	/* Ensure shader is compiled */
-	if (!vjlink_effect_ensure_loaded(node->entry))
+	if (!vjlink_effect_ensure_loaded(node->entry)) {
+		/* Avoid showing a stale render target from the previous effect
+		 * when a shader fails or is still compiling. */
+		gs_texrender_reset(node->output);
+		if (gs_texrender_begin(node->output, comp->width, comp->height)) {
+			struct vec4 clear_color;
+			vec4_zero(&clear_color);
+			gs_clear(GS_CLEAR_COLOR, &clear_color, 0.0f, 0);
+			gs_texrender_end(node->output);
+		}
 		return;
+	}
 
 	/* Begin rendering to this node's render target */
 	gs_texrender_reset(node->output);
@@ -280,6 +291,11 @@ static void render_effect_node(struct vjlink_compositor *comp,
 	/* Bind standard uniforms */
 	vjlink_effect_bind_uniforms(node->entry, input_tex, prev_tex,
 	                            comp->width, comp->height);
+
+	/* Dual-mode shaders use this to choose generator or filter mode. */
+	if (node->entry->p_has_input)
+		gs_effect_set_float(node->entry->p_has_input,
+		                    has_real_input ? 1.0f : 0.0f);
 
 	/* Bind custom parameter values */
 	vjlink_effect_bind_custom_params(node->entry,
@@ -346,7 +362,8 @@ gs_texture_t *vjlink_compositor_get_feedback_tex(struct vjlink_compositor *comp)
 	return gs_texrender_get_texture(prev_buf);
 }
 
-gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
+gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp,
+                                       gs_texture_t *base_tex)
 {
 	if (!comp)
 		return NULL;
@@ -377,6 +394,7 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
 
 	/* Check if there's anything to render */
 	bool has_chain = comp->chain_length > 0;
+	bool has_base = (base_tex != NULL);
 	bool has_band_fx = false;
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
 		if (comp->band_fx.slots[i].enabled) {
@@ -385,9 +403,10 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
 		}
 	}
 
-	/* Nothing to render: return NULL (compositor stays transparent) */
+	/* Nothing to render: return media base if present, otherwise NULL
+	 * (compositor stays transparent). */
 	if (!has_chain && !has_band_fx)
-		return NULL;
+		return base_tex;
 
 	/* When transparent_bg is on and only band effects are active (no chain),
 	 * use NULL as prev_output so band effects render over transparency
@@ -398,14 +417,13 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
 	gs_texture_t *prev_output = NULL;
 
 	if (has_chain) {
-		/* Chain effects need input: use feedback or seed */
-		prev_output = feedback_tex;
+		prev_output = has_base ? base_tex : feedback_tex;
 	} else {
 		/* No chain: band effects start from an empty base.
 		 * Never reuse feedback_tex here — it still holds the last
 		 * rendered frame from a previously-active effect, which would
 		 * make a cleared main effect appear frozen on screen. */
-		prev_output = NULL;
+		prev_output = base_tex;
 	}
 
 	/* Render each effect in the chain */
@@ -414,7 +432,9 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp)
 		if (!node->enabled)
 			continue;
 
-		render_effect_node(comp, node, prev_output, feedback_tex);
+		bool node_has_input = has_base || (i > 0);
+		render_effect_node(comp, node, prev_output, feedback_tex,
+		                   node_has_input);
 
 		prev_output = gs_texrender_get_texture(node->output);
 	}

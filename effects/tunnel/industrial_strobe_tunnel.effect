@@ -1,0 +1,132 @@
+/*
+ * VJLink - Industrial Strobe Tunnel (Pro)
+ * Stark B/W tunnel with synchronized hard strobes on beat subdivisions.
+ * Hardtechno/Berghain — minimalist, brutalist, kick-locked.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     palette_id;
+
+uniform float tunnel_speed;       /* 0.1-5, default 1.5 */
+uniform float ring_count;         /* 4-32, default 16 */
+uniform float strobe_amount;      /* 0-2, default 1.0 */
+uniform float beat_sync;          /* 0=continuous 1=1/4 2=1/8 3=1/16 */
+uniform float audio_drive;        /* 0-2, default 1.0 */
+uniform float distortion;         /* 0-1, default 0.2 */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float hash11(float p) { p = frac(p * 0.1031); p *= p + 33.33; p *= p + p; return frac(p); }
+
+float3 palette_strobe(int pid, float t) {
+    float3 white = float3(1.0, 1.0, 1.0);
+    if (pid == 1) return lerp(white, float3(1.0, 0.05, 0.08), t);  /* Hardtechno red flash */
+    if (pid == 2) return lerp(white, float3(1.0, 0.35, 0.05), t);  /* Rawstyle orange */
+    if (pid == 3) return lerp(white, float3(0.7, 1.0, 0.05), t);   /* Acid */
+    if (pid == 4) return lerp(white, float3(0.05, 0.85, 1.0), t);  /* Cyber */
+    if (pid == 5) return white;                                       /* Mono */
+    return lerp(white, float3(0.95, 0.15, 0.6), t);                   /* Default magenta */
+}
+
+float4 PSIndustrialStrobeTunnel(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float bass = bands.x;
+    float beat = pow(1.0 - beat_phase, 4.0);
+
+    float drive = audio_drive * (1.0 + bass * 0.8 + kick_onset * 1.4);
+    float spd = tunnel_speed * (1.0 + bass * 0.5);
+
+    /* Cylindrical tunnel coords with subtle distortion */
+    float r = length(p);
+    float ang = atan2(p.y, p.x);
+
+    /* Audio-reactive bend */
+    if (distortion > 0.01) {
+        ang += sin(r * 4.0 + time * 0.5) * distortion * 0.15;
+    }
+
+    float u = ang / 6.28318;
+    float v = 1.0 / max(r, 0.05);
+
+    /* Tunnel rings */
+    float ring_z = v * 0.5 + time * spd;
+    float ring_idx = floor(ring_z * ring_count);
+    float ring_f = frac(ring_z * ring_count);
+
+    /* Hard binary rings */
+    float ring_mask = step(0.5, ring_f);
+
+    /* Radial bars */
+    float bar_count = ring_count * 0.5;
+    float bar = step(0.5, frac(u * bar_count));
+
+    /* Combine for grid pattern */
+    float grid = abs(ring_mask - bar);
+
+    /* === Strobe sync === */
+    float bs = beat_sync;
+    float strobe_phase;
+    if (bs < 0.5) strobe_phase = beat;
+    else if (bs < 1.5) strobe_phase = pow(1.0 - beat_1_4, 6.0);
+    else if (bs < 2.5) strobe_phase = pow(1.0 - beat_1_8, 6.0);
+    else strobe_phase = pow(1.0 - beat_1_16, 6.0);
+
+    /* Hard strobe gate */
+    float gate = step(0.65, strobe_phase * (0.7 + drive * 0.5));
+    float strobe = step(0.3, strobe_phase) * strobe_amount;
+
+    /* Color */
+    float3 col = float3(0.02, 0.02, 0.025);
+
+    /* Base tunnel grid */
+    float depth_fade = exp(-r * 0.4);
+    col += float3(grid, grid, grid) * depth_fade * 0.4;
+
+    /* Strobe flash makes pattern explode in brightness */
+    float3 flash_col = palette_strobe((int)palette_id, gate);
+    col += flash_col * grid * strobe * gate * 1.8 * (1.0 + drive * 0.5);
+
+    /* Center hot spot on kick */
+    float center = exp(-r * 3.5) * (kick_onset * 1.2 + bass * 0.3);
+    col += flash_col * center;
+
+    /* Edge vignette */
+    col *= smoothstep(2.5, 0.8, r);
+
+    /* Hard contrast (brutalist look) */
+    col = pow(col, float3(0.85, 0.85, 0.85));
+    col = saturate(col);
+
+    float a_out = max(max(col.r, col.g), col.b);
+    return float4(col, a_out);
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSIndustrialStrobeTunnel(vert_in);
+    }
+}

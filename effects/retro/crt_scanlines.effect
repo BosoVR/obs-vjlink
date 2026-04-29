@@ -11,6 +11,15 @@ uniform float2    resolution;
 uniform float     time;
 uniform float4    bands;
 uniform float     beat_phase;
+uniform float4    bands_raw;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     hat_onset;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     beat_1_16;
+uniform float     palette_id;
+uniform float     audio_drive;
 
 uniform float scanline_intensity; /* scanline darkness (default 0.3) */
 uniform float curvature;          /* screen curvature (default 0.03) */

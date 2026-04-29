@@ -2,6 +2,9 @@
   "id": "flash_shake",
   "name": "Flash Shake",
   "category": "flash",
+    "role": "overlay",
+    "requires_input": false,
+    "performance_group": "band_trigger",
   "params": [
     { "name": "intensity", "label": "Flash Intensity", "type": "float", "default": 0.8, "min": 0.0, "max": 2.0, "step": 0.01 },
     { "name": "shake_amount", "label": "Shake Amount", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 0.1 },

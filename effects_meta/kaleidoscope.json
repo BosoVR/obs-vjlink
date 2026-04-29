@@ -2,6 +2,9 @@
     "id": "kaleidoscope",
     "name": "Kaleidoscope",
     "category": "geometric",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "main_visual",
     "description": "Radial mirror symmetry with audio-reactive segment count",
     "params": [
         { "name": "segments", "label": "Segments", "type": "float", "default": 6.0, "min": 3.0, "max": 16.0, "step": 1.0 },

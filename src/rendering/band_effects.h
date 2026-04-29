@@ -19,6 +19,11 @@ struct vjlink_band_slot {
 	float                      threshold;        /* 0.0-1.0 */
 	float                      intensity;        /* 0.0-2.0 */
 	float                      current_activation; /* computed per frame */
+	float                      target_activation;
+	float                      attack;           /* 0.01-1.0, higher = faster */
+	float                      release;          /* 0.01-1.0, higher = faster */
+	float                      hold_frames;      /* frames to hold after trigger */
+	float                      hold_remaining;
 	enum vjlink_blend_mode     blend_mode;
 	float                      blend_alpha;
 
@@ -52,6 +57,10 @@ void vjlink_band_effects_resize(struct vjlink_band_effects *bfx,
 void vjlink_band_effects_set_slot(struct vjlink_band_effects *bfx,
                                    int band, const char *effect_id,
                                    float threshold, float intensity);
+
+void vjlink_band_effects_set_slot_response(struct vjlink_band_effects *bfx,
+                                           int band, float attack,
+                                           float release, float hold_frames);
 
 /* Clear a band slot */
 void vjlink_band_effects_clear_slot(struct vjlink_band_effects *bfx, int band);

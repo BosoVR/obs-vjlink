@@ -65,8 +65,23 @@ struct vjlink_effect_entry {
 	gs_eparam_t     *p_resolution;
 	gs_eparam_t     *p_time;
 	gs_eparam_t     *p_bands;
+	gs_eparam_t     *p_bands_raw;
+	gs_eparam_t     *p_chronotensity;
 	gs_eparam_t     *p_beat_phase;
 	gs_eparam_t     *p_bpm;
+	gs_eparam_t     *p_beat_confidence;
+	gs_eparam_t     *p_onset_strength;
+	gs_eparam_t     *p_rms;
+	gs_eparam_t     *p_kick_onset;
+	gs_eparam_t     *p_snare_onset;
+	gs_eparam_t     *p_hat_onset;
+	gs_eparam_t     *p_beat_1_4;
+	gs_eparam_t     *p_beat_1_8;
+	gs_eparam_t     *p_beat_1_16;
+	gs_eparam_t     *p_beat_2_1;
+	gs_eparam_t     *p_beat_4_1;
+	gs_eparam_t     *p_beat_count;
+	gs_eparam_t     *p_palette_id;
 	gs_eparam_t     *p_quality;
 	gs_eparam_t     *p_band_activation;
 	gs_eparam_t     *p_has_input;     /* "has_input_source" uniform */

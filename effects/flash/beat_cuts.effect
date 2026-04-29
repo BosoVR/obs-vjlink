@@ -1,0 +1,106 @@
+/*
+ * VJLink - Beat Cuts (Pro)
+ * Hard B/W frame cuts synchronized to BPM subdivisions.
+ * Quantized cuts on 1/4, 1/8, 1/16. Hardtechno disciplined strobe.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float     beat_phase;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     beat_1_16;
+uniform float     kick_onset;
+uniform float     palette_id;
+uniform float     band_activation;
+uniform float     has_input_source;
+uniform float     beat_count;
+
+uniform float cut_division;       /* 0=1/4 1=1/8 2=1/16 3=2/1 4=4/1 */
+uniform float pattern;            /* 0=alternate 1=triplet 2=4on4 3=offbeat */
+uniform float intensity;          /* 0-2, default 1.0 */
+uniform float color_invert;       /* 0=off 1=on */
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut o;
+    o.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    o.uv = vert_in.uv;
+    return o;
+}
+
+float3 palette_cut(int pid, float t) {
+    if (pid == 1) return lerp(float3(1,1,1), float3(1.0, 0.05, 0.08), t);
+    if (pid == 2) return lerp(float3(1,1,1), float3(1.0, 0.4, 0.05), t);
+    if (pid == 3) return lerp(float3(1,1,1), float3(0.65, 1.0, 0.1), t);
+    if (pid == 4) return lerp(float3(1,1,1), float3(0.05, 0.85, 1.0), t);
+    if (pid == 5) return float3(1,1,1);
+    return lerp(float3(1,1,1), float3(0.95, 0.15, 0.6), t);
+}
+
+float4 PSBeatCuts(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    bool has_input = (has_input_source > 0.5);
+
+    /* Pick subdivision */
+    float div = cut_division;
+    float phase;
+    int sub_count;
+    if (div < 0.5) { phase = beat_1_4; sub_count = 1; }
+    else if (div < 1.5) { phase = beat_1_8; sub_count = 2; }
+    else if (div < 2.5) { phase = beat_1_16; sub_count = 4; }
+    else if (div < 3.5) { phase = beat_phase * 0.5; sub_count = 1; }  /* 2/1 */
+    else { phase = beat_phase * 0.25; sub_count = 1; }                  /* 4/1 */
+
+    /* Index of current subdivision */
+    int sub_idx = (int)floor(phase * (float)sub_count + 0.0001);
+    int beat_int = (int)beat_count;
+    int total_idx = beat_int * sub_count + sub_idx;
+
+    /* Pattern decides which subdivisions trigger */
+    int p = (int)pattern;
+    float trigger = 0.0;
+    if (p == 0) trigger = (total_idx % 2 == 0) ? 1.0 : 0.0;       /* alternate */
+    else if (p == 1) trigger = (total_idx % 3 == 0) ? 1.0 : 0.0;  /* triplet */
+    else if (p == 2) trigger = 1.0;                                 /* 4 on 4 */
+    else trigger = (total_idx % 2 == 1) ? 1.0 : 0.0;              /* offbeat */
+
+    /* Hard gate within subdivision: bright at start, fade fast */
+    float subphase = frac(phase * (float)sub_count);
+    float gate = step(subphase, 0.45) * pow(1.0 - subphase / 0.45, 2.0);
+    float strength = trigger * gate * intensity;
+
+    /* Color */
+    float3 col;
+    if (has_input) {
+        float4 src = image.Sample(texSampler, uv);
+        if (strength > 0.5) {
+            /* Cut: full white/colored frame */
+            col = palette_cut((int)palette_id, kick_onset);
+            if (color_invert > 0.5) col = float3(1,1,1) - src.rgb;
+        } else {
+            col = src.rgb * (0.4 + 0.5 * strength);
+        }
+        return float4(col, src.a);
+    } else {
+        col = palette_cut((int)palette_id, kick_onset) * strength;
+        col += float3(0.02, 0.02, 0.025) * (1.0 - strength);
+        col = saturate(col);
+        float a = max(strength, max(max(col.r, col.g), col.b) * 0.3);
+        return float4(col, a);
+    }
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader = PSBeatCuts(vert_in);
+    }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "smoke_volume",
+  "name": "Smoke Volume",
+  "category": "postprocess",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "atmosphere",
+  "genre": ["techno", "hardtechno", "underground"],
+  "description": "Volumetric smoke with audio-reactive light shafts — underground rave atmosphere",
+  "params": [
+    { "name": "density", "label": "Density", "type": "float", "default": 1.5, "min": 0.5, "max": 3.0, "step": 0.1 },
+    { "name": "light_count", "label": "Light Shafts", "type": "float", "default": 3.0, "min": 1.0, "max": 6.0, "step": 1.0 },
+    { "name": "drift_speed", "label": "Drift Speed", "type": "float", "default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_sync", "label": "Beat Sync (0=Cont 1=1/4 2=1/8)", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0 }
+  ]
+}

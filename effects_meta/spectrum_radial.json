@@ -2,6 +2,9 @@
   "id": "spectrum_radial",
   "name": "Spectrum Radial",
   "category": "audio_viz",
+    "role": "generator",
+    "requires_input": false,
+    "performance_group": "audio_visualizer",
   "description": "Pro radial spectrum analyzer with bars, line, dual ring, mandala, petals, particles",
   "params": [
     { "name": "inner_radius", "label": "Inner Radius", "type": "float", "default": 0.2, "min": 0.05, "max": 0.5, "step": 0.01 },
