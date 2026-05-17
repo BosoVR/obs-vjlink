@@ -1,0 +1,309 @@
+/*
+ * VJLink - Logo Extrude 3D
+ * Pseudo-3D alpha extrusion for user logos. Samples the selected logo slot,
+ * builds side walls from repeated alpha offsets, and shades a bevel/front face.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     bpm;
+uniform float     kick_onset;
+uniform float     onset_strength;
+uniform float     rms;
+uniform float     quality;
+uniform float     has_input_source;
+
+uniform float logo_slot;
+uniform float depth;
+uniform float bevel;
+uniform float size;
+uniform float position_x;
+uniform float position_y;
+uniform float rotation_x;
+uniform float rotation_y;
+uniform float rotation_z;
+uniform float beat_bounce;
+uniform float audio_react;
+uniform float material;
+uniform float glow;
+uniform float alpha_threshold;
+uniform float side_light;
+uniform float edge_darkness;
+uniform float shadow;
+uniform float spin_speed;
+uniform float auto_rotate;
+uniform float perspective;
+uniform float fill_opacity;
+uniform float mesh_kind;
+uniform float mesh_text_lane;
+uniform float mesh_alpha;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+struct VertMeshIn {
+    float4 pos    : POSITION;
+    float3 normal : NORMAL;
+    float2 uv     : TEXCOORD0;
+};
+
+struct VertMeshOut {
+    float4 pos    : POSITION;
+    float2 uv     : TEXCOORD0;
+    float3 normal : TEXCOORD1;
+    float3 local  : TEXCOORD2;
+};
+
+VertMeshOut VSMesh(VertMeshIn vert_in)
+{
+    VertMeshOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv = vert_in.uv;
+    vert_out.normal = normalize(vert_in.normal);
+    vert_out.local = vert_in.pos.xyz;
+    return vert_out;
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+bool isFallback(float4 s)
+{
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.98);
+}
+
+float4 sampleLogoSlot(float slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    float4 chosen = s1;
+
+    int islot = (int)floor(slot + 0.5);
+    if (islot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!isFallback(s2))
+            chosen = s2;
+    } else if (islot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!isFallback(s3))
+            chosen = s3;
+    } else if (isFallback(s1) && has_input_source > 0.5) {
+        chosen = image.Sample(texSampler, uv);
+    }
+
+    return chosen;
+}
+
+float logoCoverage(float2 uv)
+{
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return 0.0;
+
+    float4 s = sampleLogoSlot(logo_slot, uv);
+    float luma = dot(s.rgb, float3(0.299, 0.587, 0.114));
+    float threshold = clamp(alpha_threshold, 0.0, 0.9);
+
+    if (isFallback(s))
+        return 0.0;
+
+    float coverage = max(s.a, luma);
+    coverage = smoothstep(threshold, threshold + 0.08, coverage);
+    return coverage;
+}
+
+float3 materialColor(float mid, float shade, float audio)
+{
+    int m = (int)floor(material + 0.5);
+
+    if (m == 1) {
+        float chrome = 0.35 + 0.65 * pow(saturate(shade), 2.0);
+        return float3(chrome, chrome, chrome) + float3(0.16, 0.18, 0.22) * mid;
+    }
+
+    if (m == 2) {
+        return float3(0.82, 0.80, 0.74) * (0.42 + shade * 0.58);
+    }
+
+    if (m == 3) {
+        return float3(0.20 + audio * 0.15, 0.95, 1.0) * (0.35 + shade * 0.9);
+    }
+
+    return float3(0.92, 0.92, 0.88) * (0.35 + shade * 0.75);
+}
+
+float4 PSLogoExtrude3DMesh(VertMeshOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float4 logo_sample = sampleLogoSlot(logo_slot, uv);
+    float lum = dot(logo_sample.rgb, float3(0.299, 0.587, 0.114));
+    float threshold = clamp(alpha_threshold, 0.0, 0.9);
+    float coverage = isFallback(logo_sample) ? 0.0 : smoothstep(threshold, threshold + 0.08, max(logo_sample.a, lum));
+
+    clip(coverage - 0.015);
+
+    float bass = max(bands.x, bands_raw.x);
+    float high = max(bands.z, bands.w);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(kick_onset, beat * bass);
+    float3 n = normalize(vert_in.normal);
+    float3 light_dir = normalize(float3(-0.35, 0.55, -0.72));
+    float diffuse = saturate(dot(n, -light_dir)) * 0.70 + 0.22;
+    float rim = pow(1.0 - saturate(abs(n.z)), 1.7) * (0.30 + bevel * 0.45);
+    float side = 1.0 - smoothstep(0.68, 0.94, abs(n.z));
+    float shade = diffuse + rim + hit * audio_react * 0.12;
+
+    float3 front_col = materialColor(lum, shade + 0.25, high * audio_react);
+    front_col = lerp(front_col, max(logo_sample.rgb, front_col), saturate(fill_opacity));
+    float3 side_col = materialColor(lum, shade * 0.62, high * audio_react);
+    side_col *= 0.42 + side_light * 0.32;
+    side_col *= 1.0 - saturate(edge_darkness) * side * 0.35;
+
+    float3 col = lerp(front_col, side_col, side);
+    col += float3(1.0, 1.0, 1.0) * rim * (0.12 + glow * 0.08);
+    col += materialColor(1.0, 1.0, high * audio_react) * coverage * glow * (0.05 + hit * 0.07);
+
+    return float4(saturate(col), coverage * saturate(mesh_alpha));
+}
+
+float4 PSLogoExtrude3D(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float aspect = resolution.x / max(resolution.y, 1.0);
+
+    float bass = max(bands.x, bands_raw.x);
+    float high = max(bands.z, bands.w);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(kick_onset, beat * bass);
+    float ad = max(audio_react, 0.0);
+
+    float bounce = (beat_bounce > 0.5) ? hit * 0.18 * ad : 0.0;
+    float s = max(size, 0.05) * (1.0 + bounce);
+    float d = max(depth, 0.0) * (1.0 + hit * 0.35 * ad);
+
+    float rx = (rotation_x + sin(time * 0.31) * auto_rotate * 10.0) * 0.0174532925;
+    float ry = (rotation_y + cos(time * 0.27) * auto_rotate * 12.0) * 0.0174532925;
+    float rz = (rotation_z + time * spin_speed * 60.0) * 0.0174532925;
+
+    float2 p = uv - 0.5;
+    p.x *= aspect;
+    p -= float2(position_x * aspect, position_y);
+
+    float cs = cos(-rz);
+    float sn = sin(-rz);
+    p = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+
+    float tilt_x = cos(rx);
+    float tilt_y = cos(ry);
+    p.y /= max(0.35, abs(tilt_x));
+    p.x /= max(0.35, abs(tilt_y));
+
+    float2 front_uv = p / s + 0.5;
+    float front = logoCoverage(front_uv);
+
+    float2 extrude_dir = normalize(float2(sin(ry) * 1.2 + 0.22, -sin(rx) * 1.1 + 0.18));
+    float2 px = 1.0 / max(resolution, float2(1.0, 1.0));
+    float parallax = clamp(perspective, 0.0, 1.0);
+    float2 step_dir = extrude_dir * d * (0.018 + parallax * 0.022);
+
+    float side = 0.0;
+    float side_depth = 0.0;
+    float rim = 0.0;
+    int max_steps = (quality < 0.5) ? 14 : ((quality < 1.5) ? 22 : 30);
+    for (int i = 1; i <= 30; i++) {
+        if (i > max_steps)
+            break;
+        float t = (float)i / (float)max_steps;
+        float2 suv = front_uv + step_dir * t / max(s, 0.05);
+        float c = logoCoverage(suv);
+        side = max(side, c * (1.0 - t * 0.55));
+        side_depth += c * (1.0 - t) / (float)max_steps;
+    }
+
+    float b = max(bevel, 0.0);
+    if (b > 0.001) {
+        float2 e = px * (2.0 + b * 7.0) / max(s, 0.05);
+        float edge = 0.0;
+        edge = max(edge, abs(front - logoCoverage(front_uv + float2(e.x, 0.0))));
+        edge = max(edge, abs(front - logoCoverage(front_uv - float2(e.x, 0.0))));
+        edge = max(edge, abs(front - logoCoverage(front_uv + float2(0.0, e.y))));
+        edge = max(edge, abs(front - logoCoverage(front_uv - float2(0.0, e.y))));
+        rim = saturate(edge * (0.65 + b * 2.5));
+    }
+
+    float4 logo_sample = sampleLogoSlot(logo_slot, saturate(front_uv));
+    float luma = dot(logo_sample.rgb, float3(0.299, 0.587, 0.114));
+    float shade = saturate(0.35 + side_light * 0.45 + dot(extrude_dir, normalize(float2(-0.4, -0.9))) * 0.25);
+    shade += rim * (0.45 + high * 0.25 * ad);
+
+    float3 front_col = materialColor(luma, shade + 0.3, high * ad);
+    front_col = lerp(front_col, max(logo_sample.rgb, front_col), saturate(fill_opacity));
+    float3 side_col = materialColor(luma, shade * 0.65, high * ad) * (0.55 + side_depth * 0.8);
+    side_col *= 1.0 - saturate(edge_darkness) * 0.45;
+
+    float3 col = side_col * side + front_col * front;
+    col += float3(1.0, 1.0, 1.0) * rim * front * (0.18 + bevel * 0.25);
+
+    float dist = length(p / max(s, 0.05));
+    float glow_mask = exp(-dist * 2.2) * max(front, side);
+    col += materialColor(1.0, 1.0, high * ad) * glow_mask * max(glow, 0.0) * (0.10 + hit * 0.18 * ad);
+
+    float shadow_mask = 0.0;
+    if (shadow > 0.001) {
+        float2 shadow_uv = front_uv + float2(0.045, 0.065) * (0.4 + d);
+        shadow_mask = logoCoverage(shadow_uv) * smoothstep(1.6, 0.2, dist);
+        col += float3(0.0, 0.0, 0.0) * shadow_mask;
+    }
+
+    float grain = hash21(uv * resolution + floor(time * 30.0));
+    col += (grain - 0.5) * 0.025 * (0.3 + ad * rms);
+
+    float alpha = saturate(max(front, side) + glow_mask * glow * 0.25 + shadow_mask * shadow * 0.5);
+    col = saturate(col);
+    return float4(col, alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSLogoExtrude3D(vert_in);
+    }
+}
+
+technique DrawMesh
+{
+    pass
+    {
+        vertex_shader = VSMesh(vert_in);
+        pixel_shader  = PSLogoExtrude3DMesh(vert_in);
+    }
+}

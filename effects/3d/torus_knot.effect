@@ -25,6 +25,11 @@ uniform float knot_p;          /* knot parameter p (default 3) */
 uniform float knot_q;          /* knot parameter q (default 2) */
 uniform float knot_radius;     /* major radius (default 2.0) */
 uniform float tube_radius;     /* tube radius (default 0.4) */
+uniform float rotation_speed;  /* camera orbit speed (default 0.25) */
+uniform float camera_distance; /* camera distance (default 5.0) */
+uniform float camera_height;   /* camera height (default 2.0) */
+uniform float beat_pulse;      /* beat tube pulse amount (default 0.45) */
+uniform float deform_amount;   /* audio deformation amount (default 1.0) */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -60,7 +65,8 @@ float3 knotPoint(float t, float pp, float qq, float R)
 float sdTorusKnot(float3 p, float pp, float qq, float R, float tubeR)
 {
     float minDist = 1e10;
-    float bass_warp = bands.x * 0.3;
+    float drive = max(audio_drive, 0.0);
+    float bass_warp = bands.x * drive * max(deform_amount, 0.0) * 0.3;
 
     for (int i = 0; i < 32; i++) {
         float t = float(i) / 32.0 * 6.28318;
@@ -85,7 +91,7 @@ float sceneSDF(float3 p)
     /* Beat pulse on tube radius */
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
-    tubeR += beat * 0.15;
+    tubeR += beat * max(audio_drive, 0.0) * max(beat_pulse, 0.0) * 0.33;
 
     return sdTorusKnot(p, pp, qq, R, tubeR);
 }
@@ -107,8 +113,13 @@ float4 PSTorusKnot(VertInOut vert_in) : TARGET
     p.x *= resolution.x / resolution.y;
 
     /* Orbiting camera */
-    float angle = time * 0.4;
-    float3 ro = float3(cos(angle) * 5.0, sin(time * 0.3) * 2.0, sin(angle) * 5.0);
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float treble = bands.w * drive;
+    float angle = time * max(rotation_speed, 0.0) + bass * 0.2;
+    float dist = max(camera_distance, 2.0);
+    float height = camera_height + sin(time * 0.3) * 0.6 * drive;
+    float3 ro = float3(cos(angle) * dist, height, sin(angle) * dist);
     float3 ta = float3(0.0, 0.0, 0.0);
 
     float3 ww = normalize(ta - ro);
@@ -131,7 +142,7 @@ float4 PSTorusKnot(VertInOut vert_in) : TARGET
             float3 n = calcNormal(pos);
             float3 light = normalize(float3(0.6, 0.8, -0.4));
             float diff = max(dot(n, light), 0.0);
-            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 16.0 + bands.w * 48.0);
+            float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 16.0 + treble * 48.0);
 
             /* Iridescent color based on position */
             float hue = frac(atan2(pos.z, pos.x) * 0.5 / 3.14159 + time * 0.1);
@@ -150,23 +161,11 @@ float4 PSTorusKnot(VertInOut vert_in) : TARGET
     }
 
     /* Glow */
-    float3 glow_col = float3(0.4 + bands.y * 0.6, 0.2, 0.6 + bands.z * 0.4);
+    float3 glow_col = float3(0.4 + bands.y * drive * 0.6, 0.2, 0.6 + bands.z * drive * 0.4);
     color += glow_col * glow * 0.01;
 
     color = color / (1.0 + color);
-    /* HDR Reinhard polish */
-
-    float3 _vjp_c = saturate((color) / (1.0 + (color) * 0.4));
-
-    /* Saturation boost */
-
-    float _vjp_lum = dot(_vjp_c, float3(0.299, 0.587, 0.114));
-
-    _vjp_c = lerp(float3(_vjp_lum, _vjp_lum, _vjp_lum), _vjp_c, 1.18);
-
-    _vjp_c = saturate(_vjp_c);
-
-    return float4(_vjp_c, max(max(max(_vjp_c.r, _vjp_c.g), _vjp_c.b), 0.0));
+    return float4(color, 1.0);
 }
 
 technique Draw

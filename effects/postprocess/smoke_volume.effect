@@ -65,9 +65,12 @@ float4 PSSmokeVolume(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float bass_raw = bands_raw.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float bass_raw = bands_raw.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.6);
 
     float bs = beat_sync;
     float beat;
@@ -129,11 +132,11 @@ float4 PSSmokeVolume(VertInOut vert_in) : TARGET
 
     /* Center kick glow */
     float r = length(p);
-    float kick_glow = exp(-r * 2.0) * kick_onset * 0.6;
+    float kick_glow = exp(-r * 2.0) * kick * 0.6;
     col += light_color * kick_glow;
 
     /* Onset overall flash through smoke */
-    col += light_color * onset_strength * 0.18 * (smoke + 0.3);
+    col += light_color * onset * 0.18 * (smoke + 0.3);
 
     /* Edge vignette */
     col *= smoothstep(2.0, 0.4, r);

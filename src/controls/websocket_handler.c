@@ -6,6 +6,8 @@
 #include "controls/source_trigger.h"
 #include "controls/osc_sender.h"
 #include "rendering/media_layer.h"
+#include "state/vjlink_state.h"
+#include "presets/cjson/cJSON.h"
 #include <obs-module.h>
 #include <string.h>
 #include <stdio.h>
@@ -335,6 +337,9 @@ static void handle_get_state(obs_data_t *request_data,
 	obs_data_set_double(response_data, "macro_speed", (double)ctx->macro_speed);
 	obs_data_set_double(response_data, "macro_color", (double)ctx->macro_color);
 	obs_data_set_double(response_data, "strobe_safety", (double)ctx->strobe_safety_max);
+	obs_data_set_double(response_data, "pad_trigger", (double)ctx->pad_trigger);
+	obs_data_set_double(response_data, "pad_velocity", (double)ctx->pad_velocity);
+	obs_data_set_int(response_data, "pad_index", ctx->pad_index);
 	obs_data_set_double(response_data, "kick_onset", (double)ctx->kick_onset);
 	obs_data_set_double(response_data, "snare_onset", (double)ctx->snare_onset);
 	obs_data_set_double(response_data, "hat_onset", (double)ctx->hat_onset);
@@ -395,6 +400,298 @@ static void handle_get_state(obs_data_t *request_data,
 	}
 }
 
+static void set_state_failure(obs_data_t *response_data, const char *error)
+{
+	obs_data_set_bool(response_data, "success", false);
+	obs_data_set_string(response_data, "error", error ? error : "State request failed");
+}
+
+static void copy_cjson_object_to_obs_data(obs_data_t *data, cJSON *object);
+
+static void set_cjson_value(obs_data_t *data, const char *key, cJSON *value)
+{
+	if (!key || !value)
+		return;
+
+	if (cJSON_IsString(value)) {
+		obs_data_set_string(data, key, value->valuestring);
+	} else if (cJSON_IsBool(value)) {
+		obs_data_set_bool(data, key, cJSON_IsTrue(value));
+	} else if (cJSON_IsNumber(value)) {
+		obs_data_set_double(data, key, value->valuedouble);
+	} else if (cJSON_IsObject(value)) {
+		obs_data_t *child = obs_data_create();
+		copy_cjson_object_to_obs_data(child, value);
+		obs_data_set_obj(data, key, child);
+		obs_data_release(child);
+	} else if (cJSON_IsArray(value)) {
+		obs_data_array_t *arr = obs_data_array_create();
+		cJSON *item;
+		cJSON_ArrayForEach(item, value) {
+			obs_data_t *child = obs_data_create();
+			if (cJSON_IsObject(item)) {
+				copy_cjson_object_to_obs_data(child, item);
+			} else {
+				set_cjson_value(child, "value", item);
+			}
+			obs_data_array_push_back(arr, child);
+			obs_data_release(child);
+		}
+		obs_data_set_array(data, key, arr);
+		obs_data_array_release(arr);
+	}
+}
+
+static void copy_cjson_object_to_obs_data(obs_data_t *data, cJSON *object)
+{
+	cJSON *item;
+	if (!data || !cJSON_IsObject(object))
+		return;
+
+	for (item = object->child; item; item = item->next)
+		set_cjson_value(data, item->string, item);
+}
+
+static bool set_state_json_response(obs_data_t *response_data)
+{
+	char *json = NULL;
+	cJSON *root;
+
+	if (!vjlink_state_export_json(&json) || !json)
+		return false;
+
+	root = cJSON_Parse(json);
+	if (!root) {
+		bfree(json);
+		return false;
+	}
+
+	copy_cjson_object_to_obs_data(response_data, root);
+	obs_data_set_string(response_data, "state_json", json);
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	cJSON_Delete(root);
+	bfree(json);
+	return true;
+}
+
+static char *extract_state_json_from_request(obs_data_t *request_data)
+{
+	const char *state_json = obs_data_get_string(request_data, "state_json");
+	obs_data_t *state_obj = NULL;
+	const char *json = NULL;
+	char *copy = NULL;
+
+	if (state_json && *state_json)
+		return bstrdup(state_json);
+
+	state_obj = obs_data_get_obj(request_data, "state");
+	if (!state_obj)
+		state_obj = obs_data_get_obj(request_data, "settings");
+	if (state_obj) {
+		json = obs_data_get_json(state_obj);
+		if (json && *json)
+			copy = bstrdup(json);
+		obs_data_release(state_obj);
+		return copy;
+	}
+
+	json = obs_data_get_json(request_data);
+	return (json && *json) ? bstrdup(json) : NULL;
+}
+
+static void handle_get_full_state(obs_data_t *request_data,
+                                   obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(request_data);
+	UNUSED_PARAMETER(priv);
+
+	if (!set_state_json_response(response_data))
+		set_state_failure(response_data, "Could not export state");
+}
+
+static void handle_set_full_state(obs_data_t *request_data,
+                                   obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	char *json = extract_state_json_from_request(request_data);
+	if (!json) {
+		set_state_failure(response_data, "Missing state payload");
+		return;
+	}
+
+	if (!vjlink_state_apply_json(json)) {
+		bfree(json);
+		set_state_failure(response_data, "Invalid state payload");
+		return;
+	}
+	bfree(json);
+
+	if (!vjlink_state_save_default()) {
+		set_state_failure(response_data, "State applied but could not be saved");
+		return;
+	}
+
+	if (!set_state_json_response(response_data))
+		set_state_failure(response_data, "State applied but could not be exported");
+}
+
+static void handle_save_state(obs_data_t *request_data,
+                               obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(request_data);
+	UNUSED_PARAMETER(priv);
+
+	if (!vjlink_state_save_default()) {
+		set_state_failure(response_data, "Could not save state");
+		return;
+	}
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	obs_data_set_string(response_data, "state_path",
+	                    vjlink_state_get_path());
+}
+
+static void handle_load_state(obs_data_t *request_data,
+                               obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(request_data);
+	UNUSED_PARAMETER(priv);
+
+	if (!vjlink_state_load_default()) {
+		set_state_failure(response_data, "Could not load state");
+		return;
+	}
+
+	if (!set_state_json_response(response_data))
+		set_state_failure(response_data, "Could not export loaded state");
+}
+
+static void handle_list_profiles(obs_data_t *request_data,
+                                  obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(request_data);
+	UNUSED_PARAMETER(priv);
+	char **names = NULL;
+	uint32_t count = 0;
+	obs_data_array_t *arr = obs_data_array_create();
+
+	if (!vjlink_state_list_profiles(&names, &count)) {
+		obs_data_array_release(arr);
+		set_state_failure(response_data, "Could not list profiles");
+		return;
+	}
+
+	for (uint32_t i = 0; i < count; i++) {
+		obs_data_t *item = obs_data_create();
+		obs_data_set_string(item, "name", names[i] ? names[i] : "");
+		obs_data_array_push_back(arr, item);
+		obs_data_release(item);
+	}
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	obs_data_set_array(response_data, "profiles", arr);
+	obs_data_array_release(arr);
+	vjlink_state_free_profile_list(names, count);
+}
+
+static void handle_save_profile_v2(obs_data_t *request_data,
+                                    obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	const char *name = obs_data_get_string(request_data, "name");
+	char *json = extract_state_json_from_request(request_data);
+
+	if (!name || !*name)
+		name = obs_data_get_string(request_data, "profile_name");
+	if (!name || !*name) {
+		bfree(json);
+		set_state_failure(response_data, "Missing profile name");
+		return;
+	}
+	if (!json) {
+		set_state_failure(response_data, "Missing profile state");
+		return;
+	}
+	if (!vjlink_state_save_profile(name, json)) {
+		bfree(json);
+		set_state_failure(response_data, "Could not save profile");
+		return;
+	}
+
+	bfree(json);
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	obs_data_set_string(response_data, "name", name);
+}
+
+static void handle_load_profile_v2(obs_data_t *request_data,
+                                    obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	const char *name = obs_data_get_string(request_data, "name");
+	char *json = NULL;
+	cJSON *root;
+
+	if (!name || !*name)
+		name = obs_data_get_string(request_data, "profile_name");
+	if (!name || !*name) {
+		set_state_failure(response_data, "Missing profile name");
+		return;
+	}
+	if (!vjlink_state_load_profile(name, &json) || !json) {
+		set_state_failure(response_data, "Could not load profile");
+		return;
+	}
+
+	root = cJSON_Parse(json);
+	if (!root) {
+		bfree(json);
+		set_state_failure(response_data, "Profile JSON is invalid");
+		return;
+	}
+
+	copy_cjson_object_to_obs_data(response_data, root);
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	obs_data_set_string(response_data, "name", name);
+	obs_data_set_string(response_data, "state_json", json);
+	obs_data_set_bool(response_data, "applied", false);
+	cJSON_Delete(root);
+	bfree(json);
+}
+
+static void handle_delete_profile_v2(obs_data_t *request_data,
+                                      obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	const char *name = obs_data_get_string(request_data, "name");
+
+	if (!name || !*name)
+		name = obs_data_get_string(request_data, "profile_name");
+	if (!name || !*name) {
+		set_state_failure(response_data, "Missing profile name");
+		return;
+	}
+
+	if (!vjlink_state_delete_profile(name)) {
+		set_state_failure(response_data, "Could not delete profile");
+		return;
+	}
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "schema_version",
+	                 VJLINK_STATE_SCHEMA_VERSION);
+	obs_data_set_string(response_data, "name", name);
+}
+
 /* --- Band Effect Handlers --- */
 
 static void handle_set_band_effect(obs_data_t *request_data,
@@ -419,11 +716,26 @@ static void handle_set_band_effect(obs_data_t *request_data,
 		? (float)obs_data_get_double(request_data, "release") : 0.18f;
 	float hold = obs_data_has_user_value(request_data, "hold")
 		? (float)obs_data_get_double(request_data, "hold") : 6.0f;
+	int blend_mode = obs_data_has_user_value(request_data, "blend_mode")
+		? (int)obs_data_get_int(request_data, "blend_mode") : VJLINK_BLEND_ADD;
+	float blend_alpha = obs_data_has_user_value(request_data, "blend_alpha")
+		? (float)obs_data_get_double(request_data, "blend_alpha") : 1.0f;
 
 	vjlink_band_effects_set_slot(ctx->active_band_fx, band,
 	                              effect_id, threshold, intensity);
 	vjlink_band_effects_set_slot_response(ctx->active_band_fx, band,
 	                                       attack, release, hold);
+	if (band >= 0 && band < VJLINK_NUM_BANDS) {
+		struct vjlink_band_slot *slot = &ctx->active_band_fx->slots[band];
+		if (blend_mode < VJLINK_BLEND_NORMAL || blend_mode > VJLINK_BLEND_SCREEN)
+			blend_mode = VJLINK_BLEND_ADD;
+		if (blend_alpha < 0.0f)
+			blend_alpha = 0.0f;
+		if (blend_alpha > 1.0f)
+			blend_alpha = 1.0f;
+		slot->blend_mode = (enum vjlink_blend_mode)blend_mode;
+		slot->blend_alpha = blend_alpha;
+	}
 
 	obs_data_set_bool(response_data, "success", true);
 	blog(LOG_INFO, "[VJLink] WebSocket: band %d effect set to '%s'",
@@ -452,6 +764,8 @@ static void handle_get_band_effects(obs_data_t *request_data,
 			obs_data_set_double(band_data, "attack", (double)s->attack);
 			obs_data_set_double(band_data, "release", (double)s->release);
 			obs_data_set_double(band_data, "hold", (double)s->hold_frames);
+			obs_data_set_int(band_data, "blend_mode", (int)s->blend_mode);
+			obs_data_set_double(band_data, "blend_alpha", (double)s->blend_alpha);
 			obs_data_set_bool(band_data, "enabled", s->enabled);
 			obs_data_set_double(band_data, "activation",
 			                    (double)s->current_activation);
@@ -913,6 +1227,37 @@ static void handle_set_macros(obs_data_t *request_data,
 	obs_data_set_bool(response_data, "success", true);
 }
 
+static void handle_set_pad_state(obs_data_t *request_data,
+                                  obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+	struct vjlink_context *ctx = vjlink_get_context();
+
+	int index = (int)obs_data_get_int(request_data, "index");
+	bool down = obs_data_has_user_value(request_data, "down")
+		? obs_data_get_bool(request_data, "down") : true;
+	double velocity = obs_data_has_user_value(request_data, "velocity")
+		? obs_data_get_double(request_data, "velocity") : 1.0;
+
+	if (index < 0)
+		index = 0;
+	if (index > 127)
+		index = 127;
+	if (velocity < 0.0)
+		velocity = 0.0;
+	if (velocity > 1.0)
+		velocity = 1.0;
+
+	ctx->pad_index = down ? index : -1;
+	ctx->pad_trigger = down ? 1.0f : 0.0f;
+	ctx->pad_velocity = down ? (float)velocity : 0.0f;
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_int(response_data, "pad_index", ctx->pad_index);
+	obs_data_set_double(response_data, "pad_trigger", (double)ctx->pad_trigger);
+	obs_data_set_double(response_data, "pad_velocity", (double)ctx->pad_velocity);
+}
+
 /* --- Band Effect Params --- */
 
 static void handle_set_band_param(obs_data_t *request_data,
@@ -1020,6 +1365,22 @@ static void register_all_requests(void)
 	                        handle_blackout, NULL);
 	vendor_request_register(g_vendor, "GetState",
 	                        handle_get_state, NULL);
+	vendor_request_register(g_vendor, "GetFullState",
+	                        handle_get_full_state, NULL);
+	vendor_request_register(g_vendor, "SetFullState",
+	                        handle_set_full_state, NULL);
+	vendor_request_register(g_vendor, "SaveState",
+	                        handle_save_state, NULL);
+	vendor_request_register(g_vendor, "LoadState",
+	                        handle_load_state, NULL);
+	vendor_request_register(g_vendor, "ListProfiles",
+	                        handle_list_profiles, NULL);
+	vendor_request_register(g_vendor, "SaveProfileV2",
+	                        handle_save_profile_v2, NULL);
+	vendor_request_register(g_vendor, "LoadProfileV2",
+	                        handle_load_profile_v2, NULL);
+	vendor_request_register(g_vendor, "DeleteProfileV2",
+	                        handle_delete_profile_v2, NULL);
 	vendor_request_register(g_vendor, "SetBandEffect",
 	                        handle_set_band_effect, NULL);
 	vendor_request_register(g_vendor, "GetBandEffects",
@@ -1050,6 +1411,8 @@ static void register_all_requests(void)
 	                        handle_set_palette, NULL);
 	vendor_request_register(g_vendor, "SetMacros",
 	                        handle_set_macros, NULL);
+	vendor_request_register(g_vendor, "SetPadState",
+	                        handle_set_pad_state, NULL);
 	vendor_request_register(g_vendor, "SetLogo",
 	                        handle_set_logo, NULL);
 	vendor_request_register(g_vendor, "SetTransparentBg",
@@ -1078,7 +1441,7 @@ void vjlink_websocket_init(void)
 	g_ws_available = true;
 
 	blog(LOG_INFO,
-	     "[VJLink] WebSocket vendor registered (19 request types)");
+	     "[VJLink] WebSocket vendor registered (29 request types)");
 }
 
 /* Called after all OBS modules have loaded (from plugin post-load event) */
@@ -1099,7 +1462,7 @@ void vjlink_websocket_late_init(void)
 	g_ws_available = true;
 
 	blog(LOG_INFO,
-	     "[VJLink] WebSocket vendor registered late (18 request types)");
+	     "[VJLink] WebSocket vendor registered late (29 request types)");
 }
 
 void vjlink_websocket_shutdown(void)

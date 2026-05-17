@@ -77,9 +77,12 @@ float4 PSLiquidMetal(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float treble = bands.w * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
     float t = time * flow_speed * 0.4;
@@ -132,15 +135,15 @@ float4 PSLiquidMetal(VertInOut vert_in) : TARGET
 
     /* Kick shockwave: ring expanding from center */
     float r = length(p);
-    float wave_r = kick_onset * 1.6;
-    float wave = exp(-abs(r - wave_r) * 6.0) * kick_onset * 0.4;
+    float wave_r = kick * 1.6;
+    float wave = exp(-abs(r - wave_r) * 6.0) * kick * 0.4;
     col += palette_metal((int)palette_id, 0.9) * wave;
 
     /* Beat brightening */
     col *= 1.0 + beat_4 * bass * 0.18 * drive;
 
     /* Onset highlight */
-    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.12;
+    col += float3(1.0, 0.95, 1.0) * onset * 0.12;
 
     /* Vignette */
     col *= smoothstep(2.4, 0.5, r);

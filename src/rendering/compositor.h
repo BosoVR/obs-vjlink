@@ -35,6 +35,9 @@ struct vjlink_compositor {
 	/* Per-band effect system */
 	struct vjlink_band_effects band_fx;
 
+	/* Native GS 3D meshes for true perspective/depth effects */
+	struct vjlink_engine3d *engine3d;
+
 	/* Blend effect for compositing layers */
 	gs_effect_t    *blend_effect;
 

@@ -20,12 +20,21 @@ uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float sharpness;
 uniform float flash_color_r;
 uniform float flash_color_g;
 uniform float flash_color_b;
+uniform float trigger_threshold;
+uniform float decay_speed;
+uniform float ring_amount;
+uniform float beam_amount;
+uniform float invert_flash;
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -53,17 +62,38 @@ float4 PSFlashSnare(VertInOut vert_in) : TARGET
 
     float3 flash_col = float3(flash_color_r, flash_color_g, flash_color_b);
 
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float high_mid_hit = max(snare_onset, max(bands.z * 0.70, bands_raw.z * 0.95));
+    float raw_trigger = max(band_activation, max(high_mid_hit, pad));
+    float threshold = clamp(trigger_threshold, 0.0, 0.95);
+    float trigger = smoothstep(threshold, 1.0, raw_trigger) * max(audio_drive, 0.0) *
+        lerp(0.85, 1.5, macro_energy);
+    trigger = saturate(trigger);
+
     /* Sharp power curve for snappy response */
     float sharp = max(sharpness, 1.0);
-    float envelope = pow(band_activation, sharp);
+    float envelope = pow(trigger, sharp);
 
     /* Quick cutoff for snappy feel */
-    envelope = smoothstep(0.1, 0.4, envelope);
+    envelope = smoothstep(0.04, 0.38, envelope);
+    envelope = pow(envelope, max(decay_speed, 0.25));
 
-    float strength = envelope * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = envelope *
+        ( intensity > 0.01 ? saturate(intensity) : 1.0 ) *
+        safety;
+
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * float2(aspect, 1.0);
+    float ring = exp(-abs(length(p) - (0.18 + trigger * 0.12)) * 28.0) * saturate(ring_amount);
+    float beam = exp(-abs(frac((uv.y + time * 0.08) * (8.0 + sharp * 2.0)) - 0.5) * 22.0) * saturate(beam_amount);
+    float flash_shape = saturate(strength + ring * strength * 0.85 + beam * strength * 0.55);
 
     /* Screen blend for brightness */
-    float3 color = saturate(1.0 - (1.0 - src.rgb) * (1.0 - flash_col * strength));
+    float3 color = saturate(1.0 - (1.0 - src.rgb) * (1.0 - flash_col * flash_shape));
+    if (invert_flash > 0.5) {
+        color = lerp(color, 1.0 - src.rgb, flash_shape);
+    }
     float out_alpha = max(max(color.r, color.g), color.b);
     /* HDR Reinhard polish */
 

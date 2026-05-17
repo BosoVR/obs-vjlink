@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(obs-vjlink VERSION 1.0.0 LANGUAGES C CXX)
+project(obs-vjlink VERSION 1.4.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -50,6 +50,7 @@ endif()
 set(VJLINK_SOURCES
     src/plugin-main.c
     src/vjlink_context.c
+    src/state/vjlink_state.c
     # Audio
     src/audio/audio_engine.c
     src/audio/audio_texture.c
@@ -84,6 +85,7 @@ set(VJLINK_SOURCES
 
 set(VJLINK_HEADERS
     src/vjlink_context.h
+    src/state/vjlink_state.h
     src/audio/audio_engine.h
     src/audio/audio_texture.h
     src/audio/bpm_detector.h

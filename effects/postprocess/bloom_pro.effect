@@ -21,6 +21,9 @@ uniform float intensity;          /* 0 - 4, default 1.4 */
 uniform float radius;             /* 0.5 - 5, default 1.5 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float palette_tint;       /* 0 - 1, default 0.0 (pure bloom) */
+uniform float mix_amount;         /* 0 - 1 */
+uniform float source_gain;        /* 0 - 2 */
+uniform float soft_clip;          /* 0 - 1 */
 uniform float has_input_source;
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
@@ -44,6 +47,7 @@ float3 palette_bloom(int pid, float t) {
 }
 
 float lum(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+float hash21(float2 p) { p = frac(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return frac(p.x * p.y); }
 
 /* Bright-pass: extracts pixels above threshold */
 float3 brightPass(float3 c, float thresh)
@@ -105,24 +109,32 @@ float4 PSBloom(VertInOut vert_in) : TARGET
     float2 uv = vert_in.uv;
     bool has_input = (has_input_source > 0.5);
 
-    if (!has_input) {
-        /* No input: nothing to bloom */
-        return float4(0.0, 0.0, 0.0, 0.0);
-    }
-
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    /* Original */
+    /* Original or standalone preview source */
     float4 src = image.Sample(texSampler, uv);
+    if (!has_input) {
+        float aspect = resolution.x / max(resolution.y, 1.0);
+        float2 p = (uv - 0.5) * float2(aspect, 1.0);
+        float rings = exp(-abs(frac(length(p) * (8.0 + bass * 6.0) - time * 0.35) - 0.5) * 12.0);
+        float beams = exp(-abs(frac((uv.x + uv.y * 0.7) * 5.0 - time * 0.18) - 0.5) * 14.0);
+        float blocks = step(0.94 - bass * 0.05, hash21(floor(uv * float2(18.0, 10.0)) + floor(time * 4.0)));
+        float3 tint = palette_bloom((int)palette_id, time * 0.05);
+        src = float4(tint * (rings * 0.75 + beams * 0.45 + blocks * 0.35), saturate(rings + beams + blocks));
+    }
+    src.rgb *= max(source_gain, 0.0);
 
     /* Bloom */
     float r = max(radius, 0.5) * (1.0 + beat_4 * bass * 0.4);
     float3 bloom = sampleBloom(uv, r);
 
     /* Beat-driven intensity */
-    float ints = max(intensity, 0.0) * (1.0 + kick_onset * 0.6 + onset_strength * 0.3);
+    float ints = max(intensity, 0.0) * (1.0 + kick * 0.6 + onset * 0.3);
     bloom *= ints * (0.7 + drive * 0.5);
 
     /* Optional palette tint on the bloom (0=pure white-ish bloom) */
@@ -133,10 +145,11 @@ float4 PSBloom(VertInOut vert_in) : TARGET
     }
 
     /* Composite: additive over original */
-    float3 col = src.rgb + bloom;
+    float mixv = mix_amount > 0.001 ? saturate(mix_amount) : 1.0;
+    float3 col = lerp(src.rgb, src.rgb + bloom, mixv);
 
     /* Soft tonemap for HDR safety */
-    col = col / (1.0 + col * 0.35);
+    col = lerp(col, col / (1.0 + col * 0.35), saturate(soft_clip));
     col = saturate(col);
 
     return float4(col, src.a);

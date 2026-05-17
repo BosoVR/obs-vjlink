@@ -52,9 +52,12 @@ float4 PSParticleStorm(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.7);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float treble = bands.w * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.7);
     float beat = pow(1.0 - beat_phase, 3.0);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
@@ -96,7 +99,7 @@ float4 PSParticleStorm(VertInOut vert_in) : TARGET
 
         float dist = length(cell_f - ppos);
         /* Particle size varies + grows on kick */
-        float size = 0.04 + seed * 0.06 + kick_onset * 0.025;
+        float size = 0.04 + seed * 0.06 + kick * 0.025;
         float particle = exp(-dist / size * 6.0) * exists;
 
         /* Tail/trail */
@@ -114,11 +117,11 @@ float4 PSParticleStorm(VertInOut vert_in) : TARGET
 
     /* Beat burst — bright streak shockwave from center on kick */
     float r = length(p);
-    float burst = exp(-abs(r - kick_onset * 0.8) * 8.0) * kick_onset * 0.5;
+    float burst = exp(-abs(r - kick * 0.8) * 8.0) * kick * 0.5;
     col += palette_storm((int)palette_id, time * 0.1) * burst;
 
     /* Onset whitewash */
-    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.12;
+    col += float3(1.0, 0.95, 1.0) * onset * 0.12;
 
     /* Vignette */
     col *= smoothstep(2.4, 0.4, r);

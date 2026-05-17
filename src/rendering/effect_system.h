@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 /* Maximum number of custom parameters per effect */
-#define VJLINK_MAX_PARAMS 32
+#define VJLINK_MAX_PARAMS 96
 
 /* Maximum registered effects */
 #define VJLINK_MAX_REGISTERED_EFFECTS 128
@@ -84,6 +84,14 @@ struct vjlink_effect_entry {
 	gs_eparam_t     *p_palette_id;
 	gs_eparam_t     *p_quality;
 	gs_eparam_t     *p_band_activation;
+	gs_eparam_t     *p_macro_energy;
+	gs_eparam_t     *p_macro_chaos;
+	gs_eparam_t     *p_macro_speed;
+	gs_eparam_t     *p_macro_color;
+	gs_eparam_t     *p_strobe_safety;
+	gs_eparam_t     *p_pad_trigger;
+	gs_eparam_t     *p_pad_velocity;
+	gs_eparam_t     *p_pad_index;
 	gs_eparam_t     *p_has_input;     /* "has_input_source" uniform */
 	gs_eparam_t     *p_logo_tex;     /* "logo_tex" uniform */
 	gs_eparam_t     *p_logo_tex2;    /* "logo_tex2" uniform */

@@ -58,9 +58,10 @@ float4 PSMandala(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= resolution.x / max(resolution.y, 1.0);
 
-    float bass = bands.x, low = bands.y, high = bands.z, treble = bands.w;
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad, low = bands.y * ad, high = bands.z * ad, treble = bands.w * ad;
     float beat = pow(1.0 - beat_phase, 3.0);
-    float onset = saturate(onset_strength);
+    float onset = saturate(onset_strength * ad);
 
     float comp    = clamp(complexity, 1.0, 8.0);
     float breathe = max(breathe_speed, 0.0);

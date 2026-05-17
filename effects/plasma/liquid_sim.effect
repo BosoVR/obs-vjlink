@@ -71,13 +71,16 @@ float4 PSLiquidSim(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float bass_raw = bands_raw.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float bass_raw = bands_raw.x * ad;
+    float treble = bands.w * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick_onset * ad * 0.6);
 
     float bs = beat_sync;
     float beat = pow(1.0 - beat_phase, 3.0);
-    float beat_q = (bs < 0.5) ? beat
+    float beat_q = (bs < 0.5) ? 0.0
                   : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
                               : pow(1.0 - beat_1_8, 4.0));
 
@@ -126,7 +129,7 @@ float4 PSLiquidSim(VertInOut vert_in) : TARGET
     col += col_caustic * caustic * caustic_strength * (0.6 + drive * 0.4);
 
     /* Bright caustic sparkle on treble */
-    col += float3(1.0, 1.0, 1.0) * pow(caustic, 2.0) * bands.w * 0.5;
+    col += float3(1.0, 1.0, 1.0) * pow(caustic, 2.0) * treble * 0.5;
 
     /* Kick: ripple pulse from center */
     float r_len = length(p);
@@ -135,7 +138,7 @@ float4 PSLiquidSim(VertInOut vert_in) : TARGET
     col += col_filament * ripple * 0.4;
 
     /* Onset: brighten everything briefly */
-    col *= 1.0 + onset_strength * 0.25;
+    col *= 1.0 + onset * 0.25;
 
     /* Vignette */
     col *= smoothstep(2.4, 0.5, r_len);

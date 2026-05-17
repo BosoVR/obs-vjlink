@@ -1,10 +1,14 @@
 #include "compositor.h"
 #include "effect_system.h"
 #include "band_effects.h"
+#include "rendering/engine3d.h"
 #include "audio/audio_texture.h"
 #include <obs-module.h>
+#include <math.h>
 #include <string.h>
 #include <stdlib.h>
+
+#define VJLINK_DEG_TO_RAD 0.01745329251994329577f
 
 static void create_feedback_buffers(struct vjlink_compositor *comp)
 {
@@ -23,7 +27,7 @@ static void create_chain_render_targets(struct vjlink_compositor *comp)
 	for (uint32_t i = 0; i < VJLINK_MAX_CHAIN; i++) {
 		if (comp->chain[i].output)
 			gs_texrender_destroy(comp->chain[i].output);
-		comp->chain[i].output = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+		comp->chain[i].output = gs_texrender_create(GS_RGBA, GS_Z24_S8);
 	}
 }
 
@@ -67,6 +71,7 @@ struct vjlink_compositor *vjlink_compositor_create_renderer(uint32_t width,
 
 	/* Initialize per-band effect system */
 	vjlink_band_effects_init(&comp->band_fx, width, height);
+	comp->engine3d = vjlink_engine3d_create();
 
 	comp->initialized = true;
 	blog(LOG_INFO, "[VJLink] Compositor renderer created (%ux%u)", width, height);
@@ -116,6 +121,10 @@ void vjlink_compositor_destroy_renderer(struct vjlink_compositor *comp)
 	if (comp->debug_target) {
 		gs_texrender_destroy(comp->debug_target);
 		comp->debug_target = NULL;
+	}
+	if (comp->engine3d) {
+		vjlink_engine3d_destroy(comp->engine3d);
+		comp->engine3d = NULL;
 	}
 
 	vjlink_band_effects_destroy(&comp->band_fx);
@@ -241,6 +250,257 @@ void vjlink_compositor_set_chain_param(struct vjlink_compositor *comp,
 	     param_name, value, node->entry->id, node->entry->param_count);
 }
 
+static float clampf_local(float v, float lo, float hi)
+{
+	return v < lo ? lo : (v > hi ? hi : v);
+}
+
+static float node_param_value(const struct vjlink_effect_node *node,
+                              const char *param_name, float fallback)
+{
+	if (!node || !node->entry || !param_name)
+		return fallback;
+
+	for (uint32_t i = 0; i < node->entry->param_count; i++) {
+		if (strcmp(node->entry->params[i].name, param_name) == 0)
+			return node->param_values[i][0];
+	}
+
+	return fallback;
+}
+
+static bool node_uses_true3d_mesh(const struct vjlink_effect_node *node)
+{
+	if (!node || !node->entry)
+		return false;
+
+	return strcmp(node->entry->id, "logo_extrude_3d") == 0 ||
+	       strcmp(node->entry->id, "halo_text_logo_tunnel") == 0;
+}
+
+static void set_effect_float_by_name(struct vjlink_effect_entry *entry,
+                                     const char *name, float value)
+{
+	if (!entry || !entry->effect || !name)
+		return;
+
+	gs_eparam_t *param = gs_effect_get_param_by_name(entry->effect, name);
+	if (param)
+		gs_effect_set_float(param, value);
+}
+
+static void bind_chain_audio_activation(struct vjlink_effect_entry *entry)
+{
+	if (!entry || !entry->p_band_activation)
+		return;
+
+	struct vjlink_context *ctx = vjlink_get_context();
+	float max_band = ctx->bands[0];
+	for (int b = 1; b < 4; b++) {
+		if (ctx->bands[b] > max_band)
+			max_band = ctx->bands[b];
+	}
+	gs_effect_set_float(entry->p_band_activation, max_band);
+}
+
+static void bind_mesh_controls(struct vjlink_effect_entry *entry,
+                               float kind, float lane, float alpha)
+{
+	set_effect_float_by_name(entry, "mesh_kind", kind);
+	set_effect_float_by_name(entry, "mesh_text_lane", lane);
+	set_effect_float_by_name(entry, "mesh_alpha", alpha);
+}
+
+static void draw_fullscreen_effect_draw(struct vjlink_effect_entry *entry,
+                                        uint32_t width, uint32_t height)
+{
+	if (!entry || !entry->effect)
+		return;
+
+	gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+	gs_matrix_identity();
+	bind_mesh_controls(entry, 0.0f, 0.0f, 1.0f);
+
+	while (gs_effect_loop(entry->effect, "Draw")) {
+		gs_draw_sprite(NULL, 0, width, height);
+	}
+}
+
+static void draw_mesh_object(struct vjlink_effect_entry *entry,
+                             struct vjlink_mesh *mesh,
+                             float kind, float lane, float alpha,
+                             float x, float y, float z,
+                             float sx, float sy, float sz,
+                             float rx, float ry, float rz)
+{
+	if (!entry || !entry->effect || !mesh)
+		return;
+
+	bind_mesh_controls(entry, kind, lane, alpha);
+
+	gs_matrix_push();
+	gs_matrix_identity();
+	gs_matrix_translate3f(x, y, z);
+	gs_matrix_rotaa4f(1.0f, 0.0f, 0.0f, rx);
+	gs_matrix_rotaa4f(0.0f, 1.0f, 0.0f, ry);
+	gs_matrix_rotaa4f(0.0f, 0.0f, 1.0f, rz);
+	gs_matrix_scale3f(sx, sy, sz);
+
+	while (gs_effect_loop(entry->effect, "DrawMesh")) {
+		vjlink_mesh_draw(mesh);
+	}
+
+	gs_matrix_pop();
+}
+
+static bool render_effect_node_3d_scene(struct vjlink_compositor *comp,
+                                        struct vjlink_effect_node *node,
+                                        gs_texture_t *input_tex,
+                                        gs_texture_t *prev_tex,
+                                        bool has_real_input)
+{
+	if (!comp || !node || !node->entry || !node->enabled || !comp->engine3d)
+		return false;
+
+	if (!vjlink_effect_ensure_loaded(node->entry)) {
+		gs_texrender_reset(node->output);
+		if (gs_texrender_begin(node->output, comp->width, comp->height)) {
+			struct vec4 clear_color;
+			vec4_zero(&clear_color);
+			gs_clear(GS_CLEAR_COLOR | GS_CLEAR_DEPTH, &clear_color, 1.0f, 0);
+			gs_texrender_end(node->output);
+		}
+		return true;
+	}
+
+	vjlink_engine3d_create_meshes(comp->engine3d);
+
+	gs_texrender_reset(node->output);
+	if (!gs_texrender_begin(node->output, comp->width, comp->height))
+		return false;
+
+	struct vec4 clear_color;
+	float clear_alpha = comp->transparent_bg ? 0.0f : 1.0f;
+	vec4_set(&clear_color, 0.0f, 0.0f, 0.0f, clear_alpha);
+	gs_clear(GS_CLEAR_COLOR | GS_CLEAR_DEPTH, &clear_color, 1.0f, 0);
+
+	vjlink_effect_bind_uniforms(node->entry, input_tex, prev_tex,
+	                            comp->width, comp->height);
+	if (node->entry->p_has_input)
+		gs_effect_set_float(node->entry->p_has_input,
+		                    has_real_input ? 1.0f : 0.0f);
+	vjlink_effect_bind_custom_params(node->entry,
+		(const float (*)[4])node->param_values);
+	bind_chain_audio_activation(node->entry);
+
+	/* No-black safety: draw the shader's proven fullscreen path first.
+	 * If a GPU/driver rejects the mesh pass, the user still sees a usable
+	 * visual instead of a black frame. Meshes are then layered on top. */
+	gs_blend_state_push();
+	gs_enable_blending(false);
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+	set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.0f);
+	draw_fullscreen_effect_draw(node->entry, comp->width, comp->height);
+	gs_blend_state_pop();
+
+	struct vjlink_context *ctx = vjlink_get_context();
+	float beat = powf(clampf_local(1.0f - ctx->beat_phase, 0.0f, 1.0f), 3.0f);
+	float hit = fmaxf(fmaxf(ctx->kick_onset, ctx->snare_onset * 0.55f),
+	                  beat * ctx->bands[0]);
+	float react = node_param_value(node, "audio_react", 0.8f);
+	float bounce_enabled = node_param_value(node, "beat_bounce", 1.0f) > 0.5f;
+	float bounce = bounce_enabled ? hit * react : 0.0f;
+	float aspect = (float)comp->width / fmaxf((float)comp->height, 1.0f);
+	bool is_halo = strcmp(node->entry->id, "halo_text_logo_tunnel") == 0;
+
+	enum gs_cull_mode old_cull = gs_get_cull_mode();
+	gs_blend_state_push();
+	gs_enable_blending(true);
+	gs_blend_function(GS_BLEND_SRCALPHA, GS_BLEND_INVSRCALPHA);
+	gs_set_cull_mode(GS_NEITHER);
+	gs_enable_depth_test(true);
+	gs_depth_function(GS_LEQUAL);
+
+	gs_perspective(is_halo ? 54.0f : 48.0f, aspect, 0.05f, 100.0f);
+
+	struct vjlink_mesh *cube = vjlink_engine3d_get_mesh(comp->engine3d,
+	                                                    VJLINK_MESH_CUBE);
+
+	if (is_halo) {
+		float ring_count = clampf_local(node_param_value(node, "ring_count", 8.0f),
+		                                1.0f, 10.0f);
+		float ring_speed = node_param_value(node, "ring_speed", 1.15f);
+		float radius = node_param_value(node, "ring_radius", 0.62f);
+		float text_thickness = node_param_value(node, "text_thickness", 0.09f);
+		float logo_size = node_param_value(node, "logo_size", 0.42f);
+		float pulse = node_param_value(node, "beat_pulse", 0.68f);
+		float drift = node_param_value(node, "tunnel_drift", 0.42f);
+		float depth_span = 7.5f + node_param_value(node, "perspective", 0.82f) * 5.0f;
+		int max_rings = (int)ring_count;
+		if (max_rings > 10)
+			max_rings = 10;
+
+		for (int i = max_rings - 1; i >= 0; i--) {
+			float t = (float)i / fmaxf(ring_count - 1.0f, 1.0f);
+			float phase = ctx->elapsed_time * ring_speed * 0.22f + t;
+			float z = 3.2f + t * depth_span - hit * pulse * 1.2f;
+			float lane = (float)((i % 4) + 1);
+			float scale = (1.0f + t * 3.0f) * radius * (1.0f + hit * pulse * 0.15f);
+			float x = sinf(ctx->elapsed_time * 0.38f + i * 1.9f) * drift * 0.18f;
+			float y = cosf(ctx->elapsed_time * 0.31f + i * 1.3f) * drift * 0.12f;
+			float ry = sinf(phase * 1.8f) * 0.36f;
+			float rz = phase * 0.75f;
+			draw_mesh_object(node->entry, cube, 2.0f, lane, 0.80f,
+			                 x, y, z,
+			                 scale * 1.85f, text_thickness * 2.0f, 0.035f,
+			                 0.0f, ry, rz);
+		}
+
+		draw_mesh_object(node->entry, cube, 1.0f, 0.0f, 1.0f,
+		                 0.0f, 0.0f, 2.45f - bounce * 0.35f,
+		                 logo_size * 2.0f * (1.0f + bounce * 0.18f),
+		                 logo_size * 2.0f * (1.0f + bounce * 0.18f),
+		                 0.18f + bounce * 0.18f,
+		                 -12.0f * VJLINK_DEG_TO_RAD,
+		                 (20.0f + sinf(ctx->elapsed_time * 0.6f) * 8.0f) * VJLINK_DEG_TO_RAD,
+		                 sinf(ctx->elapsed_time * 0.17f) * 0.08f);
+	} else {
+		float size = node_param_value(node, "size", 0.38f);
+		float depth = node_param_value(node, "depth", 0.62f);
+		float px = node_param_value(node, "position_x", 0.0f);
+		float py = node_param_value(node, "position_y", 0.0f);
+		float spin = node_param_value(node, "spin_speed", 0.0f);
+		float auto_rotate = node_param_value(node, "auto_rotate", 0.2f);
+		float rx = (node_param_value(node, "rotation_x", -18.0f) +
+		            sinf(ctx->elapsed_time * 0.31f) * auto_rotate * 10.0f) *
+		           VJLINK_DEG_TO_RAD;
+		float ry = (node_param_value(node, "rotation_y", 28.0f) +
+		            cosf(ctx->elapsed_time * 0.27f) * auto_rotate * 12.0f) *
+		           VJLINK_DEG_TO_RAD;
+		float rz = (node_param_value(node, "rotation_z", 0.0f) +
+		            ctx->elapsed_time * spin * 60.0f) * VJLINK_DEG_TO_RAD;
+		float s = size * 3.2f * (1.0f + bounce * 0.16f);
+		float d = 0.18f + depth * 0.42f * (1.0f + hit * react * 0.22f);
+
+		draw_mesh_object(node->entry, cube, 1.0f, 0.0f, 1.0f,
+		                 px * 2.0f, py * 1.2f, 2.65f - bounce * 0.3f,
+		                 s, s, d, rx, ry, rz);
+	}
+
+	gs_enable_depth_test(false);
+	gs_set_cull_mode(old_cull);
+
+	if (is_halo) {
+		set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.42f);
+		draw_fullscreen_effect_draw(node->entry, comp->width, comp->height);
+		set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.0f);
+	}
+
+	gs_blend_state_pop();
+	gs_texrender_end(node->output);
+	return true;
+}
+
 static void render_effect_node(struct vjlink_compositor *comp,
                                struct vjlink_effect_node *node,
                                gs_texture_t *input_tex,
@@ -302,17 +562,8 @@ static void render_effect_node(struct vjlink_compositor *comp,
 		(const float (*)[4])node->param_values);
 
 	/* For flash/strobe effects in the main chain: auto-set band_activation
-	 * from audio so they work without per-band assignment.
-	 * Use max across all bands for broadest trigger. */
-	if (node->entry->p_band_activation) {
-		struct vjlink_context *ctx = vjlink_get_context();
-		float max_band = ctx->bands[0];
-		for (int b = 1; b < 4; b++) {
-			if (ctx->bands[b] > max_band)
-				max_band = ctx->bands[b];
-		}
-		gs_effect_set_float(node->entry->p_band_activation, max_band);
-	}
+	 * from audio so they work without per-band assignment. */
+	bind_chain_audio_activation(node->entry);
 
 	/* Draw full-screen quad with custom effect */
 	while (gs_effect_loop(node->entry->effect, "Draw")) {
@@ -433,8 +684,15 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp,
 			continue;
 
 		bool node_has_input = has_base || (i > 0);
-		render_effect_node(comp, node, prev_output, feedback_tex,
-		                   node_has_input);
+		if (node_uses_true3d_mesh(node)) {
+			if (!render_effect_node_3d_scene(comp, node, prev_output,
+			                                 feedback_tex, node_has_input))
+				render_effect_node(comp, node, prev_output,
+				                   feedback_tex, node_has_input);
+		} else {
+			render_effect_node(comp, node, prev_output, feedback_tex,
+			                   node_has_input);
+		}
 
 		prev_output = gs_texrender_get_texture(node->output);
 	}

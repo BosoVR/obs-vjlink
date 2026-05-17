@@ -6,16 +6,15 @@
 <title>VJLink Control</title>
 <style>
   :root {
-    /* Berghain-inspired dark palette */
     --bg: #050507;
-    --surface: #0d0d12;
-    --surface2: #15151c;
-    --surface3: #1c1c26;
-    --border: #2a2a36;
-    --border-strong: #3a3a4a;
-    --accent: #7c3aed;
-    --accent2: #a855f7;
-    --accent-glow: rgba(124, 58, 237, 0.4);
+    --surface: #0b0d0f;
+    --surface2: #12161a;
+    --surface3: #1a2026;
+    --border: #27313a;
+    --border-strong: #3a4652;
+    --accent: #ff3030;
+    --accent2: #00d9ff;
+    --accent-glow: rgba(255, 48, 48, 0.34);
     --cyan: #06b6d4;
     --pink: #ec4899;
     --green: #10b981;
@@ -24,6 +23,7 @@
     --warning: #fb7185;
     --text: #e2e8f0;
     --text-dim: #64748b;
+    --text-faint: #475569;
     --bass-color: #ef4444;
     --lowmid-color: #f59e0b;
     --highmid-color: #10b981;
@@ -44,7 +44,7 @@
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', monospace;
     overflow-x: hidden;
     min-height: 100vh;
-    letter-spacing: 0.2px;
+    letter-spacing: 0;
   }
   /* Headlines + labels: tight uppercase brutalist look */
   .section-title, .pro-stat-label, .control-label, .band-slider-label,
@@ -62,6 +62,7 @@
     padding: 12px 20px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.28);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -92,8 +93,8 @@
     font-weight: 600;
     padding: 4px 12px;
     border-radius: 20px;
-    background: rgba(124, 58, 237, 0.15);
-    border: 1px solid rgba(124, 58, 237, 0.4);
+    background: rgba(0, 217, 255, 0.10);
+    border: 1px solid rgba(0, 217, 255, 0.32);
     color: var(--accent2);
     max-width: 220px;
     white-space: nowrap;
@@ -103,9 +104,9 @@
   }
 
   .active-effect-badge.has-effect {
-    background: rgba(124, 58, 237, 0.25);
+    background: rgba(255, 48, 48, 0.18);
     border-color: var(--accent);
-    box-shadow: 0 0 12px rgba(124, 58, 237, 0.2);
+    box-shadow: 0 0 12px rgba(255, 48, 48, 0.18);
   }
 
   .connection {
@@ -139,12 +140,17 @@
   .mode-switch button.active {
     background: var(--accent);
     color: white;
-    box-shadow: 0 0 10px rgba(124,58,237,0.25);
+    box-shadow: 0 0 10px rgba(255,48,48,0.25);
   }
 
   .pro-only { display: none; }
   body.pro-mode .pro-only { display: block; }
   body.pro-mode .pro-only.pro-grid { display: grid; }
+  body.basic-mode .media-section { display: none; }
+  body.basic-mode .presets-grid { max-height: 160px; }
+  body.basic-mode .effects-grid { max-height: 190px; }
+  body.basic-mode .band-bar-wrap { height: 180px; }
+  body.basic-mode .right-panel .quick-actions { grid-template-columns: 1fr; }
 
   .status-text {
     font-size: 11px;
@@ -154,6 +160,23 @@
   }
 
   .status-text.connected { color: var(--green); }
+
+  .autosave-status {
+    min-width: 74px;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+  }
+  .autosave-status.saved { color: var(--green); border-color: rgba(16,185,129,0.35); }
+  .autosave-status.saving { color: var(--accent2); border-color: rgba(0,217,255,0.35); }
+  .autosave-status.unsaved { color: var(--orange); border-color: rgba(245,158,11,0.35); }
+  .autosave-status.failed { color: var(--red); border-color: rgba(239,68,68,0.45); }
 
   .status-dot {
     width: 10px;
@@ -179,6 +202,165 @@
 
   .connect-btn:hover { background: var(--accent2); transform: scale(1.05); }
   .connect-btn.active { background: var(--green); }
+
+  .utility-btn {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .utility-btn:hover {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: #101820;
+  }
+
+  .settings-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    background: rgba(0,0,0,0.58);
+    z-index: 180;
+  }
+  body.settings-open .settings-backdrop { display: block; }
+  .settings-drawer {
+    position: fixed;
+    top: 57px;
+    right: 0;
+    bottom: 0;
+    width: min(520px, 100vw);
+    transform: translateX(102%);
+    transition: transform 0.18s ease;
+    background: #080b0e;
+    border-left: 1px solid var(--border-strong);
+    box-shadow: -18px 0 55px rgba(0,0,0,0.55);
+    z-index: 190;
+    overflow-y: auto;
+  }
+  body.settings-open .settings-drawer { transform: translateX(0); }
+  .settings-panel-head {
+    position: sticky;
+    top: 0;
+    background: #080b0e;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 2;
+  }
+  .settings-panel-title {
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .settings-tabs {
+    position: sticky;
+    top: 58px;
+    z-index: 2;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: #080b0e;
+  }
+  .settings-tab {
+    flex: 0 0 auto;
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .settings-tab.active {
+    color: white;
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .settings-pane { display: none; }
+  .settings-pane.active { display: block; }
+  .settings-group {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(39,49,58,0.75);
+  }
+  .settings-group-title {
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 0;
+  }
+  .settings-row label,
+  .settings-row .settings-label {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.35;
+  }
+  .settings-note {
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1.45;
+    margin-top: 2px;
+  }
+  .settings-select,
+  .settings-input {
+    min-width: 132px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .settings-path-value {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--accent2);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 8px;
+    min-height: 29px;
+  }
+  .settings-action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 9px 0;
+  }
+  .pro-deep { display: block; }
+  body.basic-mode .pro-deep { display: none !important; }
+  body.ui-compact .left-panel,
+  body.ui-compact .right-panel { padding: 12px; }
+  body.ui-compact .left-panel { gap: 10px; }
+  body.ui-compact .pro-panel,
+  body.ui-compact .audio-viz,
+  body.ui-compact .band-effects-panel,
+  body.ui-compact .effects-section,
+  body.ui-compact .media-section { padding: 10px; }
+  body.ui-compact .section-title { margin-bottom: 7px; }
+  body.perf-low .header-fft,
+  body.perf-low .beat-flash-overlay { display: none !important; }
 
   .connect-input {
     background: var(--surface2);
@@ -1424,6 +1606,8 @@
       <button id="modeBasicBtn" onclick="setUIMode('basic')">BASIC</button>
       <button id="modeProBtn" onclick="setUIMode('pro')">PRO</button>
     </div>
+    <span class="autosave-status saved" id="autosaveStatus" title="Backend save status">Saved</span>
+    <button class="utility-btn" onclick="toggleSettingsDrawer(true)" title="Open global VJLink settings">Settings</button>
     <input type="text" class="connect-input" id="wsUrl" value="ws://localhost:4455" placeholder="ws://host:port">
     <input type="password" class="connect-input" id="wsPassword" placeholder="Password" style="width:140px">
     <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
@@ -1431,6 +1615,265 @@
     <span class="status-text" id="statusText">Disconnected</span>
   </div>
 </div>
+
+<!-- Global Settings Drawer -->
+<div class="settings-backdrop" id="settingsBackdrop" onclick="toggleSettingsDrawer(false)"></div>
+<aside class="settings-drawer" id="settingsDrawer" aria-label="VJLink settings">
+  <div class="settings-panel-head">
+    <div>
+      <div class="settings-panel-title">Settings</div>
+      <div class="settings-note">State source: <span id="settingsStateSource">Backend</span></div>
+    </div>
+    <button class="utility-btn" onclick="toggleSettingsDrawer(false)">Close</button>
+  </div>
+
+  <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+    <button class="settings-tab active" data-settings-tab="general" onclick="switchSettingsTab('general')">General</button>
+    <button class="settings-tab" data-settings-tab="ui" onclick="switchSettingsTab('ui')">UI</button>
+    <button class="settings-tab" data-settings-tab="audiolink" onclick="switchSettingsTab('audiolink')">AudioLink</button>
+    <button class="settings-tab" data-settings-tab="performance" onclick="switchSettingsTab('performance')">Performance</button>
+    <button class="settings-tab" data-settings-tab="strobe" onclick="switchSettingsTab('strobe')">Strobe Safety</button>
+    <button class="settings-tab" data-settings-tab="pads" onclick="switchSettingsTab('pads')">Pads</button>
+    <button class="settings-tab" data-settings-tab="effects" onclick="switchSettingsTab('effects')">Effects</button>
+    <button class="settings-tab" data-settings-tab="saving" onclick="switchSettingsTab('saving')">Saving</button>
+    <button class="settings-tab" data-settings-tab="debug" onclick="switchSettingsTab('debug')">Debug</button>
+  </div>
+
+  <div class="settings-pane active" id="settingsPane_general">
+    <div class="settings-group">
+      <div class="settings-group-title">Workflow</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">UI Mode</div>
+          <div class="settings-note">Basic keeps the live surface lean. Pro opens the workbench.</div>
+        </div>
+        <select id="settingsUiMode" class="settings-select" onchange="setUIMode(this.value);syncSettingsPanel()">
+          <option value="basic">Basic</option>
+          <option value="pro">Pro</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">AI Mode</div>
+          <div class="settings-note">Uses the existing VJ AI controls.</div>
+        </div>
+        <select id="settingsAiMode" class="settings-select" onchange="setAiMode(this.value);syncSettingsPanel()">
+          <option value="off">Off</option>
+          <option value="learning">Learning</option>
+          <option value="playing">Playing</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Transparent Background</div>
+          <div class="settings-note">Matches the output toggle in Controls.</div>
+        </div>
+        <input id="settingsTransparentBg" type="checkbox" onchange="toggleTransparentBg(this.checked);syncSettingsPanel()">
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_ui">
+    <div class="settings-group">
+      <div class="settings-group-title">Layout</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Panel Density</div>
+          <div class="settings-note">Compact reduces spacing in dense panels.</div>
+        </div>
+        <select id="settingsDensity" class="settings-select" onchange="setUiDensity(this.value)">
+          <option value="comfortable">Comfortable</option>
+          <option value="compact">Compact</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Debug Overlay</div>
+          <div class="settings-note">Mirrors the Controls toggle.</div>
+        </div>
+        <input id="settingsDebugOverlay" type="checkbox" onchange="toggleDebugOverlay(this.checked);syncSettingsPanel()">
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="resetUiPreferences()">Reset UI Preferences</button>
+        <button class="quick-btn" onclick="setUIMode(uiMode === 'pro' ? 'basic' : 'pro');syncSettingsPanel()">Toggle Basic/Pro</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_audiolink">
+    <div class="settings-group">
+      <div class="settings-group-title">AudioLink</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Master Gain</div>
+          <div class="settings-note">Same value as Pro Audio Control.</div>
+        </div>
+        <input id="settingsAudioMasterGain" type="range" min="25" max="300" value="100" step="5"
+          oninput="document.getElementById('audioMasterGain').value=this.value;setAudioControlsFromUI();syncSettingsPanel()"
+          style="width:150px;accent-color:var(--accent2)">
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Fall Speed</div>
+          <div class="settings-note">Same value as Pro Audio Control.</div>
+        </div>
+        <input id="settingsAudioFallRate" type="range" min="1" max="50" value="8" step="1"
+          oninput="document.getElementById('audioFallRate').value=this.value;setAudioControlsFromUI();syncSettingsPanel()"
+          style="width:150px;accent-color:var(--accent2)">
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="resetSensitivity()">Reset Sensitivity</button>
+        <button class="quick-btn" onclick="resetAudioControls()">Reset Audio Control</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_performance">
+    <div class="settings-group">
+      <div class="settings-group-title">Performance</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Quality Bias</div>
+          <div class="settings-note">Low reduces expensive visual work where the UI can steer it.</div>
+        </div>
+        <select id="settingsQuality" class="settings-select" onchange="setPerformanceQuality(this.value)">
+          <option value="full">Full</option>
+          <option value="balanced">Balanced</option>
+          <option value="low">Low Latency</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">GPU Quality</div>
+          <div class="settings-note">Mirrors the Pro GPU Quality buttons.</div>
+        </div>
+        <select id="settingsGpuQuality" class="settings-select" onchange="setQualityLevel(parseInt(this.value));syncSettingsPanel()">
+          <option value="0">Low</option>
+          <option value="1">Medium</option>
+          <option value="2">High</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_strobe">
+    <div class="settings-group">
+      <div class="settings-group-title">Strobe Safety</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Max Strobe Brightness</div>
+          <div class="settings-note">Applies through the existing macro safety control.</div>
+        </div>
+        <div style="min-width:150px">
+          <input id="settingsStrobeSafety" type="range" min="20" max="100" value="100"
+            oninput="setStrobeSafetyFromSettings(this.value)" style="width:100%;accent-color:var(--accent)">
+          <div id="settingsStrobeSafetyVal" class="settings-note" style="text-align:right">100%</div>
+        </div>
+      </div>
+      <div class="settings-note">Use text status plus the slider value; no safety state depends on color alone.</div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_pads">
+    <div class="settings-group">
+      <div class="settings-group-title">Pads</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Pad Bank</div>
+          <div class="settings-note">Switches the visible performance bank.</div>
+        </div>
+        <select id="settingsPadBank" class="settings-select" onchange="setPadBank(this.value);syncSettingsPanel()">
+          <option value="A">Bank A</option>
+          <option value="B">Bank B</option>
+          <option value="C">Bank C</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Pad Count</div>
+          <div class="settings-note">Matches the pad edit count.</div>
+        </div>
+        <select id="settingsPadCount" class="settings-select" onchange="setPadCount(parseInt(this.value));syncSettingsPanel()">
+          <option value="4">4</option>
+          <option value="8">8</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+          <option value="24">24</option>
+        </select>
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="togglePadEditMode();syncSettingsPanel()">Toggle Pad Edit</button>
+        <button class="quick-btn" onclick="savePerfPads();scheduleAutosave()">Save Pads</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_effects">
+    <div class="settings-group">
+      <div class="settings-group-title">Effects</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Active Effect</div>
+          <div class="settings-note" id="settingsActiveEffect">None</div>
+        </div>
+        <button class="quick-btn" onclick="selectEffect('')">Clear</button>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Favorites Filter</div>
+          <div class="settings-note">Uses the effect browser filter.</div>
+        </div>
+        <button class="quick-btn" onclick="toggleFavsFilter();syncSettingsPanel()">Toggle</button>
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="renderCategories();renderEffects()">Refresh Browser</button>
+        <button class="quick-btn" onclick="renderParams()">Refresh Controls</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_saving">
+    <div class="settings-group">
+      <div class="settings-group-title">Saving</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Autosave Status</div>
+          <div class="settings-note" id="settingsAutosaveDetail">Saved</div>
+        </div>
+        <span class="autosave-status saved" id="settingsAutosaveStatus">Saved</span>
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="saveCanonicalStateNow()">Save Now</button>
+        <button class="quick-btn" onclick="bootstrapCanonicalState()">Reload State</button>
+      </div>
+      <div class="settings-action-row">
+        <button class="quick-btn" onclick="importLegacyLocalProfiles()">Import Local Profiles</button>
+        <button class="quick-btn" onclick="refreshProfileList()">Refresh Profiles</button>
+      </div>
+      <div class="settings-note" id="settingsLegacyImportStatus">Legacy browser profiles are imported only when requested.</div>
+    </div>
+  </div>
+
+  <div class="settings-pane" id="settingsPane_debug">
+    <div class="settings-group">
+      <div class="settings-group-title">Paths</div>
+      <div class="settings-label">Loaded DLL path</div>
+      <div class="settings-path-value" id="debugLoadedDllPath">-</div>
+      <div class="settings-label" style="margin-top:9px">Loaded data path</div>
+      <div class="settings-path-value" id="debugLoadedDataPath">-</div>
+      <div class="settings-label" style="margin-top:9px">Loaded Web UI path</div>
+      <div class="settings-path-value" id="debugLoadedWebUiPath">-</div>
+      <div class="settings-label" style="margin-top:9px">State file path</div>
+      <div class="settings-path-value" id="debugStateFilePath">-</div>
+      <div class="settings-label" style="margin-top:9px">OBS target path</div>
+      <div class="settings-path-value" id="debugObsTargetPath">-</div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">Shader Errors</div>
+      <div class="settings-path-value" id="debugShaderErrors">No shader errors reported.</div>
+    </div>
+  </div>
+</aside>
 
 <!-- Main Layout -->
 <div class="main">
@@ -1886,6 +2329,11 @@
     <!-- Per-Band Effects -->
     <div class="band-effects-panel">
       <div class="section-title">Per-Band Effects</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+        <button class="mini-btn" onclick="applyTriggerPreset('tight')">Tight</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Hardtechno</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('smooth')">Smooth</button>
+      </div>
       <div class="band-effects-grid" id="bandEffectsGrid">
         <!-- Filled by JS -->
       </div>
@@ -2067,7 +2515,11 @@
         <input type="text" id="profileName" placeholder="Profile name..." style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px" onkeydown="if(event.key==='Enter')saveProfile()">
         <button onclick="saveProfile()" style="background:var(--accent);color:white;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">Save</button>
       </div>
-      <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Saves effect, band configs, logo path, settings. Persists in browser.</div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="mini-btn" onclick="importLegacyLocalProfiles()" style="flex:1">Import Local Profiles</button>
+        <button class="mini-btn" onclick="refreshProfileList()" style="flex:1">Refresh</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Profiles save through the VJLink backend. Browser profiles import only from the button above.</div>
     </div>
 
     <div class="section-title" style="margin-top:8px">Parameters</div>
@@ -2228,13 +2680,13 @@ const effectCategories = {
   plasma: { label: 'Plasma', effects: ['plasma_classic','lava_lamp','liquid_metal'] },
   particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm','toxic_sludge'] },
   fractal: { label: 'Fractals', effects: ['mandelbrot_zoom','julia_set','ifs_fractal'] },
-  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala'] },
-  glitch: { label: 'Glitch', effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','ascii_art'] },
-  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch','virtual_drug'] },
-  '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs'] },
+  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala','type_animator','halo_text_logo_tunnel'] },
+  glitch: { label: 'Glitch', effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','mono_outline','ascii_art','brutalist_scan_glitch'] },
+  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch','virtual_drug','vaporwave_sunset'] },
+  '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs','logo_extrude_3d'] },
   audio_viz: { label: 'Audio Viz', effects: ['waveform_bars','spectrum_radial','beat_flash','laser_scan'] },
-  postprocess: { label: 'Post-FX', effects: ['color_grade','feedback','displacement'] },
-  flash: { label: 'Flash', effects: ['strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','strobe_grid'] },
+  postprocess: { label: 'Post-FX', effects: ['color_grade','feedback','displacement','bloom_pro','holographic_foil'] },
+  flash: { label: 'Flash', effects: ['hardtechno_strobe','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','strobe_grid'] },
 };
 
 const effectNames = {
@@ -2249,29 +2701,38 @@ const effectNames = {
   torus_knot:'Torus Knot', metaballs:'Metaballs', waveform_bars:'Waveform Bars',
   spectrum_radial:'Spectrum Radial', beat_flash:'Beat Flash', color_grade:'Color Grade',
   feedback:'Feedback', displacement:'Displacement',
+  hardtechno_strobe:'Hardtechno Strobe Reactor',
   strobe_hard:'Hard Strobe', strobe_color:'Color Strobe', flash_kick:'Kick Flash',
   flash_snare:'Snare Flash', strobe_invert:'Invert Strobe', flash_radial:'Radial Flash',
   strobe_gate:'Strobe Gate', flash_shake:'Flash Shake', strobe_grid:'Strobe Grid',
+  beat_cuts:'Beat Cuts',
   beat_blocks:'Beat Blocks', logo_runner:'Logo Runner', beat_rings:'Beat Rings',
   logo_pulse:'Logo Pulse', laser_scan:'Laser Scan',
   acid_mandala:'Acid Mandala', toxic_sludge:'Toxic Sludge', virtual_drug:'Virtual Drug',
+  mono_outline:'Mono Outline', bloom_pro:'Bloom Pro', vaporwave_sunset:'Vaporwave Sunset',
+  holographic_foil:'Holographic Foil', type_animator:'Type Animator',
+  halo_text_logo_tunnel:'Halo Text Logo Tunnel',
+  logo_extrude_3d:'Logo Extrude 3D',
+  brutalist_scan_glitch:'Brutalist Scan Glitch',
 };
 
 /* Effects added recently — shown with NEW badge in UI */
 const NEW_EFFECTS = new Set([
-  'acid_mandala','toxic_sludge','virtual_drug','glitch_basic',
+  'hardtechno_strobe','acid_mandala','toxic_sludge','virtual_drug','glitch_basic',
+  'mono_outline','bloom_pro','vaporwave_sunset','holographic_foil','type_animator',
+  'halo_text_logo_tunnel','logo_extrude_3d','brutalist_scan_glitch',
 ]);
 
 const effectProGroups = {
   pro_main: {
     label: 'Main Visual',
     note: 'Standalone generators for the main VJ canvas',
-    effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','plasma_classic','lava_lamp','liquid_metal','fire_emitter','galaxy_spiral','particle_storm','mandelbrot_zoom','julia_set','ifs_fractal','kaleidoscope','voronoi','sacred_geometry','sphere_field','torus_knot','metaballs','matrix_rain','waveform_bars','spectrum_radial','laser_scan']
+    effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','plasma_classic','lava_lamp','liquid_metal','fire_emitter','galaxy_spiral','particle_storm','mandelbrot_zoom','julia_set','ifs_fractal','kaleidoscope','voronoi','sacred_geometry','sphere_field','torus_knot','metaballs','logo_extrude_3d','matrix_rain','vaporwave_sunset','type_animator','halo_text_logo_tunnel','waveform_bars','spectrum_radial','laser_scan']
   },
   pro_content: {
     label: 'Content FX',
     note: 'Filters for media/logo/video input: glitch, VHS, datamosh, feedback',
-    effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','ascii_art','vhs_glitch','crt_scanlines','feedback','displacement','color_grade']
+    effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','mono_outline','ascii_art','brutalist_scan_glitch','vhs_glitch','crt_scanlines','feedback','displacement','color_grade','bloom_pro','holographic_foil']
   },
   pro_logo: {
     label: 'Logo FX',
@@ -2281,7 +2742,7 @@ const effectProGroups = {
   pro_trigger: {
     label: 'Band Trigger FX',
     note: 'Best used in Per-Band Effects slots',
-    effects: ['strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','beat_flash','beat_rings']
+    effects: ['hardtechno_strobe','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','beat_flash','beat_rings']
   }
 };
 
@@ -2297,25 +2758,68 @@ const effectParams = {
   ],
   strobe_hard: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
-    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
+    { name: 'trigger_threshold', label: 'Trigger Threshold', min: 0, max: 1, step: 0.01, default: 0.2 },
+    { name: 'pulse_width', label: 'Pulse Width', min: 0.02, max: 0.95, step: 0.01, default: 0.22 },
+    { name: 'strobe_rate', label: 'Strobe Rate', min: 0, max: 8, step: 0.05, default: 1.0 },
+  ],
+  hardtechno_strobe: [
+    { name: 'source_band', label: 'Source Band', min: 0, max: 5, step: 1, default: 4 },
+    { name: 'threshold', label: 'Trigger Threshold', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { name: 'sensitivity', label: 'Sensitivity', min: 0.1, max: 5, step: 0.01, default: 1.25 },
+    { name: 'brightness', label: 'Brightness', min: 0, max: 3, step: 0.01, default: 1.25 },
+    { name: 'flash_rate', label: 'Flash Rate', min: 0.25, max: 40, step: 0.05, default: 18 },
+    { name: 'pulse_width', label: 'Pulse Width', min: 0.02, max: 0.95, step: 0.01, default: 0.16 },
+    { name: 'mode', label: 'Mode', min: 0, max: 3, step: 1, default: 1 },
+    { name: 'color_burst', label: 'Color Burst', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { name: 'color_burst_chance', label: 'Burst Chance', min: 0, max: 1, step: 0.01, default: 0.28 },
+    { name: 'invert_amount', label: 'Invert Amount', min: 0, max: 1, step: 0.01, default: 0 },
+    { name: 'text_logo_peak', label: 'Logo on Peak', min: 0, max: 1, step: 0.01, default: 0 },
+    { name: 'grid_slices', label: 'Grid Slices', min: 1, max: 80, step: 1, default: 12 },
+    { name: 'shake_amount', label: 'Shake', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { name: 'source_mix', label: 'Source Mix', min: 0, max: 1, step: 0.01, default: 0 },
+    { name: 'safety_enable', label: 'Safety Limit', min: 0, max: 1, step: 1, default: 1 },
+    { name: 'black_ratio', label: 'Black Ratio', min: 0, max: 0.9, step: 0.01, default: 0.18 },
+  ],
+  beat_cuts: [
+    { name: 'cut_division', label: 'Division', min: 0, max: 4, step: 1, default: 1, options: ['1/4','1/8','1/16','2 Beats','4 Beats'] },
+    { name: 'pattern', label: 'Pattern', min: 0, max: 3, step: 1, default: 0, options: ['Alternate','Triplet','4 on 4','Offbeat'] },
+    { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'color_invert', label: 'Color Invert', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
   ],
   strobe_color: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
-    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
-    { name: 'color_shift', label: 'Color Hue', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 0.5 },
+    { name: 'color_cycle', label: 'Color Cycle', min: 0, max: 2, step: 0.01, default: 0.0 },
   ],
   flash_kick: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
-    { name: 'decay', label: 'Decay', min: 0.01, max: 1, step: 0.01, default: 0.3 },
+    { name: 'decay_speed', label: 'Decay Speed', min: 1, max: 8, step: 0.1, default: 2.0 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
   ],
   flash_snare: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
-    { name: 'decay', label: 'Decay', min: 0.01, max: 1, step: 0.01, default: 0.2 },
+    { name: 'trigger_threshold', label: 'Trigger Threshold', min: 0, max: 0.95, step: 0.01, default: 0.34 },
+    { name: 'sharpness', label: 'Sharpness', min: 1, max: 8, step: 0.1, default: 3.0 },
+    { name: 'decay_speed', label: 'Decay Speed', min: 0.25, max: 5, step: 0.05, default: 1.65 },
+    { name: 'ring_amount', label: 'Ring Amount', min: 0, max: 1, step: 0.05, default: 0.45 },
+    { name: 'beam_amount', label: 'Beam Amount', min: 0, max: 1, step: 0.05, default: 0.25 },
+    { name: 'invert_flash', label: 'Invert Flash', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   flash_radial: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
-    { name: 'speed', label: 'Speed', min: 0, max: 5, step: 0.01, default: 1.0 },
-    { name: 'scale', label: 'Scale', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+    { name: 'wave_speed', label: 'Wave Speed', min: 0.5, max: 4, step: 0.1, default: 1.5 },
+    { name: 'wave_width', label: 'Wave Width', min: 0.02, max: 0.5, step: 0.01, default: 0.15 },
+    { name: 'flash_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'flash_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 1.0 },
   ],
   feedback: [
     { name: 'fb_decay', label: 'Decay', min: 0.01, max: 0.5, step: 0.01, default: 0.05 },
@@ -2429,9 +2933,22 @@ const effectParams = {
   ],
   pixel_sort: [
     { name: 'sort_threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.5 },
-    { name: 'sort_direction', label: 'Direction', min: 0, max: 1, step: 1, default: 0 },
+    { name: 'sort_direction', label: 'Direction', min: 0, max: 1, step: 1, default: 0, options: ['Vertical','Horizontal'] },
     { name: 'sort_length', label: 'Length', min: 0.01, max: 1, step: 0.01, default: 0.3 },
     { name: 'sort_intensity', label: 'Intensity', min: 0, max: 1, step: 0.01, default: 0.8 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 0, options: ['Continuous','1/4','1/8'] },
+  ],
+  mono_outline: [
+    { name: 'edge_thickness', label: 'Edge Thickness', min: 0.0005, max: 0.01, step: 0.0005, default: 0.0025 },
+    { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.12 },
+    { name: 'invert_on_beat', label: 'Invert on Beat', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+    { name: 'style_mode', label: 'Style', min: 0, max: 3, step: 1, default: 0, options: ['Outline','Cel-Shaded','Inverse','Color Bleed'] },
+    { name: 'kernel_size', label: 'Kernel', min: 0, max: 1, step: 1, default: 0, options: ['3x3 (fast)','5x5 (cleaner)'] },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 1, step: 1, default: 0, options: ['Continuous','1/4'] },
+    { name: 'wall_cut', label: 'LED Wall Cut', min: 0, max: 1, step: 0.05, default: 0.25 },
+    { name: 'poster_steps', label: 'Poster Steps', min: 2, max: 8, step: 1, default: 4 },
   ],
   ascii_art: [
     { name: 'char_size', label: 'Char Size', min: 4, max: 32, step: 1, default: 8 },
@@ -2466,22 +2983,41 @@ const effectParams = {
   ],
   // 3D
   sphere_field: [
-    { name: 'sphere_count', label: 'Count', min: 2, max: 20, step: 1, default: 8 },
-    { name: 'sphere_spacing', label: 'Spacing', min: 0.5, max: 5, step: 0.1, default: 2.0 },
-    { name: 'cam_distance', label: 'Distance', min: 1, max: 10, step: 0.5, default: 5.0 },
-    { name: 'glow_intensity', label: 'Glow', min: 0, max: 3, step: 0.1, default: 1.0 },
+    { name: 'sphere_count', label: 'Grid Size', min: 2, max: 12, step: 1, default: 5 },
+    { name: 'sphere_spacing', label: 'Spacing', min: 1, max: 5, step: 0.1, default: 2.5 },
+    { name: 'cam_distance', label: 'Distance', min: 3, max: 20, step: 0.5, default: 8.0 },
+    { name: 'camera_height', label: 'Camera Height', min: -4, max: 4, step: 0.1, default: 0.0 },
+    { name: 'rotation_speed', label: 'Rotation Speed', min: 0, max: 1, step: 0.01, default: 0.08 },
+    { name: 'rotation_axis', label: 'Rotation Axis', min: 0, max: 2, step: 1, default: 0, options: ['Y Orbit','X Orbit','Z Roll'] },
+    { name: 'rotation_audio', label: 'Audio Rotation', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { name: 'pulse_amount', label: 'Beat Pulse', min: 0, max: 1, step: 0.01, default: 0.45 },
+    { name: 'glow_intensity', label: 'Glow', min: 0, max: 5, step: 0.1, default: 1.5 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'ray_steps', label: 'Ray Steps', min: 24, max: 96, step: 4, default: 72 },
   ],
   torus_knot: [
-    { name: 'knot_p', label: 'Knot P', min: 1, max: 7, step: 1, default: 2 },
-    { name: 'knot_q', label: 'Knot Q', min: 1, max: 7, step: 1, default: 3 },
-    { name: 'knot_radius', label: 'Radius', min: 0.5, max: 3, step: 0.1, default: 1.0 },
-    { name: 'tube_radius', label: 'Tube', min: 0.05, max: 0.5, step: 0.01, default: 0.15 },
+    { name: 'knot_p', label: 'Knot P', min: 1, max: 7, step: 1, default: 3 },
+    { name: 'knot_q', label: 'Knot Q', min: 1, max: 7, step: 1, default: 2 },
+    { name: 'knot_radius', label: 'Radius', min: 0.5, max: 5, step: 0.1, default: 2.0 },
+    { name: 'tube_radius', label: 'Tube', min: 0.05, max: 1.5, step: 0.05, default: 0.4 },
+    { name: 'rotation_speed', label: 'Rotation Speed', min: 0, max: 1.5, step: 0.01, default: 0.25 },
+    { name: 'camera_distance', label: 'Camera Distance', min: 2, max: 10, step: 0.1, default: 5.0 },
+    { name: 'camera_height', label: 'Camera Height', min: -4, max: 4, step: 0.1, default: 2.0 },
+    { name: 'beat_pulse', label: 'Beat Pulse', min: 0, max: 2, step: 0.05, default: 0.45 },
+    { name: 'deform_amount', label: 'Deform Amount', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   metaballs: [
     { name: 'ball_count', label: 'Count', min: 2, max: 10, step: 1, default: 5 },
     { name: 'ball_size', label: 'Size', min: 0.1, max: 2, step: 0.1, default: 0.5 },
     { name: 'smoothness', label: 'Smooth', min: 0.5, max: 5, step: 0.1, default: 2.0 },
     { name: 'motion_speed', label: 'Speed', min: 0, max: 3, step: 0.1, default: 1.0 },
+    { name: 'rotation_speed', label: 'Camera Rotation', min: 0, max: 1, step: 0.01, default: 0.15 },
+    { name: 'camera_distance', label: 'Camera Distance', min: 2.5, max: 12, step: 0.1, default: 6.0 },
+    { name: 'camera_height', label: 'Camera Height', min: -2, max: 6, step: 0.1, default: 2.4 },
+    { name: 'beat_pulse', label: 'Beat Pulse', min: 0, max: 2, step: 0.05, default: 0.5 },
+    { name: 'audio_motion', label: 'Audio Motion', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   // Audio Viz
   waveform_bars: [
@@ -2496,6 +3032,7 @@ const effectParams = {
     { name: 'base_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 0.7 },
     { name: 'glow_amount', label: 'Glow', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'peak_hold', label: 'Peak Hold', min: 0, max: 1, step: 0.05, default: 0.6 },
+    { name: 'beat_reactivity', label: 'Beat Reactivity', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   spectrum_radial: [
     { name: 'inner_radius', label: 'Inner Radius', min: 0.05, max: 0.5, step: 0.01, default: 0.2 },
@@ -2508,6 +3045,7 @@ const effectParams = {
     { name: 'base_color_r', label: 'Color R', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'base_color_g', label: 'Color G', min: 0, max: 1, step: 0.01, default: 0.15 },
     { name: 'base_color_b', label: 'Color B', min: 0, max: 1, step: 0.01, default: 0.7 },
+    { name: 'beat_reactivity', label: 'Beat Reactivity', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   beat_flash: [
     { name: 'flash_decay', label: 'Decay', min: 0.5, max: 10, step: 0.5, default: 3.0 },
@@ -2554,6 +3092,9 @@ const effectParams = {
   // Flash (additional)
   strobe_invert: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
+    { name: 'trigger_threshold', label: 'Trigger Threshold', min: 0, max: 1, step: 0.01, default: 0.32 },
+    { name: 'pulse_width', label: 'Pulse Width', min: 0.02, max: 0.95, step: 0.01, default: 0.35 },
+    { name: 'strobe_rate', label: 'Strobe Rate', min: 0, max: 8, step: 0.05, default: 1.0 },
   ],
   strobe_gate: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
@@ -2614,6 +3155,8 @@ const effectParams = {
     { name: 'color_mode', label: 'Color (0=Single 1=PerLine 2=Rainbow 3=Beat)', min: 0, max: 3, step: 1, default: 0 },
     { name: 'glow_size', label: 'Glow Size', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'haze_amount', label: 'Haze', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { name: 'audio_reactivity', label: 'Audio Reactivity', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'beat_burst', label: 'Beat Burst', min: 0, max: 2, step: 0.05, default: 1.0 },
   ],
   strobe_grid: [
     { name: 'grid_size', label: 'Grid Size', min: 2, max: 20, step: 1, default: 6 },
@@ -2656,23 +3199,374 @@ let activeEffect = '';
 let activeCategory = 'all';
 let isBlackout = false;
 let uiMode = localStorage.getItem('vjlink_ui_mode') || 'basic';
+let uiDensity = localStorage.getItem('vjlink_ui_density') || 'comfortable';
+let performanceQuality = localStorage.getItem('vjlink_quality_bias') || 'balanced';
 let audioControlTimer = null;
+let canonicalState = {};
+let canonicalApplyInProgress = false;
+let autosaveTimer = null;
+let autosaveSuppressed = false;
+let uiReadyForAutosave = false;
+let backendProfiles = {};
+let backendProfileNames = [];
+let backendProfilesAvailable = false;
+let activeSettingsTab = 'general';
+
+function unwrapResponseData(resp) {
+  return resp?.responseData?.responseData || resp?.responseData || resp || {};
+}
+
+function setAutosaveStatus(status, detail) {
+  const labels = {
+    saved: 'Saved',
+    saving: 'Saving...',
+    unsaved: 'Unsaved',
+    failed: 'Save failed'
+  };
+  const cls = status === 'failed' ? 'failed' : status;
+  ['autosaveStatus', 'settingsAutosaveStatus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = labels[status] || labels.unsaved;
+    el.className = 'autosave-status ' + cls;
+  });
+  const detailEl = document.getElementById('settingsAutosaveDetail');
+  if (detailEl) detailEl.textContent = detail || (labels[status] || labels.unsaved);
+}
+
+function isAutosavedRequest(requestType) {
+  if (!requestType || autosaveSuppressed || canonicalApplyInProgress) return false;
+  if (requestType === 'SaveState' || requestType === 'SetFullState' || requestType === 'GetState' || requestType === 'GetFullState' || requestType === 'ListProfiles') return false;
+  if (requestType.startsWith('Get') || requestType.startsWith('List')) return false;
+  return requestType.startsWith('Set') ||
+         requestType === 'TapBPM' ||
+         requestType === 'NextPreset' ||
+         requestType === 'PrevPreset' ||
+         requestType === 'SaveProfileV2' ||
+         requestType === 'LoadProfileV2';
+}
+
+function scheduleAutosave() {
+  if (!uiReadyForAutosave) return;
+  if (canonicalApplyInProgress || autosaveSuppressed) return;
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  setAutosaveStatus('unsaved');
+  autosaveTimer = setTimeout(saveCanonicalStateNow, 850);
+}
+
+async function saveCanonicalStateNow() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+  if (!ws || !connected) {
+    setAutosaveStatus('unsaved', 'Unsaved - not connected');
+    return false;
+  }
+  setAutosaveStatus('saving');
+  if (typeof captureCurrentSettings === 'function') {
+    const snapshot = captureCurrentSettings();
+    snapshot.schema_version = 2;
+    snapshot.ui_density = uiDensity;
+    snapshot.performance_quality = performanceQuality;
+    snapshot.ai_mode = (typeof VJ_AI !== 'undefined' && VJ_AI.mode) ? VJ_AI.mode : 'off';
+    snapshot.saved_at = Date.now();
+    await sendRequest('SetFullState', { schema_version: 2, state: snapshot });
+  }
+  const resp = await sendRequest('SaveState', {});
+  const data = unwrapResponseData(resp);
+  if (resp && data.success !== false) {
+    setAutosaveStatus('saved');
+    return true;
+  }
+  setAutosaveStatus('failed', data.error || 'Save failed');
+  return false;
+}
+
+function switchSettingsTab(tab) {
+  activeSettingsTab = tab || 'general';
+  document.querySelectorAll('.settings-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.settingsTab === activeSettingsTab);
+  });
+  document.querySelectorAll('.settings-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === 'settingsPane_' + activeSettingsTab);
+  });
+  syncSettingsPanel();
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = (value === undefined || value === null || value === '') ? '-' : String(value);
+}
+
+function firstValue(obj, keys, fallback) {
+  for (const key of keys) {
+    if (obj && obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
+  }
+  return fallback;
+}
+
+function updateDebugFields(data) {
+  const d = data || {};
+  const debug = d.debug || d.paths || d.runtime || {};
+  setText('debugLoadedDllPath', firstValue(debug, ['loaded_dll_path','dll_path','plugin_dll_path'], firstValue(d, ['loaded_dll_path','dll_path','plugin_dll_path'], '-')));
+  setText('debugLoadedDataPath', firstValue(debug, ['loaded_data_path','data_path','plugin_data_path'], firstValue(d, ['loaded_data_path','data_path','plugin_data_path'], '-')));
+  setText('debugLoadedWebUiPath', firstValue(debug, ['loaded_web_ui_path','web_ui_path','ui_path'], firstValue(d, ['loaded_web_ui_path','web_ui_path','ui_path'], '-')));
+  setText('debugStateFilePath', firstValue(debug, ['state_file_path','state_path'], firstValue(d, ['state_file_path','state_path'], '-')));
+  setText('debugObsTargetPath', firstValue(debug, ['obs_target_path','obs_path','target_path'], firstValue(d, ['obs_target_path','obs_path','target_path'], '-')));
+  const shaderErrors = firstValue(d, ['shader_errors'], firstValue(debug, ['shader_errors'], []));
+  const shaderText = Array.isArray(shaderErrors)
+    ? (shaderErrors.length ? shaderErrors.map(e => e.msg || e.message || String(e)).join('\n') : 'No shader errors reported.')
+    : (shaderErrors || 'No shader errors reported.');
+  setText('debugShaderErrors', shaderText);
+}
+
+function applyPaletteToUI(pid) {
+  activePaletteId = parseInt(pid) || 0;
+  document.querySelectorAll('.pal-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.pid) === activePaletteId);
+  });
+}
+
+function applyCanonicalStateToUI(data) {
+  if (!data || data.success === false) return;
+  canonicalApplyInProgress = true;
+  try {
+    canonicalState = data;
+    const state = data.state || data.profile || data.settings || data;
+    const sourceEl = document.getElementById('settingsStateSource');
+    if (sourceEl) sourceEl.textContent = data.schema_version ? 'Backend v' + data.schema_version : 'Backend';
+
+    if (state.ui_mode || state.uiMode) setUIMode(state.ui_mode || state.uiMode);
+    if (state.ui_density || state.uiDensity) setUiDensity(state.ui_density || state.uiDensity);
+    if (state.performance_quality || state.quality_bias) setPerformanceQuality(state.performance_quality || state.quality_bias);
+
+    const active = state.active_effect || state.effect_id || state.current_effect;
+    if (active !== undefined) {
+      activeEffect = active || '';
+      renderEffects();
+      renderParams();
+    }
+
+    const logoPaths = state.logo_paths || state.logos || [state.logo_path, state.logo_path2, state.logo_path3];
+    if (Array.isArray(logoPaths)) {
+      for (let i = 0; i < 3; i++) {
+        const input = document.getElementById(logoInputId(i));
+        const val = logoPaths[i]?.path ?? logoPaths[i] ?? '';
+        if (input) input.value = val || '';
+      }
+      persistLogoPaths();
+    }
+
+    if (typeof state.transparent_bg === 'boolean') {
+      const el = document.getElementById('toggleTransparentBg');
+      const settingsEl = document.getElementById('settingsTransparentBg');
+      if (el) el.checked = state.transparent_bg;
+      if (settingsEl) settingsEl.checked = state.transparent_bg;
+    }
+    if (typeof state.debug_overlay === 'boolean') {
+      const el = document.getElementById('toggleDebugOverlay');
+      const settingsEl = document.getElementById('settingsDebugOverlay');
+      if (el) el.checked = state.debug_overlay;
+      if (settingsEl) settingsEl.checked = state.debug_overlay;
+    }
+
+    if (typeof state.audio_master_gain === 'number' || typeof state.audio_fall_rate === 'number') {
+      const gain = typeof state.audio_master_gain === 'number' ? state.audio_master_gain : 1.0;
+      const fall = typeof state.audio_fall_rate === 'number' ? state.audio_fall_rate : 0.08;
+      const gainEl = document.getElementById('audioMasterGain');
+      const fallEl = document.getElementById('audioFallRate');
+      if (gainEl) gainEl.value = Math.round(gain * 100);
+      if (fallEl) fallEl.value = Math.round(fall * 100);
+      updateAudioControlLabels(gain, fall);
+    }
+
+    if (typeof state.palette_id === 'number') applyPaletteToUI(state.palette_id);
+    if (state.macros) {
+      const m = state.macros;
+      const setSlider = (id, valId, v) => {
+        const el = document.getElementById(id);
+        const lbl = document.getElementById(valId);
+        if (el) el.value = Math.round((v ?? 0) * 100);
+        if (lbl) lbl.textContent = Math.round((v ?? 0) * 100);
+      };
+      setSlider('macroEnergy', 'macroEnergyVal', m.energy ?? state.macro_energy ?? 0.5);
+      setSlider('macroChaos', 'macroChaosVal', m.chaos ?? state.macro_chaos ?? 0);
+      setSlider('macroSpeed', 'macroSpeedVal', m.speed ?? state.macro_speed ?? 0.5);
+      setSlider('macroColor', 'macroColorVal', m.color ?? state.macro_color ?? 0.5);
+    }
+    if (typeof state.strobe_safety === 'number') {
+      const pct = Math.round(state.strobe_safety * 100);
+      const main = document.getElementById('strobeSafety');
+      const mainVal = document.getElementById('strobeSafetyVal');
+      const settings = document.getElementById('settingsStrobeSafety');
+      const settingsVal = document.getElementById('settingsStrobeSafetyVal');
+      if (main) main.value = pct;
+      if (mainVal) mainVal.textContent = pct + '%';
+      if (settings) settings.value = pct;
+      if (settingsVal) settingsVal.textContent = pct + '%';
+    }
+
+    if (Array.isArray(state.bands)) {
+      state.bands.slice(0, 4).forEach((saved, i) => {
+        if (!bandSlots[i]) return;
+        bandSlots[i].effect = saved.effect || saved.effect_id || '';
+        bandSlots[i].threshold = typeof saved.threshold === 'number' ? saved.threshold : bandSlots[i].threshold;
+        bandSlots[i].intensity = typeof saved.intensity === 'number' ? saved.intensity : bandSlots[i].intensity;
+        bandSlots[i].attack = typeof saved.attack === 'number' ? saved.attack : bandSlots[i].attack;
+        bandSlots[i].release = typeof saved.release === 'number' ? saved.release : bandSlots[i].release;
+        bandSlots[i].hold = typeof saved.hold === 'number' ? saved.hold : bandSlots[i].hold;
+        bandSlots[i].blendMode = typeof saved.blend_mode === 'number' ? saved.blend_mode : bandSlots[i].blendMode;
+        bandSlots[i].blendAlpha = typeof saved.blend_alpha === 'number' ? saved.blend_alpha : bandSlots[i].blendAlpha;
+        bandSlots[i].paramCache = Object.assign({}, saved.paramCache || saved.params || {});
+      });
+      renderBandEffects();
+    }
+
+    if (state.main_params && activeEffect) {
+      Object.entries(state.main_params).forEach(([pname, pval]) => {
+        const slider = document.getElementById('paramSlider_' + pname);
+        const valEl = document.getElementById('paramVal_' + pname);
+        if (slider) slider.value = pval;
+        if (valEl && typeof pval === 'number') valEl.textContent = pval.toFixed(2);
+      });
+    }
+    if (state.halo_ring_text) {
+      applyHaloRingTextState(state.halo_ring_text);
+      if (activeEffect === 'halo_text_logo_tunnel') pushHaloRingTextToShader();
+    }
+    paramBandMappings = Object.assign({}, state.main_param_mappings || state.param_mappings || {});
+    bandParamMappings = Object.assign({}, state.band_param_mappings || {});
+
+    if (Array.isArray(state.perf_pads)) {
+      perfPads = state.perf_pads;
+      while (perfPads.length < 12) perfPads.push(null);
+      renderPerfPads();
+    }
+    if (state.ai_mode && typeof setAiMode === 'function') setAiMode(state.ai_mode);
+
+    updateDebugFields(data);
+    syncSettingsPanel();
+    setAutosaveStatus('saved');
+  } finally {
+    canonicalApplyInProgress = false;
+  }
+}
+
+async function bootstrapCanonicalState() {
+  if (!ws || !connected) return;
+  const resp = await sendRequest('GetFullState', {});
+  const data = unwrapResponseData(resp);
+  if (!data || data.success === false) {
+    const sourceEl = document.getElementById('settingsStateSource');
+    if (sourceEl) sourceEl.textContent = 'Backend unavailable';
+    return;
+  }
+  applyCanonicalStateToUI(data);
+  await refreshProfileList();
+}
 
 function setUIMode(mode) {
   uiMode = (mode === 'pro') ? 'pro' : 'basic';
   localStorage.setItem('vjlink_ui_mode', uiMode);
   document.body.classList.toggle('pro-mode', uiMode === 'pro');
+  document.body.classList.toggle('basic-mode', uiMode !== 'pro');
 
   const basicBtn = document.getElementById('modeBasicBtn');
   const proBtn = document.getElementById('modeProBtn');
   if (basicBtn) basicBtn.classList.toggle('active', uiMode !== 'pro');
   if (proBtn) proBtn.classList.toggle('active', uiMode === 'pro');
+  const settingsMode = document.getElementById('settingsUiMode');
+  if (settingsMode) settingsMode.value = uiMode;
 
   if (uiMode !== 'pro' && effectProGroups[activeCategory])
     activeCategory = 'all';
   renderCategories();
   renderEffects();
   updateProWorkbench();
+  scheduleAutosave();
+}
+
+function toggleSettingsDrawer(open) {
+  document.body.classList.toggle('settings-open', !!open);
+  if (open) syncSettingsPanel();
+}
+
+function setUiDensity(value) {
+  uiDensity = (value === 'compact') ? 'compact' : 'comfortable';
+  localStorage.setItem('vjlink_ui_density', uiDensity);
+  document.body.classList.toggle('ui-compact', uiDensity === 'compact');
+  const el = document.getElementById('settingsDensity');
+  if (el) el.value = uiDensity;
+  scheduleAutosave();
+}
+
+function setPerformanceQuality(value) {
+  performanceQuality = ['full','balanced','low'].includes(value) ? value : 'balanced';
+  localStorage.setItem('vjlink_quality_bias', performanceQuality);
+  document.body.classList.toggle('perf-low', performanceQuality === 'low');
+  const el = document.getElementById('settingsQuality');
+  if (el) el.value = performanceQuality;
+
+  const raySteps = performanceQuality === 'full' ? 88 : (performanceQuality === 'low' ? 40 : 64);
+  const raySlider = document.getElementById('paramSlider_ray_steps');
+  if (raySlider) {
+    raySlider.value = raySteps;
+    const label = document.getElementById('paramVal_ray_steps');
+    if (label) label.textContent = String(raySteps);
+    setParam('ray_steps', raySteps);
+  }
+  scheduleAutosave();
+}
+
+function setStrobeSafetyFromSettings(rawValue) {
+  const pct = Math.max(20, Math.min(100, parseFloat(rawValue) || 100));
+  const main = document.getElementById('strobeSafety');
+  if (main) main.value = pct;
+  const settings = document.getElementById('settingsStrobeSafety');
+  if (settings) settings.value = pct;
+  const settingsVal = document.getElementById('settingsStrobeSafetyVal');
+  if (settingsVal) settingsVal.textContent = pct.toFixed(0) + '%';
+  setStrobeSafetyFromUI();
+}
+
+function syncSettingsPanel() {
+  const mode = document.getElementById('settingsUiMode');
+  const density = document.getElementById('settingsDensity');
+  const quality = document.getElementById('settingsQuality');
+  const strobe = document.getElementById('settingsStrobeSafety');
+  const strobeVal = document.getElementById('settingsStrobeSafetyVal');
+  const mainStrobe = document.getElementById('strobeSafety');
+  const transparent = document.getElementById('settingsTransparentBg');
+  const debug = document.getElementById('settingsDebugOverlay');
+  const aiMode = document.getElementById('settingsAiMode');
+  const audioGain = document.getElementById('settingsAudioMasterGain');
+  const audioFall = document.getElementById('settingsAudioFallRate');
+  const gpuQuality = document.getElementById('settingsGpuQuality');
+  const padBankEl = document.getElementById('settingsPadBank');
+  const padCountEl = document.getElementById('settingsPadCount');
+  const activeEffectEl = document.getElementById('settingsActiveEffect');
+  if (mode) mode.value = uiMode;
+  if (density) density.value = uiDensity;
+  if (quality) quality.value = performanceQuality;
+  if (strobe && mainStrobe) strobe.value = mainStrobe.value;
+  if (strobeVal && mainStrobe) strobeVal.textContent = mainStrobe.value + '%';
+  if (transparent) transparent.checked = !!document.getElementById('toggleTransparentBg')?.checked;
+  if (debug) debug.checked = !!document.getElementById('toggleDebugOverlay')?.checked;
+  if (aiMode && typeof VJ_AI !== 'undefined') aiMode.value = VJ_AI.mode || 'off';
+  if (audioGain) audioGain.value = document.getElementById('audioMasterGain')?.value || '100';
+  if (audioFall) audioFall.value = document.getElementById('audioFallRate')?.value || '8';
+  if (gpuQuality) gpuQuality.value = String(activeQuality);
+  if (padBankEl) padBankEl.value = (typeof activeBank !== 'undefined' ? activeBank : 'A');
+  if (padCountEl) padCountEl.value = String(padCount || 12);
+  if (activeEffectEl) activeEffectEl.textContent = activeEffect ? (effectNames[activeEffect] || activeEffect) : 'None';
+}
+
+function resetUiPreferences() {
+  setUiDensity('comfortable');
+  setPerformanceQuality('balanced');
+  setUIMode('basic');
+  syncSettingsPanel();
 }
 
 function updateProWorkbench() {
@@ -2706,9 +3600,9 @@ function drawSpectrum() {
   const barCount = spectrumData.length;
   const barW = w / barCount;
   const gradient = specCtx.createLinearGradient(0, h, 0, 0);
-  gradient.addColorStop(0, '#7c3aed');
-  gradient.addColorStop(0.5, '#a855f7');
-  gradient.addColorStop(1, '#ec4899');
+  gradient.addColorStop(0, '#ff3030');
+  gradient.addColorStop(0.5, '#f59e0b');
+  gradient.addColorStop(1, '#00d9ff');
 
   for (let i = 0; i < barCount; i++) {
     const barH = spectrumData[i] * h;
@@ -2856,6 +3750,7 @@ async function handleMessage(msg) {
     console.log('[VJLink] Identified! Connected successfully.');
     if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
     setConnected(true);
+    await bootstrapCanonicalState();
     startPolling();
     fetchSceneSources();
     syncSensitivityFromServer();
@@ -2904,6 +3799,7 @@ function sendRequest(requestType, requestData) {
         }
       }
     }));
+    if (isAutosavedRequest(requestType)) scheduleAutosave();
     setTimeout(() => {
       if (pendingRequests[id]) {
         delete pendingRequests[id];
@@ -3311,25 +4207,40 @@ async function clearLogoPath(slot) {
   await sendRequest('SetLogo', { path: '', slot: slot });
 }
 
-/* === Profile Save/Load (localStorage) === */
+/* === Profile Save/Load (backend canonical, legacy local import only) === */
 const PROFILE_STORAGE_KEY = 'vjlink_profiles_v1';
 
-function getProfiles() {
+function getLegacyLocalProfiles() {
   try { return JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || '{}'); }
   catch (e) { return {}; }
 }
 
-function saveProfilesToStorage(profiles) {
-  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profiles));
+function getProfiles() {
+  return Object.assign({}, backendProfiles);
 }
 
-function refreshProfileList() {
+async function refreshProfileList() {
   const sel = document.getElementById('profileSelect');
   if (!sel) return;
-  const profiles = getProfiles();
   const currentVal = sel.value;
+  if (ws && connected) {
+    const resp = await sendRequest('ListProfiles', {});
+    const data = unwrapResponseData(resp);
+    if (resp && data.success !== false) {
+      backendProfilesAvailable = true;
+      const rawProfiles = data.profiles || data.profile_names || data.names || [];
+      if (Array.isArray(rawProfiles)) {
+        backendProfileNames = rawProfiles.map(p => typeof p === 'string' ? p : (p.name || p.profile_name || '')).filter(Boolean);
+      } else {
+        backendProfileNames = Object.keys(rawProfiles);
+        backendProfiles = Object.assign({}, rawProfiles);
+      }
+    }
+  }
+  const profiles = getProfiles();
+  const names = [...new Set([...backendProfileNames, ...Object.keys(profiles)])].sort();
   sel.innerHTML = '<option value="">-- Select profile --</option>';
-  Object.keys(profiles).sort().forEach(name => {
+  names.forEach(name => {
     const opt = document.createElement('option');
     opt.value = name;
     opt.textContent = name;
@@ -3359,11 +4270,14 @@ function captureCurrentSettings() {
       attack: slot.attack,
       release: slot.release,
       hold: slot.hold,
+      blend_mode: typeof slot.blendMode === 'number' ? slot.blendMode : 1,
+      blend_alpha: typeof slot.blendAlpha === 'number' ? slot.blendAlpha : 1.0,
       paramCache: Object.assign({}, slot.paramCache || {})
     })),
     /* Audio band mappings (main + band) */
     main_param_mappings: Object.assign({}, paramBandMappings),
     band_param_mappings: Object.assign({}, bandParamMappings),
+    halo_ring_text: normalizeHaloRingTextState(haloRingTextState),
     /* Main effect param values from current sliders */
     main_params: {}
   };
@@ -3455,16 +4369,23 @@ async function applyProfile(settings) {
     }
   }
 
+  if (settings.halo_ring_text) {
+    applyHaloRingTextState(settings.halo_ring_text);
+    if (newActive === 'halo_text_logo_tunnel') await pushHaloRingTextToShader();
+  }
+
   /* --- Band slots: always send all 4 (empty effect_id = clear) --- */
   for (let i = 0; i < 4; i++) {
     const saved = (Array.isArray(settings.bands) ? settings.bands[i] : null)
-                  || { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, paramCache: {} };
+                  || { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blend_mode: 1, blend_alpha: 1.0, paramCache: {} };
     bandSlots[i].effect = saved.effect || '';
     bandSlots[i].threshold = (typeof saved.threshold === 'number') ? saved.threshold : 0.3;
     bandSlots[i].intensity = (typeof saved.intensity === 'number') ? saved.intensity : 1.0;
     bandSlots[i].attack = (typeof saved.attack === 'number') ? saved.attack : 0.65;
     bandSlots[i].release = (typeof saved.release === 'number') ? saved.release : 0.18;
     bandSlots[i].hold = (typeof saved.hold === 'number') ? saved.hold : 6;
+    bandSlots[i].blendMode = (typeof saved.blend_mode === 'number') ? saved.blend_mode : 1;
+    bandSlots[i].blendAlpha = (typeof saved.blend_alpha === 'number') ? saved.blend_alpha : 1.0;
     bandSlots[i].paramCache = Object.assign({}, saved.paramCache || {});
     await sendRequest('SetBandEffect', {
       band: i,
@@ -3473,7 +4394,9 @@ async function applyProfile(settings) {
       intensity: bandSlots[i].intensity,
       attack: bandSlots[i].attack,
       release: bandSlots[i].release,
-      hold: bandSlots[i].hold
+      hold: bandSlots[i].hold,
+      blend_mode: bandSlots[i].blendMode,
+      blend_alpha: bandSlots[i].blendAlpha
     });
   }
 
@@ -3497,43 +4420,101 @@ async function applyProfile(settings) {
   bandParamMappings = Object.assign({}, settings.band_param_mappings || {});
 }
 
-function saveProfile() {
+async function saveProfile() {
   const input = document.getElementById('profileName');
   const name = (input?.value || '').trim();
   if (!name) {
     input?.focus();
     return;
   }
-  const profiles = getProfiles();
-  profiles[name] = captureCurrentSettings();
-  saveProfilesToStorage(profiles);
-  refreshProfileList();
+  const snapshot = captureCurrentSettings();
+  snapshot.schema_version = 2;
+  const resp = await sendRequest('SaveProfileV2', { name, profile_name: name, state: snapshot, settings: snapshot });
+  const data = unwrapResponseData(resp);
+  if (!resp || data.success === false) {
+    setAutosaveStatus('failed', data.error || 'Profile save failed');
+    return;
+  }
+  backendProfiles[name] = snapshot;
+  if (!backendProfileNames.includes(name)) backendProfileNames.push(name);
+  await refreshProfileList();
   const sel = document.getElementById('profileSelect');
   if (sel) sel.value = name;
   input.value = '';
   input.placeholder = 'Saved as "' + name + '"';
   setTimeout(() => { if (input) input.placeholder = 'Profile name...'; }, 2000);
+  setAutosaveStatus('saved', 'Saved profile "' + name + '"');
 }
 
 async function loadProfile() {
   const sel = document.getElementById('profileSelect');
   const name = sel?.value || '';
   if (!name) return;
-  const profiles = getProfiles();
-  const settings = profiles[name];
-  if (!settings) return;
-  await applyProfile(settings);
+  const resp = await sendRequest('LoadProfileV2', { name, profile_name: name });
+  const data = unwrapResponseData(resp);
+  const settings = data.state || data.profile || data.settings || backendProfiles[name];
+  if (!resp || data.success === false || !settings) {
+    setAutosaveStatus('failed', data.error || 'Profile load failed');
+    return;
+  }
+  applyCanonicalStateToUI(settings);
+  if (data.applied === false) await applyProfile(settings);
+  await bootstrapCanonicalState();
 }
 
-function deleteProfile() {
+async function deleteProfile() {
   const sel = document.getElementById('profileSelect');
   const name = sel?.value || '';
   if (!name) return;
   if (!confirm('Delete profile "' + name + '"?')) return;
-  const profiles = getProfiles();
-  delete profiles[name];
-  saveProfilesToStorage(profiles);
-  refreshProfileList();
+  const resp = await sendRequest('DeleteProfileV2', { name, profile_name: name });
+  const data = unwrapResponseData(resp);
+  if (!resp || data.success === false) {
+    alert(data.error || 'Backend profile delete is not available yet.');
+    return;
+  }
+  delete backendProfiles[name];
+  backendProfileNames = backendProfileNames.filter(n => n !== name);
+  await refreshProfileList();
+}
+
+async function saveLegacyProfilesToBackend(legacy) {
+  const entries = Object.entries(legacy || {});
+  let saved = 0;
+  for (const [name, settings] of entries) {
+    if (!name || !settings) continue;
+    const resp = await sendRequest('SaveProfileV2', {
+      name,
+      profile_name: name,
+      state: Object.assign({ schema_version: 2 }, settings),
+      settings: Object.assign({ schema_version: 2 }, settings)
+    });
+    const data = unwrapResponseData(resp);
+    if (resp && data.success !== false) {
+      backendProfiles[name] = settings;
+      if (!backendProfileNames.includes(name)) backendProfileNames.push(name);
+      saved++;
+    }
+  }
+  await refreshProfileList();
+  return saved;
+}
+
+async function importLegacyLocalProfiles() {
+  const status = document.getElementById('settingsLegacyImportStatus');
+  if (!ws || !connected) {
+    if (status) status.textContent = 'Connect to OBS before importing local profiles.';
+    return;
+  }
+  const legacy = getLegacyLocalProfiles();
+  const count = Object.keys(legacy).length;
+  if (!count) {
+    if (status) status.textContent = 'No legacy browser profiles found.';
+    return;
+  }
+  if (status) status.textContent = 'Importing ' + count + ' local profile(s)...';
+  const saved = await saveLegacyProfilesToBackend(legacy);
+  if (status) status.textContent = 'Imported ' + saved + ' of ' + count + ' local profile(s).';
 }
 
 /* Initialize profile list + restore cached logo paths on load */
@@ -3625,7 +4606,7 @@ async function setParam(name, value) {
 }
 
 // === Audio Band -> Param Mapping (Web UI driven modulation) ===
-let paramBandMappings = {};  // { paramName: { band: 0-3|-1, min: float, max: float, amount: float } }
+let paramBandMappings = {};  // { paramName: { band, min, max, amount, threshold, curve, smoothing } }
 
 function setParamBandMapping(paramName, band) {
   if (band < 0) {
@@ -3639,6 +4620,10 @@ function setParamBandMapping(paramName, band) {
         min: p ? p.min : 0,
         max: p ? p.max : 1,
         amount: 1.0,
+        threshold: 0,
+        curve: 0,
+        smoothing: 0.35,
+        smoothValue: 0,
         baseValue: p ? p.default : 0
       };
     } else {
@@ -3659,20 +4644,52 @@ function setParamBandThreshold(paramName, threshold) {
   }
 }
 
+function setParamBandCurve(paramName, curve) {
+  if (paramBandMappings[paramName]) {
+    paramBandMappings[paramName].curve = parseInt(curve, 10) || 0;
+  }
+}
+
+function setParamBandSmoothing(paramName, smoothing) {
+  if (paramBandMappings[paramName]) {
+    paramBandMappings[paramName].smoothing = Math.max(0, Math.min(0.95, parseFloat(smoothing) || 0));
+  }
+}
+
+function applyAutomationCurve(value, curve) {
+  value = Math.max(0, Math.min(1, value || 0));
+  switch (parseInt(curve, 10) || 0) {
+    case 1: return value * value;                 /* punch */
+    case 2: return Math.sqrt(value);              /* soft */
+    case 3: return value > 0.5 ? 1 : 0;           /* gate */
+    case 4: return Math.pow(value, 3);            /* hard stomp */
+    default: return value;
+  }
+}
+
 // Called each poll cycle to send band-modulated params
 function updateBandModulatedParams(state) {
   const bands = [
     state.band_bass || 0, state.band_lowmid || 0,
     state.band_highmid || 0, state.band_treble || 0
   ];
+  const activeParams = new Set((effectParams[activeEffect] || []).map(p => p.name));
 
+  autosaveSuppressed = true;
+  try {
   /* Main effect param modulation */
   for (const [paramName, mapping] of Object.entries(paramBandMappings)) {
+    if (activeEffect && activeParams.size && !activeParams.has(paramName)) continue;
     let bandVal = bands[mapping.band] || 0;
     /* Apply threshold: ignore audio below this level */
     const thr = mapping.threshold || 0;
     if (bandVal < thr) bandVal = 0;
     else if (thr < 1.0) bandVal = (bandVal - thr) / (1.0 - thr);
+    bandVal = applyAutomationCurve(bandVal, mapping.curve);
+    const smoothing = Math.max(0, Math.min(0.95, mapping.smoothing ?? 0.35));
+    const prev = (typeof mapping.smoothValue === 'number') ? mapping.smoothValue : bandVal;
+    bandVal = prev + (bandVal - prev) * (1.0 - smoothing);
+    mapping.smoothValue = bandVal;
     const range = mapping.max - mapping.min;
     const modulated = mapping.baseValue + bandVal * range * mapping.amount;
     const clamped = Math.max(mapping.min, Math.min(mapping.max, modulated));
@@ -3682,6 +4699,9 @@ function updateBandModulatedParams(state) {
   /* Band effect param modulation */
   if (Object.keys(bandParamMappings).length > 0) {
     updateBandParamMappings(bands);
+  }
+  } finally {
+    autosaveSuppressed = false;
   }
 }
 
@@ -3798,8 +4818,6 @@ function renderParams() {
   if (activeBandIndex >= 0) return;
 
   const container = document.getElementById('paramsContainer');
-  /* Only clear main effect mappings, not band mappings */
-  paramBandMappings = {};
   activeBandIndex = -1;
   /* Only stop main effect random intervals, keep band intervals running */
   stopAllRandomForBand(-1);
@@ -3821,13 +4839,14 @@ function renderParams() {
       Not connected to OBS — sliders won't work. Click Connect first.</div>`;
   }
 
-  html += `<div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;padding:6px 10px;background:rgba(124,58,237,0.1);border-radius:6px;border:1px solid rgba(124,58,237,0.3)">
+  html += `<div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:12px;padding:6px 10px;background:rgba(0,217,255,0.08);border-radius:6px;border:1px solid rgba(0,217,255,0.24)">
     ${name}</div>`;
 
   params.forEach(p => {
     const dropdownOptions = getParamDropdownOptions(p);
     const isDropdown = dropdownOptions && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
+    const audioMapping = paramBandMappings[p.name];
 
     html += `<div class="param-slider">
       <div class="control-label" style="display:flex;align-items:center;gap:4px">
@@ -3861,15 +4880,15 @@ function renderParams() {
 
     /* Audio band mapping */
     if (!isDropdown) {
-      html += `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+      html += `<div class="param-audio-map" style="display:flex;align-items:center;gap:6px;margin-top:4px">
         <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">Audio</span>
         <select style="flex:1;font-size:11px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
           onchange="setParamBandMapping('${p.name}',parseInt(this.value));renderParamBandAmount('${p.name}',this.parentElement)">
-          <option value="-1">None</option>
-          <option value="0">Bass</option>
-          <option value="1">Low-Mid</option>
-          <option value="2">High-Mid</option>
-          <option value="3">Treble</option>
+          <option value="-1" ${!audioMapping ? 'selected' : ''}>None</option>
+          <option value="0" ${audioMapping && audioMapping.band === 0 ? 'selected' : ''}>Bass</option>
+          <option value="1" ${audioMapping && audioMapping.band === 1 ? 'selected' : ''}>Low-Mid</option>
+          <option value="2" ${audioMapping && audioMapping.band === 2 ? 'selected' : ''}>High-Mid</option>
+          <option value="3" ${audioMapping && audioMapping.band === 3 ? 'selected' : ''}>Treble</option>
         </select>
         <span id="paramBandAmountWrap_${p.name}"></span>
       </div>`;
@@ -3883,12 +4902,23 @@ function renderParams() {
     html += renderCustomWordsPanel();
   }
 
+  if (activeEffect === 'halo_text_logo_tunnel') {
+    html += renderHaloRingTextPanel();
+  }
+
   container.innerHTML = html;
   renderParamTabs();
+  Object.keys(paramBandMappings).forEach(paramName => {
+    const wrap = document.getElementById('paramBandAmountWrap_' + paramName);
+    if (wrap) renderParamBandAmount(paramName, wrap.parentElement);
+  });
 
   /* Hook up Type Animator custom-words handlers */
   if (activeEffect === 'type_animator') {
     initCustomWordsPanel();
+  }
+  if (activeEffect === 'halo_text_logo_tunnel') {
+    initHaloRingTextPanel();
   }
 }
 
@@ -3947,6 +4977,7 @@ function sanitizeWord(w) {
 async function pushCustomWordToShader(word) {
   if (!connected) return;
   const w = sanitizeWord(word);
+  sendRequest('SetParam', { param: 'text_choice', value: 6 });
   for (let i = 0; i < 12; i++) {
     const ch = i < w.length ? w[i] : '';
     const idx = ch ? charToIndex(ch) : 0;
@@ -3990,7 +5021,7 @@ function renderCustomWordsPanel() {
       Active: <span id="cwActiveWord" style="color:var(--accent);font-weight:700">—</span>
     </div>
     <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.4">
-      Set Text dropdown to <strong>CUSTOM</strong> above to use these words. JS rotates them by beat.
+      Custom mode switches the shader to CUSTOM automatically and rotates these words by beat.
     </div>
   </div>`;
 }
@@ -4044,6 +5075,12 @@ function initCustomWordsPanel() {
 function applyCurrentCustomWord() {
   if (!customWordsState.words.length) return;
   const w = customWordsState.words[customWordsState.currentIndex] || '';
+  const textChoiceEl = document.getElementById('paramSlider_text_choice');
+  const textChoiceSelect = document.getElementById('paramSelect_text_choice');
+  const textChoiceVal = document.getElementById('paramVal_text_choice');
+  if (textChoiceEl) textChoiceEl.value = 6;
+  if (textChoiceSelect) textChoiceSelect.value = 6;
+  if (textChoiceVal) textChoiceVal.textContent = 'CUSTOM';
   pushCustomWordToShader(w);
   const labelEl = document.getElementById('cwActiveWord');
   if (labelEl) labelEl.textContent = w || '(empty)';
@@ -4074,6 +5111,158 @@ function tickCustomWords(state) {
   }
 }
 
+/* === HALO TEXT LOGO TUNNEL: FREE RING TEXT === */
+const HALO_RING_TEXT_KEY = 'vjlink_halo_ring_text_v1';
+let haloRingTextState = {
+  enabled: true,
+  mode: 1,
+  rings: ['BOSO', 'BOSO', 'BOSO', 'BOSO']
+};
+
+function loadHaloRingTextState() {
+  try {
+    const raw = localStorage.getItem(HALO_RING_TEXT_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.rings) &&
+        data.rings.join('|') === 'HALO WHO?|VJLINK|HARDTECHNO|VOID?') {
+      data.enabled = true;
+      data.mode = 1;
+      data.rings = ['BOSO', 'BOSO', 'BOSO', 'BOSO'];
+    }
+    applyHaloRingTextState(data, false);
+  } catch (e) {}
+}
+
+function saveHaloRingTextState() {
+  try {
+    localStorage.setItem(HALO_RING_TEXT_KEY, JSON.stringify(haloRingTextState));
+  } catch (e) {}
+}
+
+function sanitizeHaloText(w) {
+  return (w || '').toUpperCase()
+    .replace(/[^A-Z0-9 ?]/g, '')
+    .slice(0, 12);
+}
+
+function haloCharToIndex(ch) {
+  if (ch === '?') return 38;
+  return charToIndex(ch);
+}
+
+function normalizeHaloRingTextState(data) {
+  const src = data || {};
+  const rings = Array.isArray(src.rings) ? src.rings : haloRingTextState.rings;
+  return {
+    enabled: !!src.enabled,
+    mode: Number.isFinite(Number(src.mode)) ? Math.max(0, Math.min(2, Number(src.mode))) : 1,
+    rings: [0, 1, 2, 3].map(i => sanitizeHaloText(rings[i] || haloRingTextState.rings[i] || ''))
+  };
+}
+
+function applyHaloRingTextState(data, persist = true) {
+  haloRingTextState = normalizeHaloRingTextState(data);
+  if (persist) saveHaloRingTextState();
+  const enabledEl = document.getElementById('haloRingEnabled');
+  const modeEl = document.getElementById('haloRingMode');
+  if (enabledEl) enabledEl.checked = haloRingTextState.enabled;
+  if (modeEl) modeEl.value = String(haloRingTextState.mode);
+  for (let i = 0; i < 4; i++) {
+    const input = document.getElementById('haloRingText' + (i + 1));
+    if (input) input.value = haloRingTextState.rings[i] || '';
+  }
+}
+
+loadHaloRingTextState();
+
+async function pushHaloRingTextToShader() {
+  if (!connected || activeEffect !== 'halo_text_logo_tunnel') return;
+  await sendRequest('SetParam', { param: 'ring_text_active', value: haloRingTextState.enabled ? 1 : 0 });
+  await sendRequest('SetParam', { param: 'ring_text_mode', value: haloRingTextState.mode });
+  for (let ring = 1; ring <= 4; ring++) {
+    const w = sanitizeHaloText(haloRingTextState.rings[ring - 1] || '');
+    for (let i = 0; i < 12; i++) {
+      const ch = i < w.length ? w[i] : '';
+      const idx = ch ? haloCharToIndex(ch) : 0;
+      await sendRequest('SetParam', { param: 'ring' + ring + '_char_' + i, value: idx });
+    }
+  }
+}
+
+function renderHaloRingTextPanel() {
+  const modeOptions = [
+    ['0', 'Use preset dropdowns'],
+    ['1', 'Use custom text per lane'],
+    ['2', 'Beat-rotate custom lanes']
+  ];
+  const rows = [1, 2, 3, 4].map(i => `
+    <label style="display:grid;grid-template-columns:64px 1fr;align-items:center;gap:8px;margin-top:6px">
+      <span style="font-size:10px;color:var(--text-dim);font-weight:700;text-transform:uppercase">Ring ${i}</span>
+      <input type="text" id="haloRingText${i}" value="${(haloRingTextState.rings[i - 1] || '').replace(/</g,'&lt;')}"
+        maxlength="12" placeholder="A-Z 0-9 ?"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;font-family:monospace">
+    </label>`).join('');
+  return `
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--accent)">HALO RING TEXT</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;color:var(--text-dim)">
+        <input type="checkbox" id="haloRingEnabled" ${haloRingTextState.enabled ? 'checked' : ''}>
+        <span>Use Custom</span>
+      </label>
+    </div>
+    <select id="haloRingMode" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;font-size:11px">
+      ${modeOptions.map(([val, label]) => `<option value="${val}" ${Number(val) === haloRingTextState.mode ? 'selected' : ''}>${label}</option>`).join('')}
+    </select>
+    ${rows}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="haloApplyTextBtn" style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;font-size:11px;cursor:pointer">Apply Text</button>
+      <button id="haloPresetTextBtn" style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:5px;font-size:11px;cursor:pointer">Preset</button>
+    </div>
+  </div>`;
+}
+
+function initHaloRingTextPanel() {
+  const enabledEl = document.getElementById('haloRingEnabled');
+  const modeEl = document.getElementById('haloRingMode');
+  const applyBtn = document.getElementById('haloApplyTextBtn');
+  const presetBtn = document.getElementById('haloPresetTextBtn');
+
+  const readPanel = () => {
+    haloRingTextState.enabled = !!enabledEl?.checked;
+    haloRingTextState.mode = parseInt(modeEl?.value || '1', 10);
+    for (let i = 0; i < 4; i++) {
+      const input = document.getElementById('haloRingText' + (i + 1));
+      haloRingTextState.rings[i] = sanitizeHaloText(input?.value || '');
+      if (input) input.value = haloRingTextState.rings[i];
+    }
+    saveHaloRingTextState();
+    scheduleAutosave();
+  };
+
+  const applyNow = async () => {
+    readPanel();
+    await pushHaloRingTextToShader();
+  };
+
+  if (enabledEl) enabledEl.onchange = applyNow;
+  if (modeEl) modeEl.onchange = applyNow;
+  for (let i = 1; i <= 4; i++) {
+    const input = document.getElementById('haloRingText' + i);
+    if (input) input.oninput = () => { readPanel(); };
+    if (input) input.onkeydown = (ev) => { if (ev.key === 'Enter') applyNow(); };
+  }
+  if (applyBtn) applyBtn.onclick = applyNow;
+  if (presetBtn) presetBtn.onclick = async () => {
+    applyHaloRingTextState({ enabled: true, mode: 1, rings: ['BOSO', 'BOSO', 'BOSO', 'BOSO'] });
+    await pushHaloRingTextToShader();
+    scheduleAutosave();
+  };
+
+  if (haloRingTextState.enabled) pushHaloRingTextToShader();
+}
+
 function renderParamBandAmount(paramName, parentEl) {
   const wrap = document.getElementById('paramBandAmountWrap_' + paramName);
   if (!wrap) return;
@@ -4095,6 +5284,23 @@ function renderParamBandAmount(paramName, parentEl) {
         <input type="range" min="0" max="90" value="${((m.threshold||0)*100).toFixed(0)}" step="5" style="flex:1;height:4px"
           oninput="setParamBandThreshold('${paramName}',this.value/100);this.nextElementSibling.textContent=this.value+'%'">
         <span style="font-size:11px;color:var(--orange);width:40px;text-align:right;font-variant-numeric:tabular-nums">${((m.threshold||0)*100).toFixed(0)}%</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font-size:11px;color:var(--text);width:55px">Curve</span>
+        <select style="flex:1;font-size:11px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px"
+          onchange="setParamBandCurve('${paramName}',this.value)">
+          <option value="0" ${(m.curve||0) === 0 ? 'selected' : ''}>Linear</option>
+          <option value="1" ${(m.curve||0) === 1 ? 'selected' : ''}>Punch</option>
+          <option value="2" ${(m.curve||0) === 2 ? 'selected' : ''}>Soft</option>
+          <option value="3" ${(m.curve||0) === 3 ? 'selected' : ''}>Gate</option>
+          <option value="4" ${(m.curve||0) === 4 ? 'selected' : ''}>Hard</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font-size:11px;color:var(--text);width:55px">Smooth</span>
+        <input type="range" min="0" max="95" value="${(((m.smoothing ?? 0.35))*100).toFixed(0)}" step="5" style="flex:1;height:4px"
+          oninput="setParamBandSmoothing('${paramName}',this.value/100);this.nextElementSibling.textContent=this.value+'%'">
+        <span style="font-size:11px;color:var(--purple);width:40px;text-align:right;font-variant-numeric:tabular-nums">${(((m.smoothing ?? 0.35))*100).toFixed(0)}%</span>
       </div>
     </div>`;
   } else {
@@ -4290,10 +5496,10 @@ const bandInfo = [
 ];
 
 let bandSlots = [
-  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
-  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blendMode: 1, blendAlpha: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blendMode: 1, blendAlpha: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blendMode: 1, blendAlpha: 1.0, activation: 0, paramCache: {} },
+  { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blendMode: 1, blendAlpha: 1.0, activation: 0, paramCache: {} },
 ];
 
 function renderBandEffects() {
@@ -4362,6 +5568,21 @@ function renderBandEffects() {
           <div class="band-slider-label"><span>Hold</span><span id="bandHoldVal_${i}">${slot.hold.toFixed(0)}f</span></div>
           <input type="range" min="0" max="60" value="${slot.hold}" step="1"
             oninput="bandSlots[${i}].hold=parseFloat(this.value);document.getElementById('bandHoldVal_${i}').textContent=this.value+'f';updateBandSlot(${i})">
+        </div>
+        <div>
+          <div class="band-slider-label"><span>Blend</span></div>
+          <select style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:5px;font-size:10px"
+            onchange="bandSlots[${i}].blendMode=parseInt(this.value);updateBandSlot(${i})">
+            <option value="0" ${slot.blendMode === 0 ? 'selected' : ''}>Normal</option>
+            <option value="1" ${slot.blendMode !== 0 && slot.blendMode !== 2 && slot.blendMode !== 3 ? 'selected' : ''}>Add</option>
+            <option value="2" ${slot.blendMode === 2 ? 'selected' : ''}>Multiply</option>
+            <option value="3" ${slot.blendMode === 3 ? 'selected' : ''}>Screen</option>
+          </select>
+        </div>
+        <div>
+          <div class="band-slider-label"><span>Alpha</span><span id="bandAlphaVal_${i}">${((slot.blendAlpha || 1) * 100).toFixed(0)}%</span></div>
+          <input type="range" min="0" max="100" value="${(slot.blendAlpha || 1) * 100}" step="1"
+            oninput="bandSlots[${i}].blendAlpha=this.value/100;document.getElementById('bandAlphaVal_${i}').textContent=this.value+'%';updateBandSlot(${i})">
         </div>
       </details>
       <div>
@@ -4450,7 +5671,9 @@ async function setBandEffect(bandIndex) {
     intensity: slot.intensity,
     attack: slot.attack,
     release: slot.release,
-    hold: slot.hold
+    hold: slot.hold,
+    blend_mode: slot.blendMode,
+    blend_alpha: slot.blendAlpha
   });
   renderBandParams(bandIndex);
 }
@@ -4687,35 +5910,38 @@ async function updateBandSlot(bandIndex) {
     intensity: slot.intensity,
     attack: slot.attack,
     release: slot.release,
-    hold: slot.hold
+    hold: slot.hold,
+    blend_mode: slot.blendMode,
+    blend_alpha: slot.blendAlpha
   });
 }
 
 async function applyTriggerPreset(kind) {
   const presets = {
     tight: [
-      { threshold: 0.48, attack: 0.85, release: 0.28, hold: 3 },
-      { threshold: 0.42, attack: 0.75, release: 0.22, hold: 4 },
-      { threshold: 0.38, attack: 0.70, release: 0.20, hold: 4 },
-      { threshold: 0.36, attack: 0.70, release: 0.18, hold: 3 },
+      { effect: 'flash_kick', threshold: 0.48, attack: 0.85, release: 0.28, hold: 3 },
+      { effect: 'flash_snare', threshold: 0.42, attack: 0.75, release: 0.22, hold: 4 },
+      { effect: 'strobe_gate', threshold: 0.38, attack: 0.70, release: 0.20, hold: 4 },
+      { effect: 'flash_shake', threshold: 0.36, attack: 0.70, release: 0.18, hold: 3 },
     ],
     rave: [
-      { threshold: 0.34, attack: 0.95, release: 0.16, hold: 8 },
-      { threshold: 0.32, attack: 0.80, release: 0.14, hold: 7 },
-      { threshold: 0.30, attack: 0.72, release: 0.13, hold: 6 },
-      { threshold: 0.28, attack: 0.70, release: 0.12, hold: 5 },
+      { effect: 'hardtechno_strobe', threshold: 0.34, attack: 0.95, release: 0.16, hold: 8 },
+      { effect: 'strobe_grid', threshold: 0.32, attack: 0.80, release: 0.14, hold: 7 },
+      { effect: 'beat_rings', threshold: 0.30, attack: 0.72, release: 0.13, hold: 6 },
+      { effect: 'flash_shake', threshold: 0.28, attack: 0.70, release: 0.12, hold: 5 },
     ],
     smooth: [
-      { threshold: 0.55, attack: 0.35, release: 0.08, hold: 10 },
-      { threshold: 0.50, attack: 0.32, release: 0.07, hold: 10 },
-      { threshold: 0.45, attack: 0.30, release: 0.07, hold: 9 },
-      { threshold: 0.42, attack: 0.28, release: 0.06, hold: 8 },
+      { effect: 'beat_flash', threshold: 0.55, attack: 0.35, release: 0.08, hold: 10 },
+      { effect: 'logo_pulse', threshold: 0.50, attack: 0.32, release: 0.07, hold: 10 },
+      { effect: 'spectrum_radial', threshold: 0.45, attack: 0.30, release: 0.07, hold: 9 },
+      { effect: 'laser_scan', threshold: 0.42, attack: 0.28, release: 0.06, hold: 8 },
     ],
   };
 
   const preset = presets[kind] || presets.tight;
   for (let i = 0; i < 4; i++) {
     Object.assign(bandSlots[i], preset[i]);
+    bandSlots[i].paramCache = {};
     await updateBandSlot(i);
   }
   renderBandEffects();
@@ -5343,6 +6569,10 @@ function setMacrosFromUI() {
 function setStrobeSafetyFromUI() {
   const v = parseFloat(document.getElementById('strobeSafety').value) / 100;
   document.getElementById('strobeSafetyVal').textContent = (v * 100).toFixed(0) + '%';
+  const settingsSlider = document.getElementById('settingsStrobeSafety');
+  const settingsLabel = document.getElementById('settingsStrobeSafetyVal');
+  if (settingsSlider) settingsSlider.value = Math.round(v * 100);
+  if (settingsLabel) settingsLabel.textContent = (v * 100).toFixed(0) + '%';
   if (strobeSafetyTimer) clearTimeout(strobeSafetyTimer);
   strobeSafetyTimer = setTimeout(() => {
     sendRequest('SetMacros', { strobe_safety: v });
@@ -5439,6 +6669,7 @@ function setPadCount(n) {
   savePadPrefs();
   savePerfPads();
   renderPerfPads();
+  scheduleAutosave();
 }
 
 function setPadSize(size) {
@@ -5446,6 +6677,7 @@ function setPadSize(size) {
   padSize = size;
   savePadPrefs();
   renderPerfPads();
+  scheduleAutosave();
 }
 
 function setPadBank(b) {
@@ -5458,6 +6690,7 @@ function setPadBank(b) {
     btn.classList.toggle('active', btn.dataset.bank === b);
   });
   renderPerfPads();
+  scheduleAutosave();
 }
 
 function togglePadEditMode() {
@@ -5598,6 +6831,12 @@ async function triggerPad(idx) {
   document.querySelectorAll('.perf-pad').forEach((el, j) => {
     el.classList.toggle('last-triggered', j === idx);
   });
+  sendRequest('SetPadState', { index: idx, down: true, velocity: 1.0 });
+  setTimeout(() => sendRequest('SetPadState', {
+    index: idx,
+    down: false,
+    velocity: 0.0
+  }), 220);
 
   /* Restore chain if multi-slot */
   if (typeof effectChain !== 'undefined' && Array.isArray(pad.chain) && pad.chain.length > 0) {
@@ -5964,6 +7203,8 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'kernel_size', label: 'Kernel', min: 0, max: 1, step: 1, default: 0, options: ['3x3 (fast)','5x5 (cleaner)'] },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 1, step: 1, default: 0, options: ['Continuous','1/4'] },
+    { name: 'wall_cut', label: 'LED Wall Cut', min: 0, max: 1, step: 0.05, default: 0.25 },
+    { name: 'poster_steps', label: 'Poster Steps', min: 2, max: 8, step: 1, default: 4 },
   ];
   effectParams.beat_cuts = [
     { name: 'cut_division', label: 'Division', min: 0, max: 4, step: 1, default: 1, options: ['1/4','1/8','1/16','2 Beats','4 Beats'] },
@@ -6028,6 +7269,9 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.01, default: 0.55 },
     { name: 'intensity', label: 'Intensity', min: 0, max: 4, step: 0.05, default: 1.4 },
     { name: 'radius', label: 'Radius', min: 0.5, max: 5, step: 0.05, default: 1.5 },
+    { name: 'mix_amount', label: 'Mix', min: 0, max: 1, step: 0.01, default: 1.0 },
+    { name: 'source_gain', label: 'Source Gain', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'soft_clip', label: 'Soft Clip', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'palette_tint', label: 'Palette Tint', min: 0, max: 1, step: 0.01, default: 0.0 },
   ];
@@ -6041,12 +7285,20 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
   ];
   effectParams.vaporwave_sunset = [
-    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 3, step: 0.05, default: 0.7 },
-    { name: 'sun_size', label: 'Sun Size', min: 0.15, max: 0.6, step: 0.01, default: 0.42 },
+    { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 3, step: 0.05, default: 0.65 },
+    { name: 'sun_size', label: 'Sun Size', min: 0.1, max: 0.6, step: 0.01, default: 0.42 },
+    { name: 'sun_slits', label: 'Sun Slits', min: 0, max: 1, step: 0.01, default: 1.0 },
     { name: 'grid_density', label: 'Grid Density', min: 4, max: 32, step: 1, default: 14 },
+    { name: 'grid_glow', label: 'Grid Glow', min: 0, max: 2, step: 0.05, default: 1.15 },
     { name: 'horizon_y', label: 'Horizon Y', min: 0.3, max: 0.7, step: 0.01, default: 0.55 },
+    { name: 'mountain_amount', label: 'Mountains', min: 0, max: 1, step: 0.05, default: 1.0 },
+    { name: 'star_amount', label: 'Stars', min: 0, max: 1, step: 0.05, default: 0.45 },
+    { name: 'chrome_reflect', label: 'Chrome Reflection', min: 0, max: 1, step: 0.05, default: 0.30 },
+    { name: 'palm_amount', label: 'Palms', min: 0, max: 1, step: 0.05, default: 0.20 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'bg_disable', label: 'Hide Sky/Sun/Mtns', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
+    { name: 'stage_mode', label: 'Stage Mode', min: 0, max: 2, step: 1, default: 0, options: ['Synthwave','Hard Wall','Shelternet Portal'] },
+    { name: 'impact_flash', label: 'Impact Flash', min: 0, max: 1, step: 0.05, default: 0.25 },
   ];
   effectParams.demoscene_plasma = [
     { name: 'plasma_speed', label: 'Speed', min: 0, max: 3, step: 0.05, default: 1.0 },
@@ -6068,6 +7320,8 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'metallic', label: 'Metallic', min: 0, max: 1, step: 0.05, default: 0.55 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'bg_disable', label: 'Hide Base (standalone)', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
+    { name: 'prism_gate', label: 'Prism Gate', min: 0, max: 1, step: 0.05, default: 0.30 },
+    { name: 'beam_amount', label: 'Beam Amount', min: 0, max: 1, step: 0.05, default: 0.35 },
   ];
   effectParams.cyber_grid = [
     { name: 'scroll_speed', label: 'Scroll Speed', min: 0, max: 5, step: 0.05, default: 1.6 },
@@ -6077,6 +7331,9 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 1, options: ['Continuous','1/4','1/8'] },
     { name: 'bg_disable', label: 'Hide Stars/Glow', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
+    { name: 'wall_mode', label: 'Wall Mode', min: 0, max: 2, step: 1, default: 1, options: ['Tube Grid','Industrial Slices','Laser Cage'] },
+    { name: 'panel_slices', label: 'Panel Slices', min: 2, max: 48, step: 1, default: 18 },
+    { name: 'impact_flash', label: 'Impact Flash', min: 0, max: 1, step: 0.05, default: 0.35 },
   ];
 
   /* === v1.1.0 NEW EFFECTS === */
@@ -6101,8 +7358,18 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
   effectParams.type_animator = [
     { name: 'text_choice', label: 'Text', min: 0, max: 6, step: 1, default: 0, options: ['RAVE','BERGHAIN','HARDTECHNO','ACID','DROP','TECHNO','CUSTOM'] },
     { name: 'text_size', label: 'Size', min: 0.05, max: 0.5, step: 0.01, default: 0.2 },
-    { name: 'change_rate', label: 'Change Rate', min: 0, max: 2, step: 1, default: 0, options: ['Off','On Bar','On Beat'] },
+    { name: 'change_rate', label: 'Preset Change', min: 0, max: 2, step: 1, default: 0, options: ['Off','On Bar','On Beat'] },
+    { name: 'beat_bounce', label: 'Beat Bounce', min: 0, max: 1, step: 1, default: 1, options: ['Off','On'] },
+    { name: 'bounce_amount', label: 'Bounce Amount', min: 0, max: 0.6, step: 0.01, default: 0.18 },
     { name: 'audio_drive', label: 'Audio Drive', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'text_align_x', label: 'Position X', min: -1, max: 1, step: 0.01, default: 0 },
+    { name: 'text_align_y', label: 'Position Y', min: -1, max: 1, step: 0.01, default: 0 },
+    { name: 'letter_spacing', label: 'Letter Spacing', min: 0.5, max: 2, step: 0.01, default: 1.0 },
+    { name: 'vertical_flip', label: 'Orientation', min: 0, max: 1, step: 1, default: 0, options: ['Normal','Upside Down'] },
+    { name: 'outline_amount', label: 'Outline', min: 0, max: 1, step: 0.01, default: 0.35 },
+    { name: 'glow_amount', label: 'Glow', min: 0, max: 3, step: 0.05, default: 1.0 },
+    { name: 'jitter_amount', label: 'Jitter', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { name: 'scanline_amount', label: 'Scanlines', min: 0, max: 1, step: 0.01, default: 0.15 },
     { name: 'background_amount', label: 'Background Amount', min: 0, max: 1, step: 0.05, default: 0.3 },
     { name: 'bg_disable', label: 'Hide Background', min: 0, max: 1, step: 1, default: 0, options: ['Show','Hide'] },
   ];
@@ -6173,6 +7440,79 @@ setTimeout(() => { syncProControlsFromServer(); }, 1500);
     { name: 'beat_sync', label: 'Beat Sync', min: 0, max: 2, step: 1, default: 0, options: ['Continuous','1/4','1/8'] },
   ];
 })();
+
+/* ============================================================
+ *  Metadata-driven parameters
+ *  Keeps Web UI controls in sync with effects_meta JSON files.
+ * ============================================================ */
+const HIDDEN_META_PARAMS = new Set([
+  'input_tex', 'image', 'prev_tex', 'audio_tex', 'has_input_source',
+  'rms', 'chronotensity', 'band_activation', 'pad_trigger',
+  'pad_velocity', 'media_tex'
+]);
+
+function normalizeMetaParam(p) {
+  const uniform = p.id || p.name;
+  if (!uniform || HIDDEN_META_PARAMS.has(uniform) || /^text_char_\d+$/.test(uniform) || /^ring\d+_char_\d+$/.test(uniform)) return null;
+  const label = p.label || (p.id ? p.name : null) || uniform
+    .replace(/^pp_/, '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+  return {
+    name: uniform,
+    label,
+    min: Number.isFinite(Number(p.min)) ? Number(p.min) : 0,
+    max: Number.isFinite(Number(p.max)) ? Number(p.max) : 1,
+    step: Number.isFinite(Number(p.step)) ? Number(p.step) : 0.01,
+    default: Number.isFinite(Number(p.default)) ? Number(p.default) : 0,
+    options: Array.isArray(p.options) ? p.options : undefined,
+  };
+}
+
+function mergeParamList(existing, incoming) {
+  const out = [];
+  const seen = new Set();
+  [...(existing || []), ...(incoming || [])].forEach(p => {
+    if (!p || !p.name || seen.has(p.name)) return;
+    seen.add(p.name);
+    out.push(p);
+  });
+  return out;
+}
+
+async function loadEffectMetadataParams() {
+  const ids = new Set();
+  Object.values(effectCategories).forEach(cat => (cat.effects || []).forEach(id => ids.add(id)));
+  Object.keys(effectNames).forEach(id => ids.add(id));
+
+  const jobs = [...ids].map(async id => {
+    const urls = [`effects_meta/${id}.json`, `effects_meta/flash/${id}.json`];
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) continue;
+        const meta = await resp.json();
+        if (meta && meta.name) effectNames[id] = meta.name;
+        const params = Array.isArray(meta.params)
+          ? meta.params.map(normalizeMetaParam).filter(Boolean)
+          : [];
+        if (params.length) effectParams[id] = mergeParamList(effectParams[id], params);
+        return;
+      } catch (err) {
+        /* Try fallback path. */
+      }
+    }
+  });
+
+  await Promise.all(jobs);
+  renderParams();
+  if (typeof renderEffectButtons === 'function') renderEffectButtons();
+  else renderEffects();
+  renderParamTabs();
+  console.log('[VJLink] Metadata params loaded for Web UI');
+}
+
+loadEffectMetadataParams();
 
 /* ============================================================
  *  v1.2.0: Effect Chain UI + Beat Quantize + MIDI + Hot-reload
@@ -6676,6 +8016,8 @@ function setAiMode(mode) {
       lbl.style.background = '#4d1a4d'; lbl.style.color = '#f9f';
     }
   }
+  scheduleAutosave();
+  syncSettingsPanel();
 }
 setAiMode('off');
 
@@ -6803,7 +8145,7 @@ let autoVjPool = [
   'plasma_classic','lava_lamp','liquid_metal','kaleidoscope','voronoi',
   'sacred_geometry','tunnel_classic','hex_tunnel','galaxy_tunnel',
   'particle_storm','fire_emitter','sphere_field','torus_knot','metaballs',
-  'concrete_pulse','industrial_strobe_tunnel','smoke_volume',
+  'hardtechno_strobe','concrete_pulse','industrial_strobe_tunnel','smoke_volume',
   'vaporwave_sunset','demoscene_plasma','witch_sigil','cyber_grid',
   'wireframe_city','type_animator','acid_mandala','toxic_sludge',
 ];
@@ -7053,7 +8395,10 @@ if (_origApply_v110) {
 }
 
 // === Init ===
+setUiDensity(uiDensity);
+setPerformanceQuality(performanceQuality);
 setUIMode(uiMode);
+syncSettingsPanel();
 renderBandEffects();
 renderMediaContent();
 loadPerfPads();
@@ -7064,6 +8409,7 @@ midiUpdateUi();
 /* Re-render effects after registerNewEffects() injected the new ones */
 if (typeof renderCategories === 'function') renderCategories();
 if (typeof renderEffects === 'function') renderEffects();
+uiReadyForAutosave = true;
 runDemo();
 </script>
 </body>

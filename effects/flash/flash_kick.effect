@@ -20,6 +20,10 @@ uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float decay_speed;
@@ -53,11 +57,18 @@ float4 PSFlashKick(VertInOut vert_in) : TARGET
 
     float3 flash_col = float3(flash_color_r, flash_color_g, flash_color_b);
 
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float trigger = saturate(max(band_activation, max(kick_onset, pad)) * max(audio_drive, 0.0) *
+        lerp(0.85, 1.55, macro_energy));
+
     /* Exponential decay envelope */
     float dec = max(decay_speed, 1.0);
-    float envelope = pow(band_activation, dec);
+    float envelope = pow(trigger, dec);
 
-    float strength = envelope * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = envelope *
+        ( intensity > 0.01 ? saturate(intensity) : 1.0 ) *
+        safety;
 
     /* Additive flash */
     float3 color = saturate(src.rgb + flash_col * strength);

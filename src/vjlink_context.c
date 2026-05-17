@@ -46,6 +46,9 @@ bool vjlink_context_init(void)
 	ctx->macro_speed = 0.5f;
 	ctx->macro_color = 0.5f;
 	ctx->strobe_safety_max = 1.0f;
+	ctx->pad_trigger = 0.0f;
+	ctx->pad_velocity = 0.0f;
+	ctx->pad_index = -1;
 	ctx->pending_effect_quantize = 0;
 	ctx->pending_effect_beat_anchor = 0;
 	ctx->shader_error_write = 0;

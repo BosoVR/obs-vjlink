@@ -19,7 +19,7 @@ static const struct {
 } category_order[] = {
 	{"tunnel",      "VJLinkCategory.tunnel"},
 	{"plasma",      "VJLinkCategory.plasma"},
-	{"particle",    "VJLinkCategory.particle"},
+	{"particles",   "VJLinkCategory.particle"},
 	{"fractal",     "VJLinkCategory.fractal"},
 	{"geometric",   "VJLinkCategory.geometric"},
 	{"glitch",      "VJLinkCategory.glitch"},

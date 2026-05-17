@@ -8,6 +8,7 @@
 #include "controls/http_server.h"
 #include "controls/tools_menu.h"
 #include "controls/osc_sender.h"
+#include "state/vjlink_state.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-vjlink", "en-US")
@@ -20,7 +21,8 @@ extern struct obs_source_info vjlink_videowall_source_info;
 
 bool obs_module_load(void)
 {
-	blog(LOG_INFO, "[VJLink] Loading OBS-VJLink v%s", "1.0.0");
+	blog(LOG_INFO, "[VJLink] Loading OBS-VJLink v%s",
+	     "1.4.0");
 
 	/* Initialize global context */
 	if (!vjlink_context_init()) {
@@ -33,6 +35,16 @@ bool obs_module_load(void)
 
 	/* Initialize preset manager */
 	vjlink_preset_manager_init();
+
+	/* Initialize backend-owned UI/settings state before remote controls start */
+	if (!vjlink_state_init()) {
+		blog(LOG_WARNING,
+		     "[VJLink] Backend state initialization failed; "
+		     "state websocket requests may be unavailable");
+	} else if (!vjlink_state_load_default()) {
+		blog(LOG_WARNING,
+		     "[VJLink] Backend state load failed; using defaults");
+	}
 
 	/* Register OBS sources/filters */
 	obs_register_source(&vjlink_audio_filter_info);
@@ -109,6 +121,9 @@ void obs_module_unload(void)
 	vjlink_http_server_stop();
 	vjlink_websocket_shutdown();
 	vjlink_hotkeys_shutdown();
+	if (!vjlink_state_save_default())
+		blog(LOG_WARNING, "[VJLink] Backend state save failed");
+	vjlink_state_shutdown();
 	vjlink_preset_manager_shutdown();
 	vjlink_effect_system_shutdown();
 	vjlink_context_shutdown();
@@ -121,5 +136,5 @@ const char *obs_module_name(void)
 
 const char *obs_module_description(void)
 {
-	return "VJ visuals and audio-reactive effects for OBS Studio";
+	return "Audio-reactive VJ system, source filters and LED-wall effects for OBS Studio";
 }

@@ -21,6 +21,11 @@ uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     bpm;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     macro_speed;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float gate_speed;
@@ -50,12 +55,20 @@ float4 PSStrobeGate(VertInOut vert_in) : TARGET
     float4 src = input_tex.Sample(texSampler, uv);
 
     /* Rhythmic gate: subdivide beat phase */
-    float spd = max(gate_speed, 1.0);
+    float spd = max(gate_speed, 1.0) * lerp(0.75, 1.75, macro_speed);
     float phase = frac(beat_phase * spd);
-    float gate = step(0.5, phase);
+    float gate = phase < 0.48 ? 1.0 : 0.0;
 
-    /* Only gate when band is active */
-    float strength = gate * band_activation * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float transient = max(kick_onset, max(snare_onset * 0.5, hat_onset * 0.35));
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float reactor = saturate(max(band_activation, max(transient, pad)) * max(audio_drive, 0.0) *
+        lerp(0.75, 1.5, macro_energy));
+
+    /* Only gate when band/onset/pad is active. */
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = gate * reactor *
+        ( intensity > 0.01 ? saturate(intensity) : 1.0 ) *
+        safety;
 
     /* Darken image when gate is closed */
     float3 color = src.rgb * (1.0 - strength * 0.9);

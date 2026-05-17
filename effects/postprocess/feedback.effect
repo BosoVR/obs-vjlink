@@ -68,8 +68,12 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.7);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float highmid = bands.z * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.7);
     float energy = (chronotensity.x + chronotensity.y) * 0.5;
 
     float bs = beat_sync;
@@ -78,7 +82,7 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
                   : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
                               : pow(1.0 - beat_1_8, 4.0));
 
-    float zoom = fb_zoom + bass * 0.005 + kick_onset * 0.008;
+    float zoom = fb_zoom + bass * 0.005 + kick * 0.008;
     float rot = fb_rotation + beat_q * bass * 0.012;
     float cs = cos(rot), sn = sin(rot);
 
@@ -91,11 +95,11 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
 
     if (fb_hue_shift > 0.001) {
         float3 hsv = rgb2hsv(saturate(prev_shifted));
-        hsv.x = frac(hsv.x + fb_hue_shift + bands.z * 0.005);
+        hsv.x = frac(hsv.x + fb_hue_shift + highmid * 0.005);
         prev_shifted = hsv2rgb(hsv);
     }
 
-    float decay = fb_decay * (1.0 + bass * 0.35 + onset_strength * 0.6 + kick_onset * 0.5);
+    float decay = fb_decay * (1.0 + bass * 0.35 + onset * 0.6 + kick * 0.5);
     prev_shifted *= (1.0 - decay);
 
     float4 curr = image.Sample(texSampler, uv);
@@ -103,7 +107,7 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
         curr = input_tex.Sample(texSampler, uv);
     }
 
-    float dynamic_mix = fb_mix * (1.0 - beat_q * bass * 0.22 - onset_strength * 0.16);
+    float dynamic_mix = fb_mix * (1.0 - beat_q * bass * 0.22 - onset * 0.16);
     dynamic_mix = saturate(dynamic_mix + energy * 0.06);
 
     float3 result = lerp(curr.rgb, prev_shifted, dynamic_mix);
@@ -116,7 +120,7 @@ float4 PSFeedback(VertInOut vert_in) : TARGET
                       0.10 + drive * 0.10);
     }
 
-    result += float3(1.0, 0.95, 1.0) * onset_strength * 0.06;
+    result += float3(1.0, 0.95, 1.0) * onset * 0.06;
 
     result = saturate(result);
     float out_alpha = max(curr.a, max(max(result.r, result.g), result.b));

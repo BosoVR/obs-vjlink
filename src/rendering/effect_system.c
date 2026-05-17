@@ -2,6 +2,7 @@
 #include "audio/audio_texture.h"
 #include "presets/cjson/cJSON.h"
 #include <obs-module.h>
+#include <graphics/matrix4.h>
 #include <util/dstr.h>
 #include <util/platform.h>
 #include <string.h>
@@ -208,8 +209,6 @@ static void scan_effects_directory(void)
 			if (!ext || strcmp(ext, ".effect") != 0)
 				continue;
 
-			/* Include all effects, even vjlink_test */
-
 			/* Extract ID from filename (without extension) */
 			char id[64];
 			size_t name_len = ext - dirent->d_name;
@@ -234,6 +233,8 @@ static void scan_effects_directory(void)
 			    strcmp(id, "videowall_blit") == 0 ||
 			    strcmp(id, "luma_alpha") == 0 ||
 			    strcmp(id, "debug_overlay") == 0 ||
+			    strcmp(id, "debug_solid") == 0 ||
+			    strcmp(id, "vjlink_test") == 0 ||
 			    strcmp(id, "dna_helix") == 0) {
 				g_effects[g_effect_count - 1].hidden = true;
 			}
@@ -354,6 +355,14 @@ static void cache_standard_params(struct vjlink_effect_entry *entry)
 	entry->p_palette_id = gs_effect_get_param_by_name(e, "palette_id");
 	entry->p_quality    = gs_effect_get_param_by_name(e, "quality");
 	entry->p_band_activation = gs_effect_get_param_by_name(e, "band_activation");
+	entry->p_macro_energy = gs_effect_get_param_by_name(e, "macro_energy");
+	entry->p_macro_chaos = gs_effect_get_param_by_name(e, "macro_chaos");
+	entry->p_macro_speed = gs_effect_get_param_by_name(e, "macro_speed");
+	entry->p_macro_color = gs_effect_get_param_by_name(e, "macro_color");
+	entry->p_strobe_safety = gs_effect_get_param_by_name(e, "strobe_safety");
+	entry->p_pad_trigger = gs_effect_get_param_by_name(e, "pad_trigger");
+	entry->p_pad_velocity = gs_effect_get_param_by_name(e, "pad_velocity");
+	entry->p_pad_index = gs_effect_get_param_by_name(e, "pad_index");
 	entry->p_has_input = gs_effect_get_param_by_name(e, "has_input_source");
 	entry->p_logo_tex  = gs_effect_get_param_by_name(e, "logo_tex");
 	entry->p_logo_tex2 = gs_effect_get_param_by_name(e, "logo_tex2");
@@ -451,10 +460,6 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 			struct gs_effect_param_info info;
 			gs_effect_get_param_info(param, &info);
 
-			/* ViewProj is auto-bound by gs_effect_loop */
-			if (strcmp(info.name, "ViewProj") == 0)
-				continue;
-
 			switch (info.type) {
 			case GS_SHADER_PARAM_TEXTURE:
 				if (g_fallback_tex)
@@ -486,6 +491,12 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 				struct vec4 z;
 				vec4_zero(&z);
 				gs_effect_set_vec4(param, &z);
+				break;
+			}
+			case GS_SHADER_PARAM_MATRIX4X4: {
+				struct matrix4 m;
+				matrix4_identity(&m);
+				gs_effect_set_matrix4(param, &m);
 				break;
 			}
 			default:
@@ -588,6 +599,23 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 	/* GPU quality level (0=low, 1=medium, 2=high) */
 	if (entry->p_quality)
 		gs_effect_set_float(entry->p_quality, (float)ctx->gpu_quality);
+
+	if (entry->p_macro_energy)
+		gs_effect_set_float(entry->p_macro_energy, ctx->macro_energy);
+	if (entry->p_macro_chaos)
+		gs_effect_set_float(entry->p_macro_chaos, ctx->macro_chaos);
+	if (entry->p_macro_speed)
+		gs_effect_set_float(entry->p_macro_speed, ctx->macro_speed);
+	if (entry->p_macro_color)
+		gs_effect_set_float(entry->p_macro_color, ctx->macro_color);
+	if (entry->p_strobe_safety)
+		gs_effect_set_float(entry->p_strobe_safety, ctx->strobe_safety_max);
+	if (entry->p_pad_trigger)
+		gs_effect_set_float(entry->p_pad_trigger, ctx->pad_trigger);
+	if (entry->p_pad_velocity)
+		gs_effect_set_float(entry->p_pad_velocity, ctx->pad_velocity);
+	if (entry->p_pad_index)
+		gs_effect_set_float(entry->p_pad_index, (float)ctx->pad_index);
 
 	/* Logo textures (up to 3 user-selected images) */
 	if (entry->p_logo_tex && ctx->logo_texture)
@@ -706,6 +734,14 @@ bool vjlink_effect_check_hot_reload(struct vjlink_effect_entry *entry)
 	entry->p_palette_id = NULL;
 	entry->p_quality = NULL;
 	entry->p_band_activation = NULL;
+	entry->p_macro_energy = NULL;
+	entry->p_macro_chaos = NULL;
+	entry->p_macro_speed = NULL;
+	entry->p_macro_color = NULL;
+	entry->p_strobe_safety = NULL;
+	entry->p_pad_trigger = NULL;
+	entry->p_pad_velocity = NULL;
+	entry->p_pad_index = NULL;
 	entry->p_has_input = NULL;
 	entry->p_logo_tex = NULL;
 	entry->p_logo_tex2 = NULL;

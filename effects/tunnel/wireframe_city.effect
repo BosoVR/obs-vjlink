@@ -96,15 +96,18 @@ float4 PSWireframeCity(VertInOut vert_in) : TARGET
     float2 uv = vert_in.uv;
     float aspect = resolution.x / max(resolution.y, 1.0);
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.4);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
     float3 sky_top, sky_bot, grid_col, window_col;
     palette_city((int)palette_id, sky_top, sky_bot, grid_col, window_col);
 
     float horizon = clamp(horizon_y, 0.25, 0.75);
-    float spd = max(fly_speed, 0.1) * (1.0 + bass * 0.5 + kick_onset * 0.2);
+    float spd = max(fly_speed, 0.1) * (1.0 + bass * 0.5 + kick * 0.2);
     float depth = time * spd;
 
     float3 col;
@@ -189,7 +192,7 @@ float4 PSWireframeCity(VertInOut vert_in) : TARGET
                     float wx_id = floor((bx + 1.0) * wcols * 0.5);
                     float wy_id = floor(by * wrows);
                     float wseed = hash21(float2(column + depth_id * 0.7, wy_id * 1.7));
-                    float win_on = step(0.7 - kick_onset * 0.2, wseed);
+                    float win_on = step(0.7 - kick * 0.2, wseed);
                     /* Window cell shape */
                     float wxf = abs(frac((bx + 1.0) * wcols * 0.5) - 0.5) * 2.0;
                     float wyf = abs(frac(by * wrows) - 0.5) * 2.0;
@@ -210,14 +213,13 @@ float4 PSWireframeCity(VertInOut vert_in) : TARGET
     col += grid_col * pow(strobe_y, 12.0) * beat_4 * bass * 0.15;
 
     /* Onset whitewash */
-    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.08;
+    col += float3(1.0, 1.0, 1.0) * onset * 0.08;
 
     /* HDR */
     col = col / (1.0 + col * 0.4);
     col = saturate(col);
 
-    float a_out = max(max(col.r, col.g), col.b);
-    return float4(col, a_out);
+    return float4(saturate(col), 1.0);
 }
 
 technique Draw {

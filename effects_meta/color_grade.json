@@ -1,17 +1,101 @@
-{
-    "id": "color_grade",
-    "name": "Color Grade",
-    "category": "postprocess",
-    "role": "post",
-    "requires_input": false,
-    "performance_group": "content_fx",
-    "description": "Post-processing: brightness, contrast, saturation, hue, vignette",
-    "params": [
-        { "name": "pp_brightness", "label": "Brightness", "type": "float", "default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01 },
-        { "name": "pp_contrast", "label": "Contrast", "type": "float", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05 },
-        { "name": "pp_saturation", "label": "Saturation", "type": "float", "default": 1.0, "min": 0.0, "max": 3.0, "step": 0.05 },
-        { "name": "pp_hue_shift", "label": "Hue Shift", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01 },
-        { "name": "pp_vignette", "label": "Vignette", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.05 },
-        { "name": "pp_gamma", "label": "Gamma", "type": "float", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05 }
-    ]
+﻿{
+    "id":  "color_grade",
+    "name":  "Color Grade",
+    "category":  "postprocess",
+    "role":  "post",
+    "requires_input":  false,
+    "performance_group":  "content_fx",
+    "description":  "Post-processing: brightness, contrast, saturation, hue, vignette",
+    "params":  [
+                   {
+                       "name":  "pp_brightness",
+                       "label":  "Brightness",
+                       "type":  "float",
+                       "default":  0.0,
+                       "min":  -1.0,
+                       "max":  1.0,
+                       "step":  0.01
+                   },
+                   {
+                       "name":  "pp_contrast",
+                       "label":  "Contrast",
+                       "type":  "float",
+                       "default":  1.0,
+                       "min":  0.5,
+                       "max":  2.0,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "pp_saturation",
+                       "label":  "Saturation",
+                       "type":  "float",
+                       "default":  1.0,
+                       "min":  0.0,
+                       "max":  3.0,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "pp_hue_shift",
+                       "label":  "Hue Shift",
+                       "type":  "float",
+                       "default":  0.0,
+                       "min":  0.0,
+                       "max":  1.0,
+                       "step":  0.01
+                   },
+                   {
+                       "name":  "pp_vignette",
+                       "label":  "Vignette",
+                       "type":  "float",
+                       "default":  0.3,
+                       "min":  0.0,
+                       "max":  1.0,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "pp_gamma",
+                       "label":  "Gamma",
+                       "type":  "float",
+                       "default":  1.0,
+                       "min":  0.5,
+                       "max":  2.0,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "audio_drive",
+                       "label":  "Audio Drive",
+                       "type":  "float",
+                       "default":  1,
+                       "min":  0,
+                       "max":  2,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "palette_tint",
+                       "label":  "Palette Tint",
+                       "type":  "float",
+                       "default":  0,
+                       "min":  0,
+                       "max":  1,
+                       "step":  0.05
+                   },
+                   {
+                       "name":  "pp_gain",
+                       "label":  "Gain",
+                       "type":  "float",
+                       "default":  1,
+                       "min":  0.5,
+                       "max":  2,
+                       "step":  0.01
+                   },
+                   {
+                       "name":  "pp_lift",
+                       "label":  "Lift",
+                       "type":  "float",
+                       "default":  0,
+                       "min":  -0.3,
+                       "max":  0.3,
+                       "step":  0.01
+                   }
+               ]
 }

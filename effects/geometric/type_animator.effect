@@ -29,6 +29,16 @@ uniform float change_rate;        /* 0=continuous 1=on bar 2=on beat (only for p
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float background_amount;  /* 0 - 1, default 0.3 */
 uniform float bg_disable;         /* 0=show bg, 1=only text on transparent */
+uniform float beat_bounce;        /* 0=off, 1=on */
+uniform float bounce_amount;      /* 0 - 0.6 */
+uniform float vertical_flip;      /* 0=normal, 1=legacy/upside-down */
+uniform float text_align_x;       /* -1 - 1 */
+uniform float text_align_y;       /* -1 - 1 */
+uniform float letter_spacing;     /* 0.5 - 2 */
+uniform float outline_amount;     /* 0 - 1 */
+uniform float glow_amount;        /* 0 - 3 */
+uniform float jitter_amount;      /* 0 - 1 */
+uniform float scanline_amount;    /* 0 - 1 */
 
 /* CUSTOM-text per-char indices (used when text_choice == 6).
  * Each is 0=blank, 1-26=A-Z, 27=space, 28-37=0-9. */
@@ -386,6 +396,20 @@ int customLength()
     return len;
 }
 
+float sampleGlyphCell(int letter, float2 lp, float flip_y)
+{
+    if (lp.x < -0.6 || lp.x > 0.6 || lp.y < -0.85 || lp.y > 0.85)
+        return 0.0;
+
+    int cx = (int)((lp.x + 0.5) * 5.0);
+    int cy = (int)((lp.y + 0.7) * 5.0);
+    if (flip_y > 0.5)
+        cy = 6 - cy;
+    cy = clamp(cy, 0, 6);
+    cx = clamp(cx, 0, 4);
+    return glyphBit(letter, cx, cy);
+}
+
 float4 PSTypeAnimator(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
@@ -394,7 +418,8 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
     p.x *= aspect;
 
     float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float beat_enabled = (beat_bounce > 0.5) ? 1.0 : 0.0;
+    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5 * beat_enabled);
     bool bg_off = (bg_disable > 0.5);
 
     int word_idx = (int)text_choice;
@@ -415,26 +440,40 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
     }
 
     float ts = clamp(text_size, 0.04, 0.5);
-    float scale_pulse = 1.0 + kick_onset * 0.18;
+    float scale_pulse = 1.0 + kick_onset * max(bounce_amount, 0.0) * beat_enabled;
     ts *= scale_pulse;
 
     float char_w = ts;
-    float total_w = char_w * (float)max(len, 1);
+    float spacing = clamp(letter_spacing, 0.5, 2.0);
+    float total_w = char_w * spacing * (float)max(len, 1);
     float start_x = -total_w * 0.5 + char_w * 0.5;
+    float2 align = float2(clamp(text_align_x, -1.0, 1.0) * aspect,
+                          clamp(text_align_y, -1.0, 1.0));
 
     float text_mask = 0.0;
+    float outline_mask = 0.0;
     for (int li = 0; li < 12; li++) {
         if (li >= len) break;
-        float cx_center = start_x + (float)li * char_w;
-        float2 lp = float2(p.x - cx_center, p.y) / (ts * 0.5);
-        if (lp.x < -0.6 || lp.x > 0.6 || lp.y < -0.85 || lp.y > 0.85) continue;
-        int cx = (int)((lp.x + 0.5) * 5.0);
-        int cy = 6 - (int)((lp.y + 0.7) * 5.0);
-        cy = clamp(cy, 0, 6);
-        cx = clamp(cx, 0, 4);
+        float cx_center = start_x + (float)li * char_w * spacing;
+        float2 jitter = float2(
+            hash21(float2((float)li, floor(time * 18.0))) - 0.5,
+            hash21(float2((float)li + 17.0, floor(time * 16.0))) - 0.5
+        ) * jitter_amount * (0.04 + onset_strength * 0.10);
+        float2 lp = float2(p.x - align.x - cx_center, p.y - align.y) / (ts * 0.5);
+        lp += jitter;
         int letter = is_custom ? customCharAt(li) : wordLetter(word_idx, li);
-        text_mask = max(text_mask, glyphBit(letter, cx, cy));
+        float g = sampleGlyphCell(letter, lp, vertical_flip);
+        text_mask = max(text_mask, g);
+
+        if (outline_amount > 0.001) {
+            float o = 0.08 + outline_amount * 0.16;
+            outline_mask = max(outline_mask, sampleGlyphCell(letter, lp + float2( o, 0.0), vertical_flip));
+            outline_mask = max(outline_mask, sampleGlyphCell(letter, lp + float2(-o, 0.0), vertical_flip));
+            outline_mask = max(outline_mask, sampleGlyphCell(letter, lp + float2(0.0,  o), vertical_flip));
+            outline_mask = max(outline_mask, sampleGlyphCell(letter, lp + float2(0.0, -o), vertical_flip));
+        }
     }
+    outline_mask = saturate(outline_mask - text_mask);
 
     /* Color */
     float3 accent = palette_type((int)palette_id);
@@ -459,11 +498,18 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
     }
 
     /* Text */
-    float beat_glow = pow(1.0 - beat_1_4, 4.0) * 0.4 + kick_onset * 0.6;
-    col += accent * text_mask * (0.7 + drive * 0.5 + beat_glow);
+    float beat_glow = (pow(1.0 - beat_1_4, 4.0) * 0.4 + kick_onset * 0.6) * beat_enabled;
+    float glow = max(glow_amount, 0.0);
+    col += accent * outline_mask * (0.3 + glow * 0.45);
+    col += accent * text_mask * (0.7 + drive * 0.5 + beat_glow + glow * 0.28);
     col += float3(1.0, 1.0, 1.0) * text_mask * 0.3;
-    col += accent * text_mask * kick_onset * 0.5;
-    col += float3(1.0, 1.0, 1.0) * onset_strength * text_mask * 0.4;
+    col += accent * text_mask * kick_onset * 0.5 * beat_enabled;
+    col += float3(1.0, 1.0, 1.0) * onset_strength * text_mask * 0.4 * beat_enabled;
+
+    if (scanline_amount > 0.001) {
+        float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+        col *= lerp(1.0, 0.75 + scan * 0.25, saturate(scanline_amount));
+    }
 
     /* Vignette only with bg */
     if (!bg_off) col *= smoothstep(2.4, 0.5, length(p));
@@ -471,9 +517,9 @@ float4 PSTypeAnimator(VertInOut vert_in) : TARGET
     col = saturate(col);
     float a_out;
     if (bg_off) {
-        a_out = text_mask;  /* Pure transparent: only text visible */
+        a_out = max(text_mask, outline_mask);  /* Pure transparent: only text visible */
     } else {
-        a_out = max(text_mask, max(max(col.r, col.g), col.b) * 0.6);
+        a_out = max(max(text_mask, outline_mask), max(max(col.r, col.g), col.b) * 0.6);
     }
     return float4(col, a_out);
 }

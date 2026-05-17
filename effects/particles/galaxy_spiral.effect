@@ -68,6 +68,12 @@ float4 PSGalaxy(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= resolution.x / resolution.y;
 
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float lowmid = bands.y * drive;
+    float highmid = bands.z * drive;
+    float treble = bands.w * drive;
+
     float arms = max(arm_count, 1.0);
     float tight = max(arm_tightness, 0.5);
     float rot_spd = rotation_speed;
@@ -104,13 +110,13 @@ float4 PSGalaxy(VertInOut vert_in) : TARGET
     star_points *= (arm_pattern * 0.7 + 0.3) * radial;
 
     /* Audio reactivity */
-    float brightness = 1.0 + bands.x * 1.0;
-    float sparkle = bands.w * 2.0;
+    float brightness = 1.0 + bass * 1.0;
+    float sparkle = treble * 2.0;
 
     /* Beat pulse on core */
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
-    core += beat * 0.5 * bands.x;
+    core += beat * 0.5 * bass;
 
     /* Color: blue-white arms, warm core */
     float3 arm_color = float3(0.4, 0.5, 0.9) * stars * brightness;
@@ -123,8 +129,8 @@ float4 PSGalaxy(VertInOut vert_in) : TARGET
     float3 color = (arm_color + core_color + star_color * (1.0 + sparkle)) * dust;
 
     /* Subtle hue shift from lowmid */
-    color.r += bands.y * 0.1 * radial;
-    color.b += bands.z * 0.05 * radial;
+    color.r += lowmid * 0.1 * radial;
+    color.b += highmid * 0.05 * radial;
 
     /* Vignette */
     float vig = 1.0 - length(uv - 0.5) * 1.5;

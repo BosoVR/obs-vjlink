@@ -17,6 +17,7 @@
     { "name": "base_color_g", "label": "Color G", "type": "float", "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "base_color_b", "label": "Color B", "type": "float", "default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "glow_amount", "label": "Glow", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
-    { "name": "peak_hold", "label": "Peak Hold", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 }
+    { "name": "peak_hold", "label": "Peak Hold", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "beat_reactivity", "label": "Beat Reactivity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
   ]
 }

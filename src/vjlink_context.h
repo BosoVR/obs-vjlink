@@ -157,8 +157,12 @@ struct vjlink_context {
     float            macro_color;           /* 0..1 — Performance macro: hue/saturation shift */
     float            strobe_safety_max;     /* 0..1 — Max strobe brightness, 1.0 = no limit */
 
+    float            pad_trigger;           /* 0..1 momentary pad signal for shader overlays */
+    float            pad_velocity;          /* 0..1 pad pressure/velocity */
+    int              pad_index;             /* active performance pad index, -1 when idle */
+
     /* WebSocket -> Compositor param override (applied on render thread) */
-#define VJLINK_MAX_PENDING_PARAMS 32
+#define VJLINK_MAX_PENDING_PARAMS 128
     struct {
         char  name[64];
         float value;

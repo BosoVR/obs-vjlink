@@ -2,14 +2,20 @@
   "id": "flash_snare",
   "name": "Snare Flash",
   "category": "flash",
-    "role": "overlay",
-    "requires_input": false,
-    "performance_group": "band_trigger",
+  "role": "overlay",
+  "requires_input": false,
+  "performance_group": "band_trigger",
   "params": [
     { "name": "intensity", "label": "Intensity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01 },
+    { "name": "trigger_threshold", "label": "Trigger Threshold", "type": "float", "default": 0.34, "min": 0.0, "max": 0.95, "step": 0.01 },
     { "name": "sharpness", "label": "Sharpness", "type": "float", "default": 3.0, "min": 1.0, "max": 8.0, "step": 0.1 },
+    { "name": "decay_speed", "label": "Decay Speed", "type": "float", "default": 1.65, "min": 0.25, "max": 5.0, "step": 0.05 },
+    { "name": "ring_amount", "label": "Ring Amount", "type": "float", "default": 0.45, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "beam_amount", "label": "Beam Amount", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "invert_flash", "label": "Invert Flash", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0, "options": ["Off","On"] },
     { "name": "flash_color_r", "label": "Color R", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "flash_color_g", "label": "Color G", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
-    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 }
+    { "name": "flash_color_b", "label": "Color B", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
   ]
 }

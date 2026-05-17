@@ -173,9 +173,34 @@ static void handle_client(socket_t client)
 	char *query = strchr(clean_path, '?');
 	if (query) *query = '\0';
 
-	/* Build full filesystem path */
+	/* Build full filesystem path.
+	 * The HTTP root is the web-ui directory, but the Web UI also needs
+	 * read-only access to sibling plugin-data folders for metadata-driven
+	 * controls. Map these known folders to the parent data directory. */
 	char filepath[1024];
-	snprintf(filepath, sizeof(filepath), "%s%s", g_webui_path, clean_path);
+	if (strncmp(clean_path, "/effects_meta/", 14) == 0 ||
+	    strncmp(clean_path, "/effects/", 9) == 0 ||
+	    strncmp(clean_path, "/presets/", 9) == 0 ||
+	    strncmp(clean_path, "/textures/", 10) == 0) {
+		char data_root[512];
+		strncpy(data_root, g_webui_path, sizeof(data_root) - 1);
+		data_root[sizeof(data_root) - 1] = '\0';
+
+		char *last_sep = strrchr(data_root, '/');
+#ifdef _WIN32
+		char *last_bslash = strrchr(data_root, '\\');
+		if (!last_sep || (last_bslash && last_bslash > last_sep))
+			last_sep = last_bslash;
+#endif
+		if (last_sep)
+			*last_sep = '\0';
+
+		snprintf(filepath, sizeof(filepath), "%s%s", data_root,
+		         clean_path);
+	} else {
+		snprintf(filepath, sizeof(filepath), "%s%s", g_webui_path,
+		         clean_path);
+	}
 
 	/* Convert forward slashes to backslashes on Windows */
 #ifdef _WIN32

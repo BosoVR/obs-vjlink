@@ -5,14 +5,18 @@
   "role": "generator",
   "requires_input": false,
   "performance_group": "main_visual",
-  "genre": ["cyber", "synthwave", "vaporwave"],
-  "description": "80s vector horizon grid with perspective + horizon sun + beat pulse on grid lines.",
+  "genre": ["hardtechno", "industrial", "cyber", "synthwave"],
+  "description": "Modern hardtechno LED-wall grid with tube lines, industrial slices, laser cage modes and kick impact.",
   "params": [
     { "name": "scroll_speed", "label": "Scroll Speed", "type": "float", "default": 1.4, "min": 0.0, "max": 5.0, "step": 0.05 },
     { "name": "grid_density", "label": "Grid Density", "type": "float", "default": 18.0, "min": 6.0, "max": 40.0, "step": 1.0 },
     { "name": "horizon_y", "label": "Horizon Y", "type": "float", "default": 0.45, "min": 0.3, "max": 0.7, "step": 0.01 },
     { "name": "horizon_glow", "label": "Horizon Glow", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
     { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
-    { "name": "beat_sync", "label": "Beat Sync", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 1.0 }
+    { "name": "beat_sync", "label": "Beat Sync", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 1.0 },
+    { "name": "bg_disable", "label": "Hide Stars/Glow", "type": "int", "default": 0, "min": 0, "max": 1, "options": ["Show","Hide"] },
+    { "name": "wall_mode", "label": "Wall Mode", "type": "int", "default": 1, "min": 0, "max": 2, "options": ["Tube Grid","Industrial Slices","Laser Cage"] },
+    { "name": "panel_slices", "label": "Panel Slices", "type": "float", "default": 18.0, "min": 2.0, "max": 48.0, "step": 1.0 },
+    { "name": "impact_flash", "label": "Impact Flash", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0, "step": 0.05 }
   ]
 }

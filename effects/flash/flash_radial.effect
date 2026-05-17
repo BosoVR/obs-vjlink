@@ -20,6 +20,11 @@ uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     macro_speed;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float wave_speed;
@@ -60,16 +65,23 @@ float4 PSFlashRadial(VertInOut vert_in) : TARGET
     center.x *= aspect;
     float dist = length(center);
 
-    /* Expanding ring wave based on activation */
-    float spd = max(wave_speed, 0.5);
-    float ring_pos = band_activation * spd;
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float trigger = saturate(max(band_activation, max(kick_onset * 0.85, pad)) * max(audio_drive, 0.0) *
+        lerp(0.8, 1.6, macro_energy));
+
+    /* Beat-reset expanding ring with trigger-controlled brightness. */
+    float spd = max(wave_speed, 0.5) * lerp(0.75, 1.6, macro_speed);
+    float ring_pos = frac(beat_1_4 * spd);
     float wid = max(wave_width, 0.05);
     float ring = 1.0 - smoothstep(0.0, wid, abs(dist - ring_pos));
 
     /* Also add center glow */
-    float glow = band_activation * exp(-dist * 4.0);
+    float glow = trigger * exp(-dist * 4.0);
 
-    float strength = (ring + glow) * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = (ring * trigger + glow) *
+        ( intensity > 0.01 ? saturate(intensity) : 1.0 ) *
+        safety;
 
     float3 color = saturate(src.rgb + flash_col * strength);
     float out_alpha = max(max(color.r, color.g), color.b);

@@ -456,18 +456,31 @@ void vjlink_engine3d_create_meshes(struct vjlink_engine3d *engine)
 	if (!engine)
 		return;
 
-	if (!engine->meshes[VJLINK_MESH_CUBE].created)
-		generate_cube(&engine->meshes[VJLINK_MESH_CUBE]);
-	if (!engine->meshes[VJLINK_MESH_SPHERE].created)
-		generate_sphere(&engine->meshes[VJLINK_MESH_SPHERE]);
-	if (!engine->meshes[VJLINK_MESH_TORUS].created)
-		generate_torus(&engine->meshes[VJLINK_MESH_TORUS]);
-	if (!engine->meshes[VJLINK_MESH_PLANE].created)
-		generate_plane(&engine->meshes[VJLINK_MESH_PLANE]);
-	if (!engine->meshes[VJLINK_MESH_CYLINDER].created)
-		generate_cylinder(&engine->meshes[VJLINK_MESH_CYLINDER]);
+	bool created_any = false;
 
-	blog(LOG_INFO, "[VJLink] Procedural meshes generated");
+	if (!engine->meshes[VJLINK_MESH_CUBE].created) {
+		generate_cube(&engine->meshes[VJLINK_MESH_CUBE]);
+		created_any = true;
+	}
+	if (!engine->meshes[VJLINK_MESH_SPHERE].created) {
+		generate_sphere(&engine->meshes[VJLINK_MESH_SPHERE]);
+		created_any = true;
+	}
+	if (!engine->meshes[VJLINK_MESH_TORUS].created) {
+		generate_torus(&engine->meshes[VJLINK_MESH_TORUS]);
+		created_any = true;
+	}
+	if (!engine->meshes[VJLINK_MESH_PLANE].created) {
+		generate_plane(&engine->meshes[VJLINK_MESH_PLANE]);
+		created_any = true;
+	}
+	if (!engine->meshes[VJLINK_MESH_CYLINDER].created) {
+		generate_cylinder(&engine->meshes[VJLINK_MESH_CYLINDER]);
+		created_any = true;
+	}
+
+	if (created_any)
+		blog(LOG_INFO, "[VJLink] Procedural meshes generated");
 }
 
 struct vjlink_mesh *vjlink_engine3d_get_mesh(struct vjlink_engine3d *engine,

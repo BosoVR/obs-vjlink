@@ -50,8 +50,11 @@ float4 PSMandelbrot(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
 
     /* Zoom trajectory: continuous spiral toward an interesting point */
     float zoom_t = time * zoom_speed * 0.3 + bass * 0.3;
@@ -67,7 +70,7 @@ float4 PSMandelbrot(VertInOut vert_in) : TARGET
 
     int max_iter = clamp((int)max_iterations, 32, 256);
     /* Bass boosts iteration count for more detail */
-    int iter_boost = (int)(kick_onset * 32.0);
+    int iter_boost = (int)(kick * 32.0);
     int iter_cap = max_iter + iter_boost;
 
     float2 z = float2(0.0, 0.0);
@@ -108,7 +111,7 @@ float4 PSMandelbrot(VertInOut vert_in) : TARGET
 
     /* Beat brightening */
     col *= 0.7 + drive * 0.5;
-    col += palette_mandel((int)palette_id, hue + 0.2) * onset_strength * 0.18;
+    col += palette_mandel((int)palette_id, hue + 0.2) * onset * 0.18;
 
     /* Vignette */
     col *= smoothstep(2.4, 0.4, length(p));

@@ -5,13 +5,22 @@
   "role": "generator",
   "requires_input": false,
   "performance_group": "main_visual",
-  "genre": ["vaporwave", "synthwave", "retro"],
-  "description": "Classic 80s vaporwave: sun, gradient sky, wireframe ground grid, mountains.",
+  "genre": ["hardtechno", "industrial", "shelternet", "synthwave"],
+  "description": "Classic retrowave sunset with pro stage modes, grid glow, mountains, reflection and palm silhouettes.",
   "params": [
-    { "name": "scroll_speed", "label": "Scroll Speed", "type": "float", "default": 0.6, "min": 0.0, "max": 3.0, "step": 0.05 },
-    { "name": "sun_size", "label": "Sun Size", "type": "float", "default": 0.32, "min": 0.1, "max": 0.6, "step": 0.01 },
+    { "name": "scroll_speed", "label": "Scroll Speed", "type": "float", "default": 0.65, "min": 0.0, "max": 3.0, "step": 0.05 },
+    { "name": "sun_size", "label": "Sun Size", "type": "float", "default": 0.42, "min": 0.1, "max": 0.6, "step": 0.01 },
+    { "name": "sun_slits", "label": "Sun Slits", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "grid_density", "label": "Grid Density", "type": "float", "default": 14.0, "min": 4.0, "max": 32.0, "step": 1.0 },
-    { "name": "horizon_y", "label": "Horizon Y", "type": "float", "default": 0.5, "min": 0.3, "max": 0.7, "step": 0.01 },
-    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
+    { "name": "grid_glow", "label": "Grid Glow", "type": "float", "default": 1.15, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "horizon_y", "label": "Horizon Y", "type": "float", "default": 0.55, "min": 0.3, "max": 0.7, "step": 0.01 },
+    { "name": "mountain_amount", "label": "Mountains", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "star_amount", "label": "Stars", "type": "float", "default": 0.45, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "chrome_reflect", "label": "Chrome Reflection", "type": "float", "default": 0.30, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "palm_amount", "label": "Palms", "type": "float", "default": 0.20, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "bg_disable", "label": "Hide Sky/Sun/Mtns", "type": "int", "default": 0, "min": 0, "max": 1, "options": ["Show","Hide"] },
+    { "name": "stage_mode", "label": "Stage Mode", "type": "int", "default": 0, "min": 0, "max": 2, "options": ["Synthwave","Hard Wall","Shelternet Portal"] },
+    { "name": "impact_flash", "label": "Impact Flash", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05 }
   ]
 }

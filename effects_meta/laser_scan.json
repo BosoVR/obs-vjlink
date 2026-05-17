@@ -16,6 +16,8 @@
     { "name": "scan_mode", "label": "Mode (0=H 1=V 2=Fan 3=Grid 4=Burst 5=Curve)", "type": "float", "default": 0.0, "min": 0.0, "max": 5.0, "step": 1.0 },
     { "name": "color_mode", "label": "Color (0=Single 1=PerLine 2=Rainbow 3=BeatReact)", "type": "float", "default": 0.0, "min": 0.0, "max": 3.0, "step": 1.0 },
     { "name": "glow_size", "label": "Glow Size", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
-    { "name": "haze_amount", "label": "Haze", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01 }
+    { "name": "haze_amount", "label": "Haze", "type": "float", "default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "audio_reactivity", "label": "Audio Reactivity", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "beat_burst", "label": "Beat Burst", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
   ]
 }

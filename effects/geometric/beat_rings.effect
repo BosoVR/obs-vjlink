@@ -65,12 +65,13 @@ float4 PSBeatRings(VertInOut vert_in) : TARGET
     p.x *= aspect;
     float dist = length(p);
 
-    float bass = bands.x;
-    float lowmid = bands.y;
-    float highmid = bands.z;
-    float treble = bands.w;
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float lowmid = bands.y * ad;
+    float highmid = bands.z * ad;
+    float treble = bands.w * ad;
 
-    float beat = 1.0 - beat_phase;
+    float beat = (ad > 0.001) ? (1.0 - beat_phase) : 0.0;
     beat = beat * beat;
 
     float3 base_col = float3(

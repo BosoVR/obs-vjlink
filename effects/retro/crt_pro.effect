@@ -67,8 +67,10 @@ float4 PSCRTPro(VertInOut vert_in) : TARGET
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick_onset * ad * 0.4);
 
     /* Source */
     float3 col;
@@ -161,7 +163,7 @@ float4 PSCRTPro(VertInOut vert_in) : TARGET
     col *= 1.0 + drive * 0.05;
 
     /* Onset whitewash (rare) */
-    col += float3(1.0, 1.0, 1.0) * onset_strength * 0.04;
+    col += float3(1.0, 1.0, 1.0) * onset * 0.04;
 
     col = saturate(col);
     return float4(col, has_input ? image.Sample(texSampler, cuv).a : 1.0);

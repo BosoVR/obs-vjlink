@@ -5,6 +5,28 @@
 #include <string.h>
 #include <math.h>
 
+static void apply_band_blend_mode(enum vjlink_blend_mode mode)
+{
+	gs_blend_state_push();
+	gs_enable_blending(true);
+
+	switch (mode) {
+	case VJLINK_BLEND_ADD:
+		gs_blend_function(GS_BLEND_SRCALPHA, GS_BLEND_ONE);
+		break;
+	case VJLINK_BLEND_MULTIPLY:
+		gs_blend_function(GS_BLEND_DSTCOLOR, GS_BLEND_ZERO);
+		break;
+	case VJLINK_BLEND_SCREEN:
+		gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCCOLOR);
+		break;
+	case VJLINK_BLEND_NORMAL:
+	default:
+		gs_blend_function(GS_BLEND_SRCALPHA, GS_BLEND_INVSRCALPHA);
+		break;
+	}
+}
+
 void vjlink_band_effects_init(struct vjlink_band_effects *bfx,
                                uint32_t width, uint32_t height)
 {
@@ -275,7 +297,7 @@ static void render_band_slot(struct vjlink_band_effects *bfx,
 	/* Bind band_activation uniform */
 	if (slot->entry->p_band_activation)
 		gs_effect_set_float(slot->entry->p_band_activation,
-		                    slot->current_activation);
+		                    slot->current_activation * slot->blend_alpha);
 
 	/* Bind custom parameter values (from band slot or defaults) */
 	vjlink_effect_bind_custom_params(slot->entry,
@@ -385,9 +407,7 @@ gs_texture_t *vjlink_band_effects_render(struct vjlink_band_effects *bfx,
 			}
 
 			/* Blend band effect on top with activation-scaled alpha */
-			gs_blend_state_push();
-			gs_enable_blending(true);
-			gs_blend_function(GS_BLEND_ONE, GS_BLEND_ONE);
+			apply_band_blend_mode(slot->blend_mode);
 
 			gs_effect_set_texture(img, band_tex);
 			while (gs_effect_loop(default_effect, "Draw")) {

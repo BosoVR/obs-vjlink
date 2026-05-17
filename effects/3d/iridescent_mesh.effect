@@ -69,9 +69,12 @@ float4 PSIridescentMesh(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float treble = bands.w * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
     float t = time * ripple_speed * 0.3;
@@ -128,14 +131,14 @@ float4 PSIridescentMesh(VertInOut vert_in) : TARGET
     }
 
     /* Audio: pulse on kick brightens whole surface */
-    col *= 1.0 + kick_onset * 0.3 + beat_4 * bass * 0.2;
+    col *= 1.0 + kick * 0.3 + beat_4 * bass * 0.2;
 
     /* Treble adds extra sparkle (more sparkles than before) */
     float sparkle = step(0.978 - treble * 0.05, hash21(p * resolution * 0.3 + floor(time * 8.0)));
     col += float3(1.0, 1.0, 1.0) * sparkle * (0.5 + treble);
 
     /* Onset highlight */
-    col += col_film * onset_strength * 0.15;
+    col += col_film * onset * 0.15;
 
     /* Vignette only when bg enabled */
     if (!bg_off) col *= smoothstep(2.4, 0.5, length(p));

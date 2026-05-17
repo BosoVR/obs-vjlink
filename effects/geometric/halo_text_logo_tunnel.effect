@@ -1,0 +1,533 @@
+/*
+ * VJLink - Halo Text Logo Tunnel
+ * Monochrome harsh-contrast logo tunnel with repeated glyph rings,
+ * barcode columns, scanlines, smoke noise, and optional tearing.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     beat_count;
+uniform float     bpm;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     onset_strength;
+uniform float     rms;
+uniform float     quality;
+uniform float     has_input_source;
+
+uniform float center_logo_slot;
+uniform float main_text;
+uniform float ring_count;
+uniform float ring_text_mode;
+uniform float ring_text_active;
+uniform float ring_text_1;
+uniform float ring_text_2;
+uniform float ring_text_3;
+uniform float ring_text_4;
+uniform float ring_speed;
+uniform float ring_radius;
+uniform float perspective;
+uniform float mono_contrast;
+uniform float invert;
+uniform float smoke;
+uniform float scanlines;
+uniform float barcode_columns;
+uniform float glitch_enable;
+uniform float glitch_amount;
+uniform float beat_pulse;
+uniform float audio_glitch;
+uniform float logo_size;
+uniform float tunnel_drift;
+uniform float strobe_hits;
+uniform float text_thickness;
+uniform float noise_seed;
+uniform float mesh_kind;
+uniform float mesh_text_lane;
+uniform float mesh_alpha;
+uniform float mesh_scene_mix;
+
+uniform float ring1_char_0; uniform float ring1_char_1; uniform float ring1_char_2; uniform float ring1_char_3;
+uniform float ring1_char_4; uniform float ring1_char_5; uniform float ring1_char_6; uniform float ring1_char_7;
+uniform float ring1_char_8; uniform float ring1_char_9; uniform float ring1_char_10; uniform float ring1_char_11;
+uniform float ring2_char_0; uniform float ring2_char_1; uniform float ring2_char_2; uniform float ring2_char_3;
+uniform float ring2_char_4; uniform float ring2_char_5; uniform float ring2_char_6; uniform float ring2_char_7;
+uniform float ring2_char_8; uniform float ring2_char_9; uniform float ring2_char_10; uniform float ring2_char_11;
+uniform float ring3_char_0; uniform float ring3_char_1; uniform float ring3_char_2; uniform float ring3_char_3;
+uniform float ring3_char_4; uniform float ring3_char_5; uniform float ring3_char_6; uniform float ring3_char_7;
+uniform float ring3_char_8; uniform float ring3_char_9; uniform float ring3_char_10; uniform float ring3_char_11;
+uniform float ring4_char_0; uniform float ring4_char_1; uniform float ring4_char_2; uniform float ring4_char_3;
+uniform float ring4_char_4; uniform float ring4_char_5; uniform float ring4_char_6; uniform float ring4_char_7;
+uniform float ring4_char_8; uniform float ring4_char_9; uniform float ring4_char_10; uniform float ring4_char_11;
+
+sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+struct VertMeshIn {
+    float4 pos    : POSITION;
+    float3 normal : NORMAL;
+    float2 uv     : TEXCOORD0;
+};
+
+struct VertMeshOut {
+    float4 pos    : POSITION;
+    float2 uv     : TEXCOORD0;
+    float3 normal : TEXCOORD1;
+    float3 local  : TEXCOORD2;
+};
+
+VertMeshOut VSMesh(VertMeshIn vert_in)
+{
+    VertMeshOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv = vert_in.uv;
+    vert_out.normal = normalize(vert_in.normal);
+    vert_out.local = vert_in.pos.xyz;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float noise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float a = hash21(i + noise_seed);
+    float b = hash21(i + float2(1.0, 0.0) + noise_seed);
+    float c = hash21(i + float2(0.0, 1.0) + noise_seed);
+    float d = hash21(i + float2(1.0, 1.0) + noise_seed);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+bool isFallback(float4 s)
+{
+    float vis = max(max(s.r, s.g), s.b);
+    return (vis < 0.01 && s.a > 0.98);
+}
+
+float4 sampleLogo(float slot, float2 uv)
+{
+    float4 s1 = logo_tex.Sample(texSampler, uv);
+    float4 chosen = s1;
+    int islot = (int)floor(slot + 0.5);
+    if (islot == 1) {
+        float4 s2 = logo_tex2.Sample(texSampler, uv);
+        if (!isFallback(s2)) chosen = s2;
+    } else if (islot >= 2) {
+        float4 s3 = logo_tex3.Sample(texSampler, uv);
+        if (!isFallback(s3)) chosen = s3;
+    } else if (isFallback(s1) && has_input_source > 0.5) {
+        chosen = image.Sample(texSampler, uv);
+    }
+    return chosen;
+}
+
+int glyphRow(int letter, int row)
+{
+    if (letter == 1) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 31; if (row == 4) return 17; if (row == 5) return 17; return 17; }
+    if (letter == 2) { if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 30; if (row == 4) return 17; if (row == 5) return 17; return 30; }
+    if (letter == 3) { if (row == 0) return 15; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 16; if (row == 4) return 16; if (row == 5) return 16; return 15; }
+    if (letter == 4) { if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17; return 30; }
+    if (letter == 5) { if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16; return 31; }
+    if (letter == 6) { if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16; return 16; }
+    if (letter == 7) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 16; if (row == 3) return 23; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 8) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 31; if (row == 4) return 17; if (row == 5) return 17; return 17; }
+    if (letter == 9) { if (row == 0) return 14; if (row == 1) return 4; if (row == 2) return 4; if (row == 3) return 4; if (row == 4) return 4; if (row == 5) return 4; return 14; }
+    if (letter == 10) { if (row == 0) return 7; if (row == 1) return 1; if (row == 2) return 1; if (row == 3) return 1; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 11) { if (row == 0) return 17; if (row == 1) return 18; if (row == 2) return 20; if (row == 3) return 24; if (row == 4) return 20; if (row == 5) return 18; return 17; }
+    if (letter == 12) { if (row == 0) return 16; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 16; if (row == 4) return 16; if (row == 5) return 16; return 31; }
+    if (letter == 13) { if (row == 0) return 17; if (row == 1) return 27; if (row == 2) return 21; if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17; return 17; }
+    if (letter == 14) { if (row == 0) return 17; if (row == 1) return 25; if (row == 2) return 21; if (row == 3) return 19; if (row == 4) return 17; if (row == 5) return 17; return 17; }
+    if (letter == 15) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 16) { if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 30; if (row == 4) return 16; if (row == 5) return 16; return 16; }
+    if (letter == 17) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 17; if (row == 4) return 21; if (row == 5) return 18; return 13; }
+    if (letter == 18) { if (row == 0) return 30; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 30; if (row == 4) return 20; if (row == 5) return 18; return 17; }
+    if (letter == 19) { if (row == 0) return 15; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 14; if (row == 4) return 1; if (row == 5) return 1; return 30; }
+    if (letter == 20) { if (row == 0) return 31; if (row == 1) return 4; if (row == 2) return 4; if (row == 3) return 4; if (row == 4) return 4; if (row == 5) return 4; return 4; }
+    if (letter == 21) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 22) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 17; if (row == 4) return 17; if (row == 5) return 10; return 4; }
+    if (letter == 23) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 21; if (row == 4) return 21; if (row == 5) return 27; return 17; }
+    if (letter == 24) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 10; if (row == 3) return 4; if (row == 4) return 10; if (row == 5) return 17; return 17; }
+    if (letter == 25) { if (row == 0) return 17; if (row == 1) return 17; if (row == 2) return 10; if (row == 3) return 4; if (row == 4) return 4; if (row == 5) return 4; return 4; }
+    if (letter == 26) { if (row == 0) return 31; if (row == 1) return 1; if (row == 2) return 2; if (row == 3) return 4; if (row == 4) return 8; if (row == 5) return 16; return 31; }
+    if (letter == 27) return 0;
+    if (letter == 28) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 19; if (row == 3) return 21; if (row == 4) return 25; if (row == 5) return 17; return 14; }
+    if (letter == 29) { if (row == 0) return 4; if (row == 1) return 12; if (row == 2) return 4; if (row == 3) return 4; if (row == 4) return 4; if (row == 5) return 4; return 14; }
+    if (letter == 30) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 1; if (row == 3) return 2; if (row == 4) return 4; if (row == 5) return 8; return 31; }
+    if (letter == 31) { if (row == 0) return 30; if (row == 1) return 1; if (row == 2) return 1; if (row == 3) return 14; if (row == 4) return 1; if (row == 5) return 1; return 30; }
+    if (letter == 32) { if (row == 0) return 18; if (row == 1) return 18; if (row == 2) return 18; if (row == 3) return 31; if (row == 4) return 2; if (row == 5) return 2; return 2; }
+    if (letter == 33) { if (row == 0) return 31; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 30; if (row == 4) return 1; if (row == 5) return 1; return 30; }
+    if (letter == 34) { if (row == 0) return 14; if (row == 1) return 16; if (row == 2) return 16; if (row == 3) return 30; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 35) { if (row == 0) return 31; if (row == 1) return 1; if (row == 2) return 2; if (row == 3) return 4; if (row == 4) return 8; if (row == 5) return 16; return 16; }
+    if (letter == 36) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 14; if (row == 4) return 17; if (row == 5) return 17; return 14; }
+    if (letter == 37) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 17; if (row == 3) return 15; if (row == 4) return 1; if (row == 5) return 1; return 14; }
+    if (letter == 38) { if (row == 0) return 14; if (row == 1) return 17; if (row == 2) return 1; if (row == 3) return 2; if (row == 4) return 4; if (row == 5) return 0; return 4; }
+    return 0;
+}
+
+float glyphBit(int letter, int cx, int cy)
+{
+    if (cx < 0 || cx >= 5 || cy < 0 || cy >= 7 || letter <= 0)
+        return 0.0;
+    int row = glyphRow(letter, cy);
+    int sh = 4 - cx;
+    int v = row;
+    if (sh == 1) v = v / 2;
+    else if (sh == 2) v = v / 4;
+    else if (sh == 3) v = v / 8;
+    else if (sh == 4) v = v / 16;
+    int half = v / 2;
+    return (float)(v - half * 2);
+}
+
+int wordLength(int choice)
+{
+    if (choice == 1) return 6;
+    if (choice == 2) return 4;
+    if (choice == 3) return 10;
+    if (choice == 4) return 5;
+    if (choice == 5) return 5;
+    if (choice == 6) return 4;
+    return 9;
+}
+
+int wordLetter(int choice, int pos)
+{
+    if (choice == 1) {
+        if (pos == 0) return 22; if (pos == 1) return 10; if (pos == 2) return 12; if (pos == 3) return 9; if (pos == 4) return 14; if (pos == 5) return 11; return 0;
+    }
+    if (choice == 2) {
+        if (pos == 0) return 18; if (pos == 1) return 1; if (pos == 2) return 22; if (pos == 3) return 5; return 0;
+    }
+    if (choice == 3) {
+        if (pos == 0) return 8; if (pos == 1) return 1; if (pos == 2) return 18; if (pos == 3) return 4; if (pos == 4) return 20; if (pos == 5) return 5; if (pos == 6) return 3; if (pos == 7) return 8; if (pos == 8) return 14; if (pos == 9) return 15; return 0;
+    }
+    if (choice == 4) {
+        if (pos == 0) return 22; if (pos == 1) return 15; if (pos == 2) return 9; if (pos == 3) return 4; if (pos == 4) return 38; return 0;
+    }
+    if (choice == 5) {
+        if (pos == 0) return 7; if (pos == 1) return 1; if (pos == 2) return 20; if (pos == 3) return 5; if (pos == 4) return 38; return 0;
+    }
+    if (choice == 6) {
+        if (pos == 0) return 2; if (pos == 1) return 15; if (pos == 2) return 19; if (pos == 3) return 15; return 0;
+    }
+
+    if (pos == 0) return 8;
+    if (pos == 1) return 1;
+    if (pos == 2) return 12;
+    if (pos == 3) return 15;
+    if (pos == 4) return 27;
+    if (pos == 5) return 23;
+    if (pos == 6) return 8;
+    if (pos == 7) return 15;
+    if (pos == 8) return 38;
+    return 0;
+}
+
+float sampleWord(int choice, float2 cell)
+{
+    int len = wordLength(choice);
+    float char_w = 1.0 / (float)max(len, 1);
+    float x = saturate(cell.x + 0.5);
+    int idx = (int)floor(x / char_w);
+    if (idx < 0 || idx >= len)
+        return 0.0;
+
+    float local_x = frac(x / char_w);
+    int cx = (int)floor(local_x * 5.0);
+    int cy = (int)floor(saturate(cell.y + 0.5) * 7.0);
+    int letter = wordLetter(choice, idx);
+    float g = glyphBit(letter, cx, cy);
+
+    float grid_x = min(frac(local_x * 5.0), 1.0 - frac(local_x * 5.0));
+    float grid_y = min(frac(saturate(cell.y + 0.5) * 7.0), 1.0 - frac(saturate(cell.y + 0.5) * 7.0));
+    return g * smoothstep(0.02, 0.16, min(grid_x, grid_y));
+}
+
+int customRingCharAt(int ring, int pos)
+{
+    if (ring == 1) {
+        if (pos == 0) return (int)ring1_char_0; if (pos == 1) return (int)ring1_char_1; if (pos == 2) return (int)ring1_char_2; if (pos == 3) return (int)ring1_char_3;
+        if (pos == 4) return (int)ring1_char_4; if (pos == 5) return (int)ring1_char_5; if (pos == 6) return (int)ring1_char_6; if (pos == 7) return (int)ring1_char_7;
+        if (pos == 8) return (int)ring1_char_8; if (pos == 9) return (int)ring1_char_9; if (pos == 10) return (int)ring1_char_10; if (pos == 11) return (int)ring1_char_11;
+    }
+    if (ring == 2) {
+        if (pos == 0) return (int)ring2_char_0; if (pos == 1) return (int)ring2_char_1; if (pos == 2) return (int)ring2_char_2; if (pos == 3) return (int)ring2_char_3;
+        if (pos == 4) return (int)ring2_char_4; if (pos == 5) return (int)ring2_char_5; if (pos == 6) return (int)ring2_char_6; if (pos == 7) return (int)ring2_char_7;
+        if (pos == 8) return (int)ring2_char_8; if (pos == 9) return (int)ring2_char_9; if (pos == 10) return (int)ring2_char_10; if (pos == 11) return (int)ring2_char_11;
+    }
+    if (ring == 3) {
+        if (pos == 0) return (int)ring3_char_0; if (pos == 1) return (int)ring3_char_1; if (pos == 2) return (int)ring3_char_2; if (pos == 3) return (int)ring3_char_3;
+        if (pos == 4) return (int)ring3_char_4; if (pos == 5) return (int)ring3_char_5; if (pos == 6) return (int)ring3_char_6; if (pos == 7) return (int)ring3_char_7;
+        if (pos == 8) return (int)ring3_char_8; if (pos == 9) return (int)ring3_char_9; if (pos == 10) return (int)ring3_char_10; if (pos == 11) return (int)ring3_char_11;
+    }
+    if (pos == 0) return (int)ring4_char_0; if (pos == 1) return (int)ring4_char_1; if (pos == 2) return (int)ring4_char_2; if (pos == 3) return (int)ring4_char_3;
+    if (pos == 4) return (int)ring4_char_4; if (pos == 5) return (int)ring4_char_5; if (pos == 6) return (int)ring4_char_6; if (pos == 7) return (int)ring4_char_7;
+    if (pos == 8) return (int)ring4_char_8; if (pos == 9) return (int)ring4_char_9; if (pos == 10) return (int)ring4_char_10; if (pos == 11) return (int)ring4_char_11;
+    return 0;
+}
+
+int customRingLength(int ring)
+{
+    int len = 0;
+    for (int i = 0; i < 12; i++) {
+        if (customRingCharAt(ring, i) > 0) len = i + 1;
+        else break;
+    }
+    return len;
+}
+
+float sampleCustomRingWord(int ring, float2 cell)
+{
+    int len = customRingLength(ring);
+    if (len <= 0)
+        return 0.0;
+
+    float char_w = 1.0 / (float)max(len, 1);
+    float x = saturate(cell.x + 0.5);
+    int idx = (int)floor(x / char_w);
+    if (idx < 0 || idx >= len)
+        return 0.0;
+
+    float local_x = frac(x / char_w);
+    int cx = (int)floor(local_x * 5.0);
+    int cy = (int)floor(saturate(cell.y + 0.5) * 7.0);
+    int letter = customRingCharAt(ring, idx);
+    float g = glyphBit(letter, cx, cy);
+
+    float grid_x = min(frac(local_x * 5.0), 1.0 - frac(local_x * 5.0));
+    float grid_y = min(frac(saturate(cell.y + 0.5) * 7.0), 1.0 - frac(saturate(cell.y + 0.5) * 7.0));
+    return g * smoothstep(0.02, 0.16, min(grid_x, grid_y));
+}
+
+float ringTextMask(float2 p, int ring_index, float drive)
+{
+    float count = clamp(ring_count, 1.0, 10.0);
+    float fi = (float)ring_index;
+    if (fi >= count)
+        return 0.0;
+
+    float phase = frac(fi / count + time * ring_speed * 0.055 + drive * 0.035);
+    float z = frac(phase);
+    float persp = clamp(perspective, 0.0, 1.0);
+    float radius = ring_radius * lerp(0.22, 1.9, z * z) * (1.0 + drive * beat_pulse * 0.18);
+    float ellipse = lerp(1.0, 0.42 + z * 0.35, persp);
+    float2 q = float2(p.x, p.y / max(ellipse, 0.2));
+    q += float2(sin(time * 0.25 + fi) * 0.04, cos(time * 0.19 + fi * 1.7) * 0.035) * tunnel_drift;
+
+    float r = length(q);
+    float theta = atan2(q.y, q.x) / 6.2831853 + 0.5;
+    float thick = max(text_thickness, 0.02) * lerp(0.55, 1.5, z);
+    float band = smoothstep(thick, thick * 0.25, abs(r - radius));
+
+    float repeats = lerp(5.0, 16.0, z);
+    float cell_x = frac(theta * repeats + time * ring_speed * 0.07 + fi * 0.19) - 0.5;
+    float cell_y = (r - radius) / max(thick, 0.02) * 0.72;
+    float warp = sin(theta * 31.0 + time * 1.2 + fi) * 0.08 * glitch_amount * glitch_enable;
+    cell_y += warp;
+
+    int lane = ring_index - (ring_index / 4) * 4;
+    int ring_lane = lane + 1;
+    float word = 0.0;
+    if (ring_text_active > 0.5 && ring_text_mode > 0.5) {
+        if (ring_text_mode > 1.5) {
+            ring_lane = ((lane + (int)floor(beat_count * 0.25)) - ((lane + (int)floor(beat_count * 0.25)) / 4) * 4) + 1;
+        }
+        word = sampleCustomRingWord(ring_lane, float2(cell_x, cell_y));
+    }
+
+    if (word <= 0.0) {
+        int txt = (int)floor(main_text + 0.5);
+        if (lane == 0) txt = (int)floor(ring_text_1 + 0.5);
+        else if (lane == 1) txt = (int)floor(ring_text_2 + 0.5);
+        else if (lane == 2) txt = (int)floor(ring_text_3 + 0.5);
+        else txt = (int)floor(ring_text_4 + 0.5);
+        word = sampleWord(txt, float2(cell_x, cell_y));
+    }
+
+    float fade = smoothstep(2.25, 0.25, radius) * smoothstep(0.04, 0.20, radius);
+    return word * band * fade;
+}
+
+float barcodeMask(float2 uv, float drive)
+{
+    float cols = lerp(18.0, 110.0, saturate(barcode_columns));
+    float id = floor(uv.x * cols);
+    float h = hash11(id + floor(time * (8.0 + drive * 20.0)) + noise_seed);
+    float bars = step(0.68 - drive * 0.14, h);
+    float width = step(frac(uv.x * cols), 0.24 + h * 0.18);
+    float vertical = smoothstep(0.95, 0.15, abs(uv.y - 0.5) * (1.1 + h));
+    return bars * width * vertical * barcode_columns;
+}
+
+float4 PSHaloTextLogoTunnelMesh(VertMeshOut vert_in) : TARGET
+{
+    float bass = max(bands.x, bands_raw.x);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
+    float drive = saturate(glitch_amount * glitch_enable + audio_glitch * (onset_strength + hit + rms * 0.4));
+    float3 n = normalize(vert_in.normal);
+    float shade = 0.30 + saturate(dot(n, normalize(float3(-0.25, 0.45, -0.86)))) * 0.55;
+    shade += pow(1.0 - saturate(abs(n.z)), 1.5) * 0.35;
+
+    float mask = 0.0;
+    if (mesh_kind < 1.5) {
+        float4 l = sampleLogo(center_logo_slot, vert_in.uv);
+        float lum = dot(l.rgb, float3(0.299, 0.587, 0.114));
+        if (!isFallback(l))
+            mask = smoothstep(0.10, 0.48, max(l.a, lum));
+        float2 p = (vert_in.uv - 0.5) * 2.0;
+        float fallback_logo = smoothstep(0.58, 0.50, length(p)) - smoothstep(0.22, 0.28, length(p));
+        mask = max(mask, fallback_logo * 0.7);
+    } else {
+        int lane = (int)clamp(floor(mesh_text_lane + 0.5), 1.0, 4.0);
+        float jitter = (hash21(float2(floor(vert_in.uv.y * 24.0), floor(time * 18.0))) - 0.5) * drive * 0.12;
+        float2 cell = float2(vert_in.uv.x - 0.5 + jitter, (vert_in.uv.y - 0.5) * 0.95);
+        if (ring_text_active > 0.5 && ring_text_mode > 0.5)
+            mask = sampleCustomRingWord(lane, cell);
+        if (mask <= 0.0) {
+            int txt = (int)floor(main_text + 0.5);
+            if (lane == 1) txt = (int)floor(ring_text_1 + 0.5);
+            else if (lane == 2) txt = (int)floor(ring_text_2 + 0.5);
+            else if (lane == 3) txt = (int)floor(ring_text_3 + 0.5);
+            else txt = (int)floor(ring_text_4 + 0.5);
+            mask = sampleWord(txt, cell);
+        }
+    }
+
+    float scan = sin(vert_in.uv.y * resolution.y * 1.4) * 0.5 + 0.5;
+    float white = mask * (0.92 + hit * beat_pulse * 0.55) * (0.65 + shade);
+    white *= lerp(1.0, 0.58 + scan * 0.72, saturate(scanlines));
+    white = saturate((white - 0.35) * max(mono_contrast, 0.1) + 0.35);
+    white = smoothstep(0.18, 0.78, white);
+    clip(white - 0.018);
+
+    float inv = (invert > 0.5) ? 1.0 : 0.0;
+    white = lerp(white, 1.0 - white, inv);
+    return float4(float3(white, white, white), white * saturate(mesh_alpha));
+}
+
+float4 PSHaloTextLogoTunnel(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float bass = max(bands.x, bands_raw.x);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
+    float drive = saturate(glitch_amount * glitch_enable + audio_glitch * (onset_strength + hit + rms * 0.4));
+
+    float tear_line = floor(uv.y * 42.0);
+    float tear = (hash11(tear_line + floor(time * 18.0) + noise_seed) - 0.5) * drive * 0.09;
+    float tear_on = step(0.82 - drive * 0.25, hash11(tear_line * 2.1 + floor(time * 12.0)));
+    uv.x += tear * tear_on;
+    uv = saturate(uv);
+
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    p += float2(sin(time * 0.12), cos(time * 0.10)) * tunnel_drift * 0.12;
+
+    float mask = 0.0;
+    int max_rings = (quality < 0.5) ? 6 : 10;
+    for (int i = 0; i < 10; i++) {
+        if (i >= max_rings)
+            break;
+        mask = max(mask, ringTextMask(p, i, hit));
+    }
+
+    float2 logo_p = p / max(logo_size * (1.0 + hit * beat_pulse * 0.12), 0.05) + 0.5;
+    float logo_mask = 0.0;
+    if (logo_p.x >= 0.0 && logo_p.x <= 1.0 && logo_p.y >= 0.0 && logo_p.y <= 1.0) {
+        float4 l = sampleLogo(center_logo_slot, logo_p);
+        float lum = dot(l.rgb, float3(0.299, 0.587, 0.114));
+        if (!isFallback(l))
+            logo_mask = smoothstep(0.12, 0.55, max(l.a, lum));
+    }
+    float fallback_logo = smoothstep(0.28, 0.24, length(p)) - smoothstep(0.10, 0.13, length(p));
+    logo_mask = max(logo_mask, fallback_logo * 0.85);
+
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    float scan_mask = lerp(1.0, 0.50 + scan * 0.65, saturate(scanlines));
+    float bars = barcodeMask(uv, drive);
+
+    float smoke_a = noise2(p * 2.4 + time * 0.11);
+    float smoke_b = noise2(p * 6.3 - time * 0.18 + 23.0);
+    float haze = smoothstep(0.35, 0.92, smoke_a * 0.65 + smoke_b * 0.35) * smoke;
+    float vignette = smoothstep(1.8, 0.2, length(p));
+
+    float white = mask * (0.85 + hit * beat_pulse * 0.6);
+    white = max(white, logo_mask * (1.1 + hit * 0.9));
+    white = max(white, bars * (0.40 + drive * 0.55));
+    white += haze * 0.22 * (0.4 + vignette);
+
+    float black_breaks = noise2(uv * float2(90.0, 38.0) + floor(time * 12.0)) * drive;
+    white *= lerp(1.0, step(0.22, black_breaks), drive * 0.35);
+    white *= scan_mask;
+
+    if (strobe_hits > 0.001)
+        white += hit * strobe_hits * 0.55;
+
+    float contrast = max(mono_contrast, 0.1);
+    white = saturate((white - 0.42) * contrast + 0.42);
+    white = smoothstep(0.22, 0.86, white);
+
+    float inv = (invert > 0.5) ? 1.0 : 0.0;
+    white = lerp(white, 1.0 - white, inv);
+
+    float3 col = float3(white, white, white);
+    float alpha = saturate(max(white, haze * smoke * 0.25));
+    float overlay_mix = (mesh_scene_mix <= 0.0) ? 1.0 : mesh_scene_mix;
+    col *= lerp(1.0, overlay_mix, 0.35);
+    alpha *= overlay_mix;
+    return float4(col, alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSHaloTextLogoTunnel(vert_in);
+    }
+}
+
+technique DrawMesh
+{
+    pass
+    {
+        vertex_shader = VSMesh(vert_in);
+        pixel_shader  = PSHaloTextLogoTunnelMesh(vert_in);
+    }
+}

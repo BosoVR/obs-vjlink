@@ -3,7 +3,7 @@
     "name": "ASCII Art",
     "category": "glitch",
     "role": "filter",
-    "requires_input": true,
+    "requires_input": false,
     "performance_group": "post_glitch",
     "description": "Character-map rendering with audio-reactive density and terminal-green option",
     "author": "VJLink",

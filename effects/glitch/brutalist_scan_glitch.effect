@@ -1,0 +1,175 @@
+/*
+ * VJLink - Brutalist Scan Glitch
+ * Reusable monochrome post effect: torn scan rows, barcode columns,
+ * frame smear, crushed blacks, clipped whites, and smoky digital noise.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d prev_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     onset_strength;
+uniform float     rms;
+uniform float     has_input_source;
+
+uniform float mix;
+uniform float horizontal_tear;
+uniform float vertical_scan_columns;
+uniform float frame_smear;
+uniform float black_crush;
+uniform float white_clip;
+uniform float noise_smoke;
+uniform float beat_hit;
+uniform float snare_hit;
+uniform float text_safe_mode;
+uniform float scanline_density;
+uniform float invert;
+uniform float fallback_alpha;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float noise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float proceduralMono(float2 uv, float drive)
+{
+    float n1 = noise2(uv * float2(42.0, 18.0) + time * 0.45);
+    float n2 = noise2(uv * float2(160.0, 70.0) - time * 1.25);
+    float columns = step(0.78 - drive * 0.16, hash11(floor(uv.x * 74.0) + floor(time * 10.0)));
+    float rows = step(0.86 - drive * 0.20, hash11(floor(uv.y * 55.0) + floor(time * 16.0)));
+    float smoke = smoothstep(0.25, 0.95, n1 * 0.65 + n2 * 0.35);
+    return saturate(smoke * 0.55 + columns * 0.35 + rows * 0.25);
+}
+
+float barcodeColumns(float2 uv, float drive)
+{
+    float cols = lerp(14.0, 125.0, saturate(vertical_scan_columns));
+    float id = floor(uv.x * cols);
+    float h = hash11(id + floor(time * (6.0 + drive * 22.0)));
+    float width = step(frac(uv.x * cols), 0.18 + h * 0.25);
+    float active = step(0.64 - drive * 0.18, h);
+    return active * width * vertical_scan_columns;
+}
+
+float4 PSBrutalistScanGlitch(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float source_present = has_input_source;
+
+    float bass = max(bands.x, bands_raw.x);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = beat * beat_hit * bass + kick_onset * beat_hit + snare_onset * snare_hit;
+    float drive = saturate(mix + hit + onset_strength * 0.45 + rms * 0.18);
+
+    float safe = saturate(text_safe_mode);
+    float center_safe = lerp(1.0, smoothstep(0.08, 0.5, abs(uv.y - 0.5)), safe);
+
+    float row = floor(uv.y * lerp(18.0, 95.0, saturate(horizontal_tear)));
+    float row_hash = hash11(row + floor(time * (11.0 + drive * 20.0)));
+    float row_active = step(0.78 - drive * 0.25, row_hash);
+    float tear = (row_hash - 0.5) * horizontal_tear * drive * 0.18 * row_active * center_safe;
+
+    float2 guv = uv;
+    guv.x += tear;
+    guv.y += (hash11(row * 3.7 + floor(time * 8.0)) - 0.5) * row_active * drive * 0.018 * horizontal_tear * center_safe;
+
+    float col_shift = (hash11(floor(uv.x * 28.0) + floor(time * 9.0)) - 0.5) * vertical_scan_columns * drive * 0.025;
+    guv.y += col_shift * (1.0 - safe * 0.5);
+    guv = saturate(guv);
+
+    float4 src = image.Sample(texSampler, guv);
+    float4 orig = image.Sample(texSampler, uv);
+    float4 prev = prev_tex.Sample(texSampler, saturate(lerp(uv, guv, 0.55)));
+    if (source_present < 0.5) {
+        float proc = proceduralMono(uv, drive);
+        src = float4(proc, proc, proc, fallback_alpha);
+        orig = src;
+        prev = src;
+    }
+
+    float smear_amt = saturate(frame_smear) * drive;
+    float3 col = lerp(src.rgb, prev.rgb, smear_amt * 0.55);
+    float lum = dot(col, float3(0.299, 0.587, 0.114));
+
+    float smoke = proceduralMono(uv * float2(1.0, 0.75) + float2(time * 0.08, -time * 0.03), drive);
+    float snow = hash21(uv * resolution + floor(time * 90.0));
+    lum = lerp(lum, smoke, noise_smoke * drive * 0.42);
+    lum += (snow - 0.5) * noise_smoke * drive * 0.35;
+
+    float scan_density = lerp(1.0, 5.0, saturate(scanline_density));
+    float scan = sin(uv.y * resolution.y * 3.14159 * scan_density) * 0.5 + 0.5;
+    lum *= 0.72 + scan * 0.32;
+
+    float bars = barcodeColumns(uv, drive);
+    lum = max(lum, bars * (0.55 + drive * 0.35));
+
+    float crush = saturate(black_crush);
+    float clipv = saturate(white_clip);
+    lum = smoothstep(crush * 0.65, 1.0 - clipv * 0.45, lum);
+    lum = saturate((lum - 0.5) * (1.2 + drive * 1.6) + 0.5);
+
+    if (invert > 0.5)
+        lum = 1.0 - lum;
+
+    float3 brutal = float3(lum, lum, lum);
+    float out_mix = saturate(mix + hit * 0.45);
+    float3 out_col = lerp(orig.rgb, brutal, out_mix);
+    float out_alpha = source_present > 0.5 ? orig.a : saturate(fallback_alpha);
+    return float4(saturate(out_col), out_alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSBrutalistScanGlitch(vert_in);
+    }
+}

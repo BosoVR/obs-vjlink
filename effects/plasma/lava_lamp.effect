@@ -85,9 +85,13 @@ float4 PSLavaLamp(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float lowmid = bands.y;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float lowmid = bands.y * ad;
+    float bass_raw = bands_raw.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
 
     /* Flow upward, slowed/sped by audio */
     float t = time * (flow_speed * (0.5 + lowmid * 0.7) + 0.2);
@@ -106,7 +110,7 @@ float4 PSLavaLamp(VertInOut vert_in) : TARGET
     float blob_mask = smoothstep(0.4, 0.65, density);
     float core = smoothstep(0.55, 0.85, density);
 
-    float heat = saturate(density + bass_raw * 0.2 + kick_onset * 0.15);
+    float heat = saturate(density + bass_raw * 0.2 + kick * 0.15);
 
     /* Color */
     float warm_t = saturate(heat * warmth);
@@ -124,7 +128,7 @@ float4 PSLavaLamp(VertInOut vert_in) : TARGET
     col += palette_lava((int)palette_id, 0.7) * edge * glow_amount * 0.4;
 
     /* Beat-driven heat pulse — entire lava brightens on kick */
-    col *= 1.0 + kick_onset * 0.4 + onset_strength * 0.15;
+    col *= 1.0 + kick * 0.4 + onset * 0.15;
 
     /* Subtle bottom darkening (heat rises) */
     col *= 0.7 + smoothstep(-1.2, 1.0, p.y) * 0.4;

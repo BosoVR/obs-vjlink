@@ -18,6 +18,10 @@ uniform float     palette_id;
 uniform float     band_activation;
 uniform float     has_input_source;
 uniform float     beat_count;
+uniform float     macro_energy;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float cut_division;       /* 0=1/4 1=1/8 2=1/16 3=2/1 4=4/1 */
 uniform float pattern;            /* 0=alternate 1=triplet 2=4on4 3=offbeat */
@@ -75,7 +79,11 @@ float4 PSBeatCuts(VertInOut vert_in) : TARGET
     /* Hard gate within subdivision: bright at start, fade fast */
     float subphase = frac(phase * (float)sub_count);
     float gate = step(subphase, 0.45) * pow(1.0 - subphase / 0.45, 2.0);
-    float strength = trigger * gate * intensity;
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float drive = saturate(max(band_activation, max(kick_onset, pad)) *
+        lerp(0.75, 1.5, macro_energy));
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = trigger * gate * intensity * max(0.35, drive) * safety;
 
     /* Color */
     float3 col;

@@ -25,6 +25,11 @@ uniform float ball_count;      /* number of metaballs (default 6) */
 uniform float ball_size;       /* base size (default 0.8) */
 uniform float smoothness;      /* blend smoothness (default 0.5) */
 uniform float motion_speed;    /* orbital speed (default 1.0) */
+uniform float rotation_speed;  /* camera orbit speed (default 0.15) */
+uniform float camera_distance; /* camera distance (default 6.0) */
+uniform float camera_height;   /* camera height (default 2.4) */
+uniform float beat_pulse;      /* beat size pulse amount (default 0.5) */
+uniform float audio_motion;    /* bass motion amount (default 1.0) */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -75,9 +80,10 @@ float sceneSDF(float3 p)
     /* Beat pulse */
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
-    sz += beat * 0.3;
+    float drive = max(audio_drive, 0.0);
+    sz += beat * drive * max(beat_pulse, 0.0) * 0.6;
 
-    float amp = bands.x * 2.0;
+    float amp = bands.x * drive * max(audio_motion, 0.0) * 2.0;
     float d = 1e10;
 
     for (int i = 0; i < 8; i++) {
@@ -109,8 +115,15 @@ float4 PSMetaballs(VertInOut vert_in) : TARGET
     p.x *= resolution.x / resolution.y;
 
     /* Camera */
-    float angle = time * 0.25;
-    float3 ro = float3(cos(angle) * 6.0, 2.5 + sin(time * 0.15) * 1.0, sin(angle) * 6.0);
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float lowmid = bands.y * drive;
+    float highmid = bands.z * drive;
+    float treble = bands.w * drive;
+    float angle = time * max(rotation_speed, 0.0) + bass * 0.16;
+    float dist = max(camera_distance, 2.5);
+    float height = camera_height + sin(time * 0.15) * 0.7 * drive;
+    float3 ro = float3(cos(angle) * dist, height, sin(angle) * dist);
     float3 ta = float3(0.0, 0.0, 0.0);
 
     float3 ww = normalize(ta - ro);
@@ -138,12 +151,12 @@ float4 PSMetaballs(VertInOut vert_in) : TARGET
 
             float diff1 = max(dot(n, light1), 0.0);
             float diff2 = max(dot(n, light2), 0.0);
-            float spec = pow(max(dot(reflect(-light1, n), -rd), 0.0), 16.0 + bands.w * 32.0);
+            float spec = pow(max(dot(reflect(-light1, n), -rd), 0.0), 16.0 + treble * 32.0);
 
             /* Environment-like color based on normal */
             float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
-            float3 col1 = float3(0.3 + bands.x * 0.7, 0.1, 0.5 + bands.z * 0.5);
-            float3 col2 = float3(0.1, 0.4 + bands.y * 0.6, 0.3);
+            float3 col1 = float3(0.3 + bass * 0.7, 0.1, 0.5 + highmid * 0.5);
+            float3 col2 = float3(0.1, 0.4 + lowmid * 0.6, 0.3);
 
             color = col1 * diff1 + col2 * diff2 * 0.5;
             color += float3(1.0, 0.95, 0.9) * spec * 0.8;
@@ -157,23 +170,11 @@ float4 PSMetaballs(VertInOut vert_in) : TARGET
     }
 
     /* Glow */
-    float3 glow_col = float3(0.3 + bands.x * 0.5, 0.15, 0.4 + bands.z * 0.3);
+    float3 glow_col = float3(0.3 + bass * 0.5, 0.15, 0.4 + highmid * 0.3);
     color += glow_col * glow * 0.008;
 
     color = color / (1.0 + color);
-    /* HDR Reinhard polish */
-
-    float3 _vjp_c = saturate((color) / (1.0 + (color) * 0.4));
-
-    /* Saturation boost */
-
-    float _vjp_lum = dot(_vjp_c, float3(0.299, 0.587, 0.114));
-
-    _vjp_c = lerp(float3(_vjp_lum, _vjp_lum, _vjp_lum), _vjp_c, 1.18);
-
-    _vjp_c = saturate(_vjp_c);
-
-    return float4(_vjp_c, max(max(max(_vjp_c.r, _vjp_c.g), _vjp_c.b), 0.0));
+    return float4(color, 1.0);
 }
 
 technique Draw

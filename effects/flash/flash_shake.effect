@@ -20,6 +20,11 @@ uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     macro_chaos;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float shake_amount;
@@ -54,8 +59,13 @@ float4 PSFlashShake(VertInOut vert_in) : TARGET
 
     float3 flash_col = float3(flash_color_r, flash_color_g, flash_color_b);
 
+    float transient = max(kick_onset, max(snare_onset * 0.55, hat_onset * 0.35));
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float trigger = saturate(max(band_activation, max(transient, pad)) * max(audio_drive, 0.0) *
+        lerp(0.8, 1.65, macro_energy));
+
     /* Screen shake offset */
-    float shake = max(shake_amount, 0.001) * band_activation;
+    float shake = max(shake_amount, 0.001) * trigger * lerp(0.75, 1.75, macro_chaos);
     float t = time * 60.0;
     float2 offset = float2(
         hash(floor(t)) * 2.0 - 1.0,
@@ -68,7 +78,10 @@ float4 PSFlashShake(VertInOut vert_in) : TARGET
     float4 src = input_tex.Sample(texSampler, shaken_uv);
 
     /* Additive flash */
-    float flash_strength = band_activation * band_activation * ( intensity > 0.01 ? saturate(intensity) : 1.0 );
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float flash_strength = trigger * trigger *
+        ( intensity > 0.01 ? saturate(intensity) : 1.0 ) *
+        safety;
     float3 color = saturate(src.rgb + flash_col * flash_strength * 0.5);
     float out_alpha = max(max(color.r, color.g), color.b);
 

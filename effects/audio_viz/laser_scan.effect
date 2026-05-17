@@ -22,6 +22,8 @@ uniform float scan_mode;        /* 0=HorizScan 1=VertScan 2=FanSweep 3=Grid 4=Bu
 uniform float color_mode;       /* 0=Single 1=PerLine 2=Rainbow 3=BeatReact */
 uniform float glow_size;        /* 0 - 2, default 1 */
 uniform float haze_amount;      /* 0 - 1, default 0.3 */
+uniform float audio_reactivity; /* 0 - 2, default 1 */
+uniform float beat_burst;       /* 0 - 2, default 1 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -92,11 +94,13 @@ float4 PSLaserScan(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float low = bands.y;
-    float treble = bands.w;
-    float beat = pow(1.0 - beat_phase, 3.0);
-    float onset = saturate(onset_strength);
+    float react = max(audio_reactivity, 0.0);
+    float burst = max(beat_burst, 0.0);
+    float bass = bands.x * react;
+    float low = bands.y * react;
+    float treble = bands.w * react;
+    float beat = pow(1.0 - beat_phase, 3.0) * burst;
+    float onset = saturate(onset_strength * burst);
 
     int mode = (int)scan_mode;
     int cmode = (int)color_mode;

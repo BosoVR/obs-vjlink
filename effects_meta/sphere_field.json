@@ -1,48 +1,23 @@
 {
-    "effect_id": "sphere_field",
-    "name": "Sphere Field",
-    "category": "3d",
-    "role": "generator",
-    "requires_input": false,
-    "performance_group": "main_visual",
-    "description": "Raymarched grid of pulsing spheres with audio-reactive glow",
-    "author": "VJLink",
-    "params": [
-        {
-            "id": "sphere_count",
-            "name": "Grid Size",
-            "type": "float",
-            "default": 5.0,
-            "min": 2.0,
-            "max": 10.0,
-            "step": 1.0
-        },
-        {
-            "id": "sphere_spacing",
-            "name": "Spacing",
-            "type": "float",
-            "default": 2.5,
-            "min": 1.0,
-            "max": 5.0,
-            "step": 0.1
-        },
-        {
-            "id": "cam_distance",
-            "name": "Camera Distance",
-            "type": "float",
-            "default": 8.0,
-            "min": 3.0,
-            "max": 20.0,
-            "step": 0.5
-        },
-        {
-            "id": "glow_intensity",
-            "name": "Glow",
-            "type": "float",
-            "default": 1.5,
-            "min": 0.0,
-            "max": 5.0,
-            "step": 0.1
-        }
-    ]
+  "effect_id": "sphere_field",
+  "name": "Sphere Field",
+  "category": "3d",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "main_visual",
+  "description": "Raymarched sphere field with controllable rotation axis, speed, camera and beat pulse.",
+  "author": "VJLink",
+  "params": [
+    { "id": "sphere_count", "name": "Grid Size", "type": "float", "default": 5.0, "min": 2.0, "max": 12.0, "step": 1.0 },
+    { "id": "sphere_spacing", "name": "Spacing", "type": "float", "default": 2.5, "min": 1.0, "max": 5.0, "step": 0.1 },
+    { "id": "cam_distance", "name": "Camera Distance", "type": "float", "default": 8.0, "min": 3.0, "max": 20.0, "step": 0.5 },
+    { "id": "camera_height", "name": "Camera Height", "type": "float", "default": 0.0, "min": -4.0, "max": 4.0, "step": 0.1 },
+    { "id": "rotation_speed", "name": "Rotation Speed", "type": "float", "default": 0.08, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "id": "rotation_axis", "name": "Rotation Axis", "type": "float", "default": 0.0, "min": 0.0, "max": 2.0, "step": 1.0, "options": ["Y Orbit","X Orbit","Z Roll"] },
+    { "id": "rotation_audio", "name": "Audio Rotation", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "id": "pulse_amount", "name": "Beat Pulse", "type": "float", "default": 0.45, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "id": "glow_intensity", "name": "Glow", "type": "float", "default": 1.5, "min": 0.0, "max": 5.0, "step": 0.1 },
+    { "id": "audio_drive", "name": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "id": "ray_steps", "name": "Ray Steps", "type": "float", "default": 72.0, "min": 24.0, "max": 96.0, "step": 4.0 }
+  ]
 }

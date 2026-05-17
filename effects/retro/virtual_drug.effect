@@ -91,10 +91,11 @@ float4 PSVirtualDrug(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float bass = bands.x;
-    float lowmid = bands.y;
-    float highmid = bands.z;
-    float treble = bands.w;
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float lowmid = bands.y * drive;
+    float highmid = bands.z * drive;
+    float treble = bands.w * drive;
 
     float beat = 1.0 - beat_phase;
     beat = beat * beat * beat;

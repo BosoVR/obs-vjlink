@@ -69,16 +69,28 @@ float ringPattern(float z, float ring_ct)
     return ring;
 }
 
+float3 paletteTunnel(int pid, float t)
+{
+    if (pid == 1) return lerp(float3(0.08, 0.00, 0.00), float3(1.00, 0.08, 0.10), t);
+    if (pid == 2) return lerp(float3(0.10, 0.03, 0.00), float3(1.00, 0.45, 0.08), t);
+    if (pid == 3) return lerp(float3(0.02, 0.07, 0.00), float3(0.65, 1.00, 0.10), t);
+    if (pid == 4) return lerp(float3(0.00, 0.03, 0.08), float3(0.08, 0.85, 1.00), t);
+    if (pid == 5) return lerp(float3(0.02, 0.02, 0.02), float3(1.00, 1.00, 1.00), t);
+    return lerp(float3(0.02, 0.00, 0.06), float3(0.85, 0.15, 1.00), t);
+}
+
 float4 PSTunnel(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
     float2 p = (uv - 0.5) * 2.0;
     p.x *= resolution.x / resolution.y;
 
-    float bass    = bands.x;
-    float lowmid  = bands.y;
-    float highmid = bands.z;
-    float treble  = bands.w;
+    float drive   = max(audio_drive, 0.0);
+    float bass    = bands.x * drive;
+    float lowmid  = bands.y * drive;
+    float highmid = bands.z * drive;
+    float treble  = bands.w * drive;
+    float kick    = kick_onset * drive;
 
     /* Beat envelope (sync-aware) */
     float bs = beat_sync;
@@ -88,8 +100,7 @@ float4 PSTunnel(VertInOut vert_in) : TARGET
     beat = beat * beat * beat;
 
     /* Camera setup: fly through tunnel — kick onset adds extra punch */
-    float drive = max(audio_drive, 0.0);
-    float fly_speed = tunnel_speed * (1.0 + bass * 1.5 * drive + kick_onset * 0.6);
+    float fly_speed = tunnel_speed * (1.0 + bass * 1.5 + kick * 0.6);
     float cam_z = time * fly_speed * 3.0;
 
     /* Camera wobble from audio */
@@ -124,25 +135,23 @@ float4 PSTunnel(VertInOut vert_in) : TARGET
         float z_local = pos.z;
         float ring = ringPattern(z_local, ring_count);
 
-        /* Hex pattern for wall texture */
+        /* Angular ribs for stage-like tunnel structure */
         float angle = atan2(pos.y - cam_offset.y, pos.x - cam_offset.x);
         float hex = sin(angle * 6.0 + pos.z * 3.0 + time) * 0.5 + 0.5;
+        float ribs = pow(0.5 + 0.5 * sin(angle * 12.0 + pos.z * 0.9 - time * 1.4), 10.0);
+        float hard_ring = pow(ring, 2.5);
 
         /* Proximity glow: brighter near walls */
         float prox = exp(-abs(wall_dist) * 4.0);
-        float glow_strength = prox * (ring * 0.8 + hex * 0.15 + 0.05);
+        float glow_strength = prox * (hard_ring * 0.95 + ribs * 0.20 + hex * 0.10 + 0.04);
 
-        /* Color based on depth and angle */
-        float hue = frac(z_local * 0.03 + angle * 0.16 + time * 0.05);
-        float3 ring_color;
-        ring_color.r = abs(hue * 6.0 - 3.0) - 1.0;
-        ring_color.g = 2.0 - abs(hue * 6.0 - 2.0);
-        ring_color.b = 2.0 - abs(hue * 6.0 - 4.0);
-        ring_color = saturate(ring_color);
+        /* Controlled palette instead of full rainbow cycling */
+        float hue = frac(z_local * 0.015 + angle * 0.05 + time * 0.025);
+        float3 ring_color = paletteTunnel((int)palette_id, 0.45 + 0.55 * hue);
 
         /* Audio-reactive color shift */
-        ring_color = lerp(ring_color, float3(1.0, 0.3, 0.1), bass * 0.3 * ring);
-        ring_color = lerp(ring_color, float3(0.2, 0.5, 1.0), treble * 0.2 * hex);
+        ring_color = lerp(ring_color, float3(1.0, 0.20, 0.08), bass * 0.25 * ring);
+        ring_color = lerp(ring_color, float3(0.12, 0.55, 1.0), treble * 0.18 * ribs);
 
         /* Accumulate glow */
         float depth_fade = exp(-t_ray * 0.08);
@@ -162,15 +171,15 @@ float4 PSTunnel(VertInOut vert_in) : TARGET
     float center_dist = length(p);
     float core_ring = exp(-center_dist * 3.0) * 0.15;
     float core_hue = frac(time * 0.1 + bass * 0.2);
-    float3 core_col;
-    core_col.r = abs(core_hue * 6.0 - 3.0) - 1.0;
-    core_col.g = 2.0 - abs(core_hue * 6.0 - 2.0);
-    core_col.b = 2.0 - abs(core_hue * 6.0 - 4.0);
-    core_col = saturate(core_col);
+    float3 core_col = paletteTunnel((int)palette_id, 0.85 + core_hue * 0.15);
     color += core_col * core_ring * (1.0 + bass * 2.0);
 
     /* Beat flash: white pulse */
     color += float3(1.0, 0.9, 0.8) * beat * bass * 0.5;
+
+    /* Hardtechno shutter slices without making the tunnel flicker away */
+    float slice = step(0.5, frac((uv.y + time * 0.10) * (12.0 + ring_count)));
+    color += core_col * slice * beat * bass * 0.08;
 
     /* HDR tonemap (Reinhard) for bloom-like look */
     color = color / (1.0 + color);
@@ -179,10 +188,8 @@ float4 PSTunnel(VertInOut vert_in) : TARGET
     float vig = 1.0 - center_dist * 0.2;
     color *= saturate(vig);
 
-    color = color / (1.0 + color * 0.45);
-    color = saturate(color);
-    float __a = max(max(color.r, color.g), color.b);
-    return float4(color, __a);
+    color = pow(saturate(color), float3(0.92, 0.92, 0.92));
+    return float4(color, 1.0);
 }
 
 technique Draw

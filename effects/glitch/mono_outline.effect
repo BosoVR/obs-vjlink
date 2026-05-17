@@ -25,6 +25,8 @@ uniform float audio_drive;        /* 0-2, default 1.0 */
 uniform float beat_sync;          /* 0=continuous 1=1/4 */
 uniform float style_mode;         /* 0=Outline 1=Cel-Shaded 2=Inverse 3=Color Bleed */
 uniform float kernel_size;        /* 0=3x3 fast, 1=5x5 thicker cleaner edges */
+uniform float wall_cut;           /* 0-1 LED slice/gate mask */
+uniform float poster_steps;       /* 2-8 cel poster steps */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -153,7 +155,7 @@ float4 PSMonoOutline(VertInOut vert_in) : TARGET
     } else if (sm == 1) {
         /* Outline + posterized fill (cel-shading look) */
         float4 src = image.Sample(texSampler, uv);
-        float3 poster = posterize(src.rgb, 4.0);
+        float3 poster = posterize(src.rgb, clamp(poster_steps, 2.0, 8.0));
         /* Use luma-driven palette mix as fill */
         float L = lum(poster);
         float3 fill = lerp(float3(0.06, 0.06, 0.06), col_outline * 0.65, L);
@@ -175,6 +177,16 @@ float4 PSMonoOutline(VertInOut vert_in) : TARGET
     /* Subtle scanline tint for cinematic feel */
     float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
     col -= scan * 0.04 * v;
+
+    if (wall_cut > 0.001) {
+        float cells = 10.0 + wall_cut * 30.0;
+        float2 f = frac(uv * float2(cells, cells * 0.55));
+        float gate = step(0.08, min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y)));
+        float shutter = step(0.5, frac(uv.y * (8.0 + wall_cut * 20.0) + time * (0.2 + bass * 0.5)));
+        float cut = lerp(1.0, gate * (0.72 + shutter * 0.28), wall_cut);
+        col *= cut;
+        v *= cut;
+    }
 
     /* Onset whitewash */
     col += float3(1, 1, 1) * onset_strength * v * 0.25;

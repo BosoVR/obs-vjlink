@@ -64,7 +64,7 @@ float3 palette_disp(int pid, float t) {
 }
 
 float3 warpStandalone(float2 uv, float2 disp_vec, float bass, float treble,
-                      float beat, float drive, int pid)
+                      float beat, float drive, float onset, int pid)
 {
     float2 p = (uv - 0.5) * 2.0;
     p.x *= resolution.x / max(resolution.y, 1.0);
@@ -100,7 +100,7 @@ float3 warpStandalone(float2 uv, float2 disp_vec, float bass, float treble,
     col += palette_disp(pid, frac(time * 0.05 + 0.5)) * beat * bass * 0.3;
 
     /* Onset whitewash */
-    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.10;
+    col += float3(1.0, 0.95, 1.0) * onset * 0.10;
 
     /* Tonemap */
     col = col / (1.0 + col * 0.4);
@@ -111,15 +111,18 @@ float4 PSDisplacement(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float bass = bands.x;
-    float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float treble = bands.w * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
     int pid = (int)palette_id;
 
     float beat = pow(1.0 - beat_phase, 3.0);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    float transient = max(onset_strength, max(bands_raw.x, bands_raw.z));
+    float transient = max(onset, max(bands_raw.x * ad, bands_raw.z * ad));
     float amount = disp_amount + bass * disp_amount * 1.65 +
                    transient * disp_amount * 1.35 + rms * disp_amount;
     amount += beat_4 * disp_amount * 2.4 * bass + transient * disp_amount * 1.2;
@@ -136,7 +139,7 @@ float4 PSDisplacement(VertInOut vert_in) : TARGET
     /* Audio-reactive swirl */
     float2 c2 = uv - 0.5;
     float r = length(c2);
-    float swirl = bands.z * 0.5 * sin(r * 10.0 - time * 2.0);
+    float swirl = bands.z * ad * 0.5 * sin(r * 10.0 - time * 2.0);
     dx += swirl * c2.y;
     dy -= swirl * c2.x;
 
@@ -147,13 +150,13 @@ float4 PSDisplacement(VertInOut vert_in) : TARGET
     bool has_input = (has_input_source > 0.5);
 
     if (!has_input) {
-        float3 pattern = warpStandalone(uv, disp_vec, bass, treble, beat, drive, pid);
+        float3 pattern = warpStandalone(uv, disp_vec, bass, treble, beat, drive, onset, pid);
         float a_out = max(max(pattern.r, pattern.g), pattern.b);
         return float4(pattern, a_out);
     }
 
     /* Filter mode: warp input + chromatic separation */
-    float chroma = length(disp_vec) * 3.0 + kick_onset * 0.2;
+    float chroma = length(disp_vec) * 3.0 + kick * 0.2;
     float2 chroma_offset = normalize(disp_vec + float2(0.001, 0.001))
                         * chroma * 0.003;
 

@@ -24,6 +24,9 @@ uniform float horizon_glow;       /* 0 - 2, default 1.0 */
 uniform float audio_drive;        /* 0 - 2, default 1.0 */
 uniform float beat_sync;          /* 0=cont 1=1/4 2=1/8 */
 uniform float bg_disable;         /* 0=show stars+horizon glow, 1=pure black bg */
+uniform float wall_mode;          /* 0=tube grid 1=industrial slices 2=laser cage */
+uniform float panel_slices;       /* 2-48 LED panel slice count */
+uniform float impact_flash;       /* 0-1 white/red kick impact */
 
 sampler_state texSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
 struct VertInOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };
@@ -88,12 +91,16 @@ float4 PSCyberGrid(VertInOut vert_in) : TARGET
 
     float bass = bands.x;
     float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float raw_bass = max(bands_raw.x, bass);
+    float raw_treble = max(bands_raw.w, treble);
+    float transient = saturate(max(kick_onset, onset_strength));
+    float drive = audio_drive * (0.5 + bass + raw_bass * 0.55 + transient * 0.6);
     float bs = beat_sync;
     float beat_q = (bs < 0.5) ? pow(1.0 - beat_phase, 4.0)
                   : (bs < 1.5 ? pow(1.0 - beat_1_4, 4.0)
                               : pow(1.0 - beat_1_8, 4.0));
     bool bg_off = (bg_disable > 0.5);
+    int mode = (int)floor(wall_mode + 0.5);
 
     float3 hot, cool, bg_glow;
     palette_neon((int)palette_id, hot, cool, bg_glow);
@@ -166,6 +173,30 @@ float4 PSCyberGrid(VertInOut vert_in) : TARGET
     col += v_line_col * (0.7 + drive * 0.4) * horizon_fade * far_fade;
     col += h_line_col * (0.75 + drive * 0.45) * horizon_fade * far_fade;
 
+    /* 2026 hardtechno LED-wall layer: panel slices, shutter gates and laser cage. */
+    float slices = clamp(panel_slices, 2.0, 48.0);
+    float panel_id = floor(uv.x * slices);
+    float panel_f = frac(uv.x * slices);
+    float panel_edge = exp(-min(panel_f, 1.0 - panel_f) * 90.0);
+    float panel_hash = hash11(panel_id + floor(time * (2.0 + raw_bass * 5.0)));
+    float shutter = step(0.58 - transient * 0.25, panel_hash);
+
+    if (mode >= 1) {
+        float y_gate = step(0.5, frac((uv.y + time * (0.16 + raw_bass * 0.35)) * (8.0 + slices * 0.18)));
+        float slice_mask = panel_edge * (0.25 + shutter * 0.75) + y_gate * shutter * 0.055;
+        float3 slice_col = lerp(hot, float3(1.0, 1.0, 1.0), transient * 0.65);
+        col += slice_col * slice_mask * (0.45 + drive * 0.55);
+        col *= 1.0 - y_gate * shutter * 0.08;
+    }
+
+    if (mode >= 2) {
+        float2 cp = (uv - 0.5) * float2(aspect, 1.0);
+        float ray_a = abs(sin((atan2(cp.y, cp.x) + time * 0.25) * 10.0));
+        float cage = smoothstep(0.985, 1.0, ray_a) * smoothstep(0.05, 0.8, length(cp));
+        float sweep = exp(-abs(frac(uv.y * 1.6 - time * (0.35 + raw_treble * 0.6)) - 0.5) * 18.0);
+        col += (cool * cage + hot * sweep * 0.35) * (0.55 + transient * 0.8);
+    }
+
     /* === Horizon glow line === */
     if (!bg_off) {
         float horizon_d = abs(uv.y - horizon);
@@ -176,6 +207,10 @@ float4 PSCyberGrid(VertInOut vert_in) : TARGET
 
     /* === Onset whitewash on lines === */
     col += float3(1.0, 1.0, 1.0) * onset_strength * max(h_line_alpha, v_line_alpha) * 0.4;
+
+    float impact = saturate(impact_flash) * pow(transient, 1.8);
+    col = lerp(col, float3(1.0, 1.0, 1.0), impact * 0.35);
+    col += hot * impact * 0.55;
 
     /* === HDR + saturation boost === */
     col = col / (1.0 + col * 0.35);

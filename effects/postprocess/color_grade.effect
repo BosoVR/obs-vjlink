@@ -68,8 +68,10 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     float2 uv = vert_in.uv;
     bool has_input = (has_input_source > 0.5);
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick_onset * ad * 0.4);
 
     /* Source */
     float4 src;
@@ -92,7 +94,7 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     /* Saturation + Hue (HSV pass) */
     float3 hsv = rgb2hsv(saturate(col));
     /* Audio-driven micro-saturation on bass */
-    float audio_sat = saturate(max(onset_strength, bass) * 0.10 + rms * 0.06);
+    float audio_sat = saturate(max(onset, bass) * 0.10 + rms * ad * 0.06);
     hsv.y *= pp_saturation * (1.0 + audio_sat);
     hsv.x = frac(hsv.x + pp_hue_shift);
     col = hsv2rgb(hsv);
@@ -118,7 +120,7 @@ float4 PSColorGrade(VertInOut vert_in) : TARGET
     col *= saturate(vig);
 
     /* Onset highlight */
-    col += float3(1.0, 0.95, 1.0) * onset_strength * 0.05;
+    col += float3(1.0, 0.95, 1.0) * onset * 0.05;
 
     col = saturate(col);
 

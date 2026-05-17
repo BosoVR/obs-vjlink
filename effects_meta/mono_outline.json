@@ -9,10 +9,13 @@
   "description": "Brutalist Sobel edge-detect: white edges on black, beat-driven inversion",
   "params": [
     { "name": "edge_thickness", "label": "Edge Thickness", "type": "float", "default": 0.0025, "min": 0.0005, "max": 0.01, "step": 0.0005 },
-    { "name": "threshold", "label": "Threshold", "type": "float", "default": 0.18, "min": 0.0, "max": 1.0, "step": 0.01 },
+    { "name": "threshold", "label": "Threshold", "type": "float", "default": 0.12, "min": 0.0, "max": 1.0, "step": 0.01 },
     { "name": "invert_on_beat", "label": "Invert on Beat", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 },
     { "name": "style_mode", "label": "Style", "type": "int", "default": 0, "min": 0, "max": 3, "options": ["Outline","Cel-Shaded","Inverse","Color Bleed"] },
     { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
-    { "name": "beat_sync", "label": "Beat Sync (0=Cont 1=1/4)", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 }
+    { "name": "beat_sync", "label": "Beat Sync (0=Cont 1=1/4)", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0 },
+    { "name": "kernel_size", "label": "Kernel", "type": "int", "default": 0, "min": 0, "max": 1, "options": ["Fast 3x3","Clean 5x5"] },
+    { "name": "wall_cut", "label": "LED Wall Cut", "type": "float", "default": 0.25, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "poster_steps", "label": "Poster Steps", "type": "float", "default": 4.0, "min": 2.0, "max": 8.0, "step": 1.0 }
   ]
 }

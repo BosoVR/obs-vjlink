@@ -5,12 +5,15 @@
   "role": "filter",
   "requires_input": false,
   "performance_group": "post_glitch",
-  "genre": ["cyber", "vaporwave"],
-  "description": "Iridescent rainbow foil shift on input — Cyberpunk surface look. Standalone: pure hologram texture.",
+  "genre": ["cyber", "hardtechno", "prism"],
+  "description": "Iridescent foil/prism filter with LED shutter gating and diagonal beam overlays.",
   "params": [
-    { "name": "foil_intensity", "label": "Foil Intensity", "type": "float", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05 },
-    { "name": "shift_speed", "label": "Shift Speed", "type": "float", "default": 0.5, "min": 0.0, "max": 3.0, "step": 0.05 },
-    { "name": "metallic", "label": "Metallic", "type": "float", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05 },
-    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 }
+    { "name": "foil_intensity", "label": "Foil Intensity", "type": "float", "default": 0.75, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "shift_speed", "label": "Shift Speed", "type": "float", "default": 0.6, "min": 0.0, "max": 3.0, "step": 0.05 },
+    { "name": "metallic", "label": "Metallic", "type": "float", "default": 0.55, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "audio_drive", "label": "Audio Drive", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05 },
+    { "name": "bg_disable", "label": "Hide Base (standalone)", "type": "int", "default": 0, "min": 0, "max": 1, "options": ["Show","Hide"] },
+    { "name": "prism_gate", "label": "Prism Gate", "type": "float", "default": 0.30, "min": 0.0, "max": 1.0, "step": 0.05 },
+    { "name": "beam_amount", "label": "Beam Amount", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0, "step": 0.05 }
   ]
 }

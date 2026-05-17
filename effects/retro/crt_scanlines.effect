@@ -109,6 +109,7 @@ float4 PSCrt(VertInOut vert_in) : TARGET
     float flick = max(flicker, 0.0);
 
     bool has_input = (has_input_source > 0.5);
+    float ad = max(audio_drive, 0.0);
 
     /* Apply curvature */
     float2 curved_uv = curveUV(uv, curve);
@@ -121,7 +122,10 @@ float4 PSCrt(VertInOut vert_in) : TARGET
 
     if (!has_input) {
         /* No source to process — output transparent */
-        return float4(0.0, 0.0, 0.0, 0.0);
+        float3 test = crtTestPattern(curved_uv, time, bands.x * ad);
+        float scanline = sin(curved_uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+        test *= 1.0 - scan_int * (1.0 - pow(scanline, 1.5));
+        return float4(saturate(test), max(max(test.r, test.g), test.b));
     }
 
     /* Filter: process input source */
@@ -153,14 +157,14 @@ float4 PSCrt(VertInOut vert_in) : TARGET
 
     /* Flicker */
     float flicker_val = 1.0 - flick * sin(time * 60.0) * 0.5;
-    flicker_val -= bands.x * flick * 0.3;
+    flicker_val -= bands.x * ad * flick * 0.3;
     color *= flicker_val;
 
     /* Beat interference ln_v */
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
     float interference = smoothstep(0.49, 0.5, abs(curved_uv.y - frac(time * 0.1 + beat * 0.5)));
-    interference = 1.0 - interference * 0.15 * bands.x;
+    interference = 1.0 - interference * 0.15 * bands.x * ad;
     color *= interference;
 
     /* Vignette */

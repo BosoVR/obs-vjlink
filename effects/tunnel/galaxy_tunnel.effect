@@ -67,19 +67,22 @@ float4 PSGalaxyTunnel(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float treble = bands.w;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float treble = bands.w * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
-    float spd = max(fly_speed, 0.1) * (1.0 + bass * 1.0 + kick_onset * 0.3);
+    float spd = max(fly_speed, 0.1) * (1.0 + bass * 1.0 + kick * 0.3);
     float depth = time * spd;
 
     /* Polar coords */
     float r = max(length(p), 0.001);
     float ang = atan2(p.y, p.x);
     /* Subtle warp on kick */
-    ang += kick_onset * 0.2 * sin(r * 4.0);
+    ang += kick * 0.2 * sin(r * 4.0);
 
     /* Nebula tunnel walls */
     float u_ang = ang / 3.14159 * 0.5 + 0.5;
@@ -117,6 +120,12 @@ float4 PSGalaxyTunnel(VertInOut vert_in) : TARGET
     float3 nebula_col = palette_galaxy((int)palette_id, hue);
     col += nebula_col * nebula * nebula_density * 0.6 * depth_fade;
 
+    /* Rave tunnel cage: gives the space a readable LED-wall/fly-through structure */
+    float ring_line = pow(0.5 + 0.5 * sin((1.0 / r + depth) * 16.0), 12.0) * depth_fade;
+    float spoke_line = pow(0.5 + 0.5 * sin(ang * 18.0 + depth * 2.0), 18.0) * depth_fade;
+    float cage = ring_line * 0.32 + spoke_line * 0.18;
+    col += nebula_col * cage * (0.45 + drive * 0.35);
+
     /* Outer ring fades */
     col *= smoothstep(2.5, 0.4, r);
 
@@ -125,14 +134,14 @@ float4 PSGalaxyTunnel(VertInOut vert_in) : TARGET
     col += float3(1.0, 0.95, 1.0) * far_glow * 0.18;
 
     /* Onset whitewash */
-    col += float3(1.0, 0.9, 1.0) * onset_strength * 0.15;
+    col += float3(1.0, 0.9, 1.0) * onset * 0.15;
 
     /* HDR */
     col = col / (1.0 + col * 0.4);
     col = saturate(col);
 
-    float a_out = max(max(col.r, col.g), col.b);
-    return float4(col, a_out);
+    col = pow(saturate(col), float3(0.92, 0.92, 0.92));
+    return float4(col, 1.0);
 }
 
 technique Draw {

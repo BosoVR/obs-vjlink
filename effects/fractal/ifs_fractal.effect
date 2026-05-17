@@ -57,9 +57,14 @@ float4 PSIfs(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 4.0;
     p.x *= resolution.x / resolution.y;
 
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float lowmid = bands.y * drive;
+    float treble = bands.w * drive;
+
     int iters = clamp(int(ifs_iterations), 3, 16);
-    float scale = max(ifs_scale, 1.01) + bands.x * 0.3;
-    float rot = ifs_rotation + bands.w * 0.2;
+    float scale = max(ifs_scale, 1.01) + bass * 0.3;
+    float rot = ifs_rotation + treble * 0.2;
     float fold_amt = max(ifs_fold, 0.0);
 
     /* Accumulate color from IFS orbit */
@@ -91,7 +96,7 @@ float4 PSIfs(VertInOut vert_in) : TARGET
 
         /* Color contribution from each iteration */
         float fi = float(i);
-        float hue = frac(fi / float(iters) + time * 0.03 + bands.y * 0.1);
+        float hue = frac(fi / float(iters) + time * 0.03 + lowmid * 0.1);
         float brightness = exp(-d * 0.5) * 0.3;
 
         float3 iter_col;
@@ -119,7 +124,7 @@ float4 PSIfs(VertInOut vert_in) : TARGET
     /* Beat pulse */
     float beat = 1.0 - beat_phase;
     beat = beat * beat * beat;
-    color *= 1.0 + beat * 0.5 * bands.x;
+    color *= 1.0 + beat * 0.5 * bass;
 
     /* Tone mapping */
     color = color / (1.0 + color);

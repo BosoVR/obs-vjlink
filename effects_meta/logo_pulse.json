@@ -2,6 +2,9 @@
   "id": "logo_pulse",
   "name": "Logo Pulse",
   "category": "geometric",
+  "role": "generator",
+  "requires_input": false,
+  "performance_group": "logo_fx",
   "params": [
     { "name": "logo_scale", "label": "Logo Scale", "type": "float", "default": 0.25, "min": 0.05, "max": 0.8, "step": 0.01 },
     { "name": "pulse_strength", "label": "Pulse Strength", "type": "float", "default": 1.5, "min": 0.0, "max": 3.0, "step": 0.1 },

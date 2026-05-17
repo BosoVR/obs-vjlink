@@ -91,17 +91,20 @@ float4 PSFireEmitter(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
-    float bass = bands.x;
-    float lowmid = bands.y;
-    float bass_raw = bands_raw.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.5);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float lowmid = bands.y * ad;
+    float bass_raw = bands_raw.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.5);
 
     /* Inverted Y: fire goes up */
     float y = 1.0 - uv.y;
     float x = uv.x - 0.5;
 
     /* Flame height responds to bass */
-    float h = max(flame_height, 0.3) * (1.0 + bass * 0.6 + kick_onset * 0.4);
+    float h = max(flame_height, 0.3) * (1.0 + bass * 0.6 + kick * 0.4);
     float t = time * (1.0 + lowmid * 0.4);
 
     /* Wind sway */
@@ -123,7 +126,7 @@ float4 PSFireEmitter(VertInOut vert_in) : TARGET
 
     /* Combine */
     float intensity = n * flame_mask * side * heat_intensity;
-    intensity *= 1.0 + bass_raw * 0.4 + kick_onset * 0.3;
+    intensity *= 1.0 + bass_raw * 0.4 + kick * 0.3;
     intensity = saturate(intensity);
 
     /* Heat color from intensity */
@@ -136,7 +139,7 @@ float4 PSFireEmitter(VertInOut vert_in) : TARGET
     /* Sparks: small bright dots in upper flame area */
     float spark_y = saturate(y * 1.4);
     float spark_seed = hash21(floor(uv * 80.0) + floor(time * 12.0));
-    float spark = step(0.985 - kick_onset * 0.04, spark_seed) * smoothstep(0.2, 0.6, spark_y);
+    float spark = step(0.985 - kick * 0.04, spark_seed) * smoothstep(0.2, 0.6, spark_y);
     col += float3(1.0, 0.85, 0.4) * spark * 0.7;
 
     /* Bottom hot core glow */
@@ -144,7 +147,7 @@ float4 PSFireEmitter(VertInOut vert_in) : TARGET
     col += palette_fire((int)palette_id, 0.95) * core;
 
     /* Onset flash */
-    col += palette_fire((int)palette_id, 0.85) * onset_strength * 0.18;
+    col += palette_fire((int)palette_id, 0.85) * onset * 0.18;
 
     /* HDR */
     col = col / (1.0 + col * 0.4);

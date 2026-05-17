@@ -24,6 +24,7 @@ uniform float base_color_g;     /* default 0.2 */
 uniform float base_color_b;     /* default 0.7 */
 uniform float glow_amount;      /* 0 - 2, default 1.0 */
 uniform float peak_hold;        /* 0 - 1, default 0.6 */
+uniform float beat_reactivity;  /* 0 - 2, default 1.0 */
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -131,8 +132,9 @@ float4 PSWaveformBars(VertInOut vert_in) : TARGET
     float low = bands.y;
     float high = bands.z;
     float treble = bands.w;
-    float beat = pow(1.0 - beat_phase, 3.0);
-    float onset = saturate(onset_strength);
+    float beat_drive = max(beat_reactivity, 0.0);
+    float beat = pow(1.0 - beat_phase, 3.0) * beat_drive;
+    float onset = saturate(onset_strength * beat_drive);
 
     int num_bars = max(16, (int)bar_count);
     float sens = max(sensitivity, 0.5);

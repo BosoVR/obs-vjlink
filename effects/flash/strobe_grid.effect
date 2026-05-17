@@ -16,6 +16,11 @@ uniform float     time;
 uniform float4    bands;
 uniform float     beat_phase;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     macro_speed;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float grid_size;       /* 2-20, default 6 */
 uniform float wave_speed;      /* 0.5-10.0, default 3.0 */
@@ -157,24 +162,26 @@ float4 PSStrobeGrid(VertInOut vert_in) : TARGET
     }
 
     /* Activation gate: only flash when band is active */
-    float activation = band_activation;
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float activation = max(band_activation, pad);
     if (activation < 0.01) {
         activation = max(max(bass, bands.y), max(bands.z, treble));
     }
 
     /* Sharpen activation curve for punchier response */
-    activation = saturate(activation * 1.8);
+    activation = saturate(activation * lerp(1.2, 2.3, macro_energy));
     activation = activation * activation;
 
     /* Strobe timing: runs on normal time, activation gates brightness */
-    float strobe_t = frac(time * wspd * 0.5 + cell_phase);
+    float strobe_t = frac(time * wspd * lerp(0.35, 0.85, macro_speed) + beat_phase * 0.25 + cell_phase);
     float strobe = smoothstep(0.0, 0.03, strobe_t) *
                    smoothstep(0.45, 0.2, strobe_t);
 
     /* Intensity control (fallback to 1.0 if not set) */
     float intens = intensity > 0.01 ? intensity : 1.0;
 
-    float strength = strobe * activation * cell_shape * intens * 1.5;
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = strobe * activation * cell_shape * intens * 1.5 * safety;
 
     /* Color with slight per-cell variation */
     float cell_hue = hash21(cell_id * 7.3) * 0.15;

@@ -1,0 +1,160 @@
+/*
+ * VJLink Hardtechno Strobe Reactor
+ * AudioLink-style band reactor with pad and macro control.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d input_tex;
+uniform texture2d logo_tex;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     bpm;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     hat_onset;
+uniform float     beat_1_4;
+uniform float     beat_1_8;
+uniform float     beat_1_16;
+uniform float     palette_id;
+uniform float     quality;
+uniform float     band_activation;
+uniform float     has_input_source;
+uniform float     macro_energy;
+uniform float     macro_chaos;
+uniform float     macro_speed;
+uniform float     macro_color;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
+uniform float     pad_index;
+
+uniform float source_band;
+uniform float threshold;
+uniform float sensitivity;
+uniform float brightness;
+uniform float flash_rate;
+uniform float pulse_width;
+uniform float mode;
+uniform float color_burst;
+uniform float color_burst_chance;
+uniform float invert_amount;
+uniform float text_logo_peak;
+uniform float grid_slices;
+uniform float shake_amount;
+uniform float source_mix;
+uniform float safety_enable;
+uniform float black_ratio;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash12(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float3 palette_color(float id, float t)
+{
+    float hue = frac(t + macro_color * 0.35);
+    float3 hardtechno = lerp(float3(1.0, 0.02, 0.04), float3(1.0, 1.0, 1.0), hue);
+    float3 rawstyle   = lerp(float3(1.0, 0.32, 0.02), float3(0.04, 0.04, 0.05), hue);
+    float3 acid       = lerp(float3(0.70, 1.0, 0.04), float3(0.0, 0.9, 0.55), hue);
+    float3 cyber      = lerp(float3(0.0, 0.85, 1.0), float3(1.0, 0.0, 0.72), hue);
+    float3 mono       = lerp(float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0), hue);
+
+    if (id < 1.5) return hardtechno;
+    if (id < 2.5) return rawstyle;
+    if (id < 3.5) return acid;
+    if (id < 4.5) return cyber;
+    return mono;
+}
+
+float selected_energy()
+{
+    float max_band = max(max(bands.x, bands.y), max(bands.z, bands.w));
+    if (source_band < 0.5) return bands.x;
+    if (source_band < 1.5) return bands.y;
+    if (source_band < 2.5) return bands.z;
+    if (source_band < 3.5) return bands.w;
+    if (source_band < 4.5) return max_band;
+    return max(max_band, pad_trigger * max(0.25, pad_velocity));
+}
+
+float4 PSHardtechnoStrobe(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float rate = max(0.25, flash_rate * lerp(0.65, 1.85, macro_speed));
+    float rnd = hash12(float2(floor(time * rate), pad_index + palette_id * 7.0));
+    float shake = shake_amount * (0.003 + macro_chaos * 0.012);
+    uv += (float2(rnd, hash12(float2(rnd, time))) - 0.5) * shake;
+
+    float4 src = input_tex.Sample(texSampler, uv);
+    float energy = saturate(selected_energy() * sensitivity * lerp(0.75, 1.6, macro_energy));
+    float reactor = smoothstep(threshold, 1.0, energy);
+    float transient = max(max(kick_onset, snare_onset * 0.65), hat_onset * 0.45);
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float activation = saturate(max(max(reactor, band_activation), max(transient * 0.75, pad)));
+
+    float phase = frac(time * rate + beat_1_16 * 0.12);
+    float gate = phase < saturate(pulse_width) ? 1.0 : 0.0;
+    float blackout = phase > (1.0 - saturate(black_ratio)) ? 0.0 : 1.0;
+    float flash = saturate(activation * gate * blackout);
+    float safety_value = strobe_safety > 0.001 ? strobe_safety : 1.0;
+    float safety = safety_enable > 0.5 ? saturate(safety_value) : 1.0;
+    flash *= safety;
+
+    float burst = color_burst * (rnd > (1.0 - saturate(color_burst_chance)) ? 1.0 : 0.0);
+    float3 pal = palette_color(palette_id + burst, rnd + beat_phase);
+    float3 white = float3(1.0, 1.0, 1.0);
+    float3 flash_col = lerp(white, pal, saturate(mode * 0.5 + burst));
+
+    float slices = max(1.0, grid_slices);
+    float slice_mask = frac((uv.y + rnd * 0.2) * slices) > 0.5 ? 1.0 : 0.18;
+    if (mode > 2.5)
+        flash *= slice_mask;
+
+    float3 base = has_input_source > 0.5 ? src.rgb * saturate(source_mix) : float3(0.0, 0.0, 0.0);
+    float3 strobe_col = lerp(flash_col, 1.0 - src.rgb, saturate(invert_amount));
+    float3 color = base + strobe_col * flash * brightness;
+
+    float4 logo = logo_tex.Sample(texSampler, vert_in.uv);
+    float logo_mask = max(max(logo.r, logo.g), logo.b) * logo.a;
+    float logo_peak = text_logo_peak * smoothstep(0.78, 1.0, activation) * gate;
+    color = lerp(color, max(color, logo.rgb * brightness), logo_mask * logo_peak);
+
+    color = saturate(color / (1.0 + color * 0.35));
+    float alpha = saturate(max(flash * brightness, logo_mask * logo_peak));
+    alpha = max(alpha, has_input_source > 0.5 ? src.a * saturate(source_mix) : 0.0);
+    return float4(color, alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSHardtechnoStrobe(vert_in);
+    }
+}

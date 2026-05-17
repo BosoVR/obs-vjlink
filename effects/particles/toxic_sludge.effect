@@ -100,10 +100,11 @@ float4 PSToxicSludge(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= resolution.x / resolution.y;
 
-    float bass = bands.x;
-    float lowmid = bands.y;
-    float highmid = bands.z;
-    float treble = bands.w;
+    float drive = max(audio_drive, 0.0);
+    float bass = bands.x * drive;
+    float lowmid = bands.y * drive;
+    float highmid = bands.z * drive;
+    float treble = bands.w * drive;
 
     float beat = 1.0 - beat_phase;
     beat = beat * beat;
@@ -175,7 +176,7 @@ float4 PSToxicSludge(VertInOut vert_in) : TARGET
 
     /* Add bubbles: bright toxic centers */
     color += float3(0.0, 0.3, 0.1) * bubble_field;
-    color += float3(0.1, 0.8, 0.2) * bubble_field * beat * 0.5; /* pulse on beat */
+    color += float3(0.1, 0.8, 0.2) * bubble_field * beat * drive * 0.5; /* pulse on beat */
 
     /* Oil slick sheen */
     color += oil_col;

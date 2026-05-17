@@ -3,7 +3,7 @@
     "name": "VHS Glitch",
     "category": "retro",
     "role": "filter",
-    "requires_input": true,
+    "requires_input": false,
     "performance_group": "post_glitch",
     "description": "VHS tape tracking errors, snow noise, color bleeding, and head switching artifacts",
     "author": "VJLink",

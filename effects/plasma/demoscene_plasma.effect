@@ -49,8 +49,11 @@ float4 PSDemoPlasma(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.4);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.4);
     float beat_4 = pow(1.0 - beat_1_4, 4.0);
 
     float t = time * plasma_speed * (1.0 + bass * 0.4);
@@ -88,7 +91,7 @@ float4 PSDemoPlasma(VertInOut vert_in) : TARGET
     col *= 0.7 + drive * 0.5 + beat_4 * bass * 0.3;
 
     /* Onset highlight */
-    col += palette_demo((int)palette_id, frac(hue + 0.3)) * onset_strength * 0.15;
+    col += palette_demo((int)palette_id, frac(hue + 0.3)) * onset * 0.15;
 
     /* Vignette */
     col *= smoothstep(2.4, 0.5, length(p));

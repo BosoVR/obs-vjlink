@@ -73,9 +73,12 @@ float4 PSPlasmaClassic(VertInOut vert_in) : TARGET
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
 
-    float bass = bands.x;
-    float bass_raw = bands_raw.x;
-    float drive = audio_drive * (0.5 + bass + kick_onset * 0.6 + rms * 0.3);
+    float ad = max(audio_drive, 0.0);
+    float bass = bands.x * ad;
+    float bass_raw = bands_raw.x * ad;
+    float kick = kick_onset * ad;
+    float onset = onset_strength * ad;
+    float drive = ad * (0.5 + bass + kick * 0.6 + rms * 0.3);
 
     float bs = beat_sync;
     float beat = pow(1.0 - beat_phase, 3.0);
@@ -85,7 +88,7 @@ float4 PSPlasmaClassic(VertInOut vert_in) : TARGET
 
     float scale = max(plasma_scale, 0.3);
     float dist = max(distortion, 0.0);
-    float t = time * (0.3 + color_speed * 0.5) + kick_onset * 0.4;
+    float t = time * (0.3 + color_speed * 0.5) + kick * 0.4;
 
     float2 q = float2(
         fbm5(p * scale + float2(0.0, t * 0.8)),
@@ -117,8 +120,8 @@ float4 PSPlasmaClassic(VertInOut vert_in) : TARGET
     float lum = dot(col, float3(0.299, 0.587, 0.114));
     col = lerp(float3(lum, lum, lum), col, 0.6 + sat);
 
-    col *= 1.0 + kick_onset * 0.45;
-    col += col_filament * onset_strength * 0.18;
+    col *= 1.0 + kick * 0.45;
+    col += col_filament * onset * 0.18;
 
     float r_len = length(p);
     col += col_filament * exp(-r_len * 1.6) * bass * beat * 0.35;

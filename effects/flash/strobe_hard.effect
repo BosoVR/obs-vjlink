@@ -20,11 +20,19 @@ uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
 uniform float     band_activation;
+uniform float     macro_energy;
+uniform float     macro_speed;
+uniform float     strobe_safety;
+uniform float     pad_trigger;
+uniform float     pad_velocity;
 
 uniform float intensity;
 uniform float flash_color_r;
 uniform float flash_color_g;
 uniform float flash_color_b;
+uniform float pulse_width;
+uniform float strobe_rate;
+uniform float trigger_threshold;
 
 sampler_state texSampler {
     Filter   = Linear;
@@ -56,10 +64,20 @@ float4 PSStrobeHard(VertInOut vert_in) : TARGET
         saturate(flash_color_b)
     );
 
-    /* Binary trigger: on when activation > 0.2 (sensitive to audio) */
-    float flash = step(0.2, band_activation);
+    float transient = max(kick_onset, max(snare_onset * 0.65, hat_onset * 0.45));
+    float pad = pad_trigger * max(0.25, pad_velocity);
+    float reactor = saturate(max(band_activation, max(transient, pad)) * max(audio_drive, 0.0) *
+        lerp(0.75, 1.65, macro_energy));
+    float rate = max(strobe_rate, 0.0);
+    float width = clamp(pulse_width, 0.02, 0.95);
+    float phase = frac(beat_1_16 + time * rate * lerp(0.2, 1.2, macro_speed) * 0.02);
+    float pulse = phase < width ? 1.0 : 0.0;
+
+    /* Binary trigger: beat-sliced, onset-aware, pad-capable. */
+    float flash = step(trigger_threshold, reactor) * pulse;
     float intens = intensity > 0.01 ? saturate(intensity) : 1.0;
-    float strength = flash * intens;
+    float safety = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float strength = flash * intens * safety;
 
     float3 color = lerp(src.rgb, flash_col, strength);
     float out_alpha = max(max(color.r, color.g), color.b);

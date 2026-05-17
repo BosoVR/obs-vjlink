@@ -84,10 +84,11 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
 {
     float2 uv = vert_in.uv;
 
+    float ad = max(audio_drive, 0.0);
+    float drive = saturate(max(max(bands_raw.x, onset_strength), band_activation)) * ad;
     float cols = max(column_count, 10.0);
-    float drive = saturate(max(max(bands_raw.x, onset_strength), band_activation));
-    float speed = max(fall_speed, 0.1) * (1.0 + drive * max(audio_drive, 0.0) * 1.75);
-    float trail = max(trail_length, 0.1) * (1.0 + bands.y * 0.35 + drive * 0.25);
+    float speed = max(fall_speed, 0.1) * (1.0 + drive * 1.75);
+    float trail = max(trail_length, 0.1) * (1.0 + bands.y * ad * 0.35 + drive * 0.25);
     float bright = max(brightness, 0.1);
     float fill = saturate(density);
 
@@ -122,7 +123,7 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
     fade = pow(fade, 1.75);
 
     /* Character change based on time and treble */
-    float char_rate = 2.0 + bands.w * 7.0 + bands_raw.w * 4.0 + onset_strength * 5.0;
+    float char_rate = 2.0 + bands.w * ad * 7.0 + bands_raw.w * ad * 4.0 + onset_strength * ad * 5.0;
     float char_seed = floor(time * char_rate + col_hash * 100.0);
     char_seed = hash(float2(col_idx, row_idx + char_seed));
 
@@ -143,7 +144,7 @@ float4 PSMatrixRain(VertInOut vert_in) : TARGET
     /* Audio glow on specific columns */
     float audio_col = frac(col_hash * 7.0);
     float audio_col_mask = step(audio_col, 0.26 + drive * 0.18);
-    color *= 1.0 + audio_col_mask * drive * max(audio_drive, 0.0) * 1.15;
+    color *= 1.0 + audio_col_mask * drive * 1.15;
 
     /* Beat flash: briefly brighten all */
     float beat = 1.0 - beat_phase;

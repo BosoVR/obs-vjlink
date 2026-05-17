@@ -20,6 +20,7 @@ uniform float     beat_1_8;
 uniform float     beat_1_16;
 uniform float     palette_id;
 uniform float     audio_drive;
+uniform float     has_input_source;
 
 uniform float flash_decay;     /* how quickly flash fades (default 3.0) */
 uniform float flash_color_r;   /* flash color R (default 1.0) */
@@ -61,15 +62,26 @@ float4 PSBeatFlash(VertInOut vert_in) : TARGET
         saturate(flash_color_b)
     );
 
+    float drive = max(audio_drive, 0.0);
+
     /* Beat envelope: exponential decay from beat onset */
     float beat = 1.0 - beat_phase;
     float envelope = pow(beat, decay);
 
     /* Scale by bass energy for natural feel */
-    envelope *= bands.x;
+    envelope *= lerp(0.35, bands.x, saturate(drive));
+    envelope += max(kick_onset, snare_onset * 0.65) * 0.45 * drive;
+    envelope = saturate(envelope);
 
     /* Sample source if available */
     float4 src = image.Sample(texSampler, uv);
+    if (has_input_source < 0.5) {
+        float2 p = (uv - 0.5) * 2.0;
+        p.x *= resolution.x / max(resolution.y, 1.0);
+        float ring = exp(-abs(length(p) - (0.12 + envelope * 0.28)) * 24.0);
+        float beam = exp(-abs(frac((uv.x + uv.y) * 5.0 - time * 0.12) - 0.5) * 16.0);
+        src = float4(flash_col * (ring * 0.35 + beam * 0.20), saturate(ring + beam));
+    }
 
     float3 color = src.rgb;
 
