@@ -8,7 +8,7 @@ on:
     branches: [main, master]
 
 env:
-  OBS_VERSION: "32.1.0"
+  OBS_VERSION: "32.1.2"
   PLUGIN_NAME: "obs-vjlink"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -23,7 +23,7 @@ jobs:
 
       - name: Download OBS Studio
         run: |
-          $obsUrl = "https://github.com/obsproject/obs-studio/releases/download/${{ env.OBS_VERSION }}/OBS-Studio-${{ env.OBS_VERSION }}-Windows.zip"
+          $obsUrl = "https://github.com/obsproject/obs-studio/releases/download/${{ env.OBS_VERSION }}/OBS-Studio-${{ env.OBS_VERSION }}-Windows-x64.zip"
           Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
           Expand-Archive -Path obs-studio.zip -DestinationPath obs-studio-install
 
