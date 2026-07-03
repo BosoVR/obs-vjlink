@@ -39,18 +39,24 @@ jobs:
       - name: Setup OBS directories
         run: |
           # Create combined SDK directory with headers from source + libs from install
+          New-Item -ItemType Directory -Path obs-combined/include -Force
           New-Item -ItemType Directory -Path obs-combined/include/obs -Force
+          New-Item -ItemType Directory -Path obs-combined/deps/w32-pthreads -Force
           New-Item -ItemType Directory -Path obs-combined/lib -Force
           New-Item -ItemType Directory -Path obs-combined/bin/64bit -Force
 
           # Copy headers from source
-          Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/*.h" -Destination obs-combined/include/obs/ -Force
-          Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/obs-module.h" -Destination obs-combined/include/obs/ -Force
-          if (Test-Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/graphics") {
-            Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/graphics" -Destination obs-combined/include/obs/ -Recurse -Force
+          $libobs = "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs"
+          Copy-Item -Path "$libobs/*.h" -Destination obs-combined/include/ -Force
+          Copy-Item -Path "$libobs/*.h" -Destination obs-combined/include/obs/ -Force
+          foreach ($headerDir in @("audio-monitoring", "callback", "graphics", "media-io", "util")) {
+            if (Test-Path "$libobs/$headerDir") {
+              Copy-Item -Path "$libobs/$headerDir" -Destination obs-combined/include/ -Recurse -Force
+              Copy-Item -Path "$libobs/$headerDir" -Destination obs-combined/include/obs/ -Recurse -Force
+            }
           }
-          if (Test-Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/util") {
-            Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/libobs/util" -Destination obs-combined/include/obs/ -Recurse -Force
+          if (Test-Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/deps/w32-pthreads") {
+            Copy-Item -Path "obs-sdk/obs-studio-${{ env.OBS_VERSION }}/deps/w32-pthreads/*.h" -Destination obs-combined/deps/w32-pthreads/ -Force
           }
 
           # Copy lib/dll from install
@@ -61,6 +67,65 @@ jobs:
           if (Test-Path "$($obsInstall.FullName)/bin/64bit/obs.lib") {
             Copy-Item -Path "$($obsInstall.FullName)/bin/64bit/obs.lib" -Destination obs-combined/lib/ -Force
           }
+          if (Test-Path "$($obsInstall.FullName)/bin/64bit/w32-pthreads.dll") {
+            Copy-Item -Path "$($obsInstall.FullName)/bin/64bit/w32-pthreads.dll" -Destination obs-combined/bin/64bit/ -Force
+          }
+          if (Test-Path "$($obsInstall.FullName)/bin/64bit/w32-pthreads.lib") {
+            Copy-Item -Path "$($obsInstall.FullName)/bin/64bit/w32-pthreads.lib" -Destination obs-combined/lib/ -Force
+          }
+
+          function New-ImportLibFromDll {
+            param(
+              [string]$DllPath,
+              [string]$ModuleName,
+              [string]$LibPath
+            )
+
+            if (!(Test-Path $DllPath) -or (Test-Path $LibPath)) {
+              return
+            }
+
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            if (!$vsPath) {
+              throw "Visual Studio C++ tools not found."
+            }
+
+            $msvcDir = Get-ChildItem -Path (Join-Path $vsPath "VC\Tools\MSVC") -Directory |
+              Sort-Object Name -Descending |
+              Select-Object -First 1
+            $dumpbin = Join-Path $msvcDir.FullName "bin\Hostx64\x64\dumpbin.exe"
+            $libExe = Join-Path $msvcDir.FullName "bin\Hostx64\x64\lib.exe"
+            if (!(Test-Path $dumpbin) -or !(Test-Path $libExe)) {
+              throw "dumpbin.exe or lib.exe not found below $($msvcDir.FullName)."
+            }
+
+            $exports = & $dumpbin /nologo /exports $DllPath |
+              Select-String '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)' |
+              ForEach-Object { $_.Matches[0].Groups[1].Value } |
+              Where-Object { $_ -and ($_ -notmatch '^\[') } |
+              Sort-Object -Unique
+
+            if (!$exports) {
+              throw "No exports found in $DllPath."
+            }
+
+            $defPath = Join-Path (Split-Path $LibPath -Parent) "$ModuleName.def"
+            @("LIBRARY $ModuleName", "EXPORTS") + $exports | Set-Content -Path $defPath -Encoding ASCII
+            & $libExe /nologo /machine:x64 "/def:$defPath" "/out:$LibPath"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create import lib $LibPath."
+            }
+          }
+
+          New-ImportLibFromDll `
+            -DllPath "obs-combined/bin/64bit/obs.dll" `
+            -ModuleName "obs" `
+            -LibPath "obs-combined/lib/obs.lib"
+          New-ImportLibFromDll `
+            -DllPath "obs-combined/bin/64bit/w32-pthreads.dll" `
+            -ModuleName "w32-pthreads" `
+            -LibPath "obs-combined/lib/w32-pthreads.lib"
 
       - name: Configure CMake
         run: |
@@ -93,7 +158,11 @@ jobs:
           }
 
           # Create ZIP
-          Compress-Archive -Path release/${{ env.PLUGIN_NAME }}/* -DestinationPath "${{ env.PLUGIN_NAME }}-${{ github.sha }}-win64.zip"
+          $packageVersion = "${{ github.ref_name }}"
+          if (!$packageVersion -or $packageVersion -in @("main", "master")) {
+            $packageVersion = "${{ github.sha }}"
+          }
+          Compress-Archive -Path release/${{ env.PLUGIN_NAME }}/* -DestinationPath "OBS-VJLink-$packageVersion-win64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -105,4 +174,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.PLUGIN_NAME }}-*-win64.zip
+          body_path: CHANGELOG/${{ github.ref_name }}.md
+          files: OBS-VJLink-${{ github.ref_name }}-win64.zip
