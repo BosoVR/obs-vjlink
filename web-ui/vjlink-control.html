@@ -146,11 +146,89 @@
   .pro-only { display: none; }
   body.pro-mode .pro-only { display: block; }
   body.pro-mode .pro-only.pro-grid { display: grid; }
+  .basic-only { display: none; }
+  body.basic-mode .basic-only { display: block; }
+  .normal-plus { display: block; }
+  body.basic-mode .normal-plus { display: none !important; }
+  .pro-deep { display: none; }
+  body.pro-mode .pro-deep { display: block; }
   body.basic-mode .media-section { display: none; }
   body.basic-mode .presets-grid { max-height: 160px; }
   body.basic-mode .effects-grid { max-height: 190px; }
-  body.basic-mode .band-bar-wrap { height: 180px; }
+  body.basic-mode .band-bar-wrap { height: 150px; }
   body.basic-mode .right-panel .quick-actions { grid-template-columns: 1fr; }
+  body.basic-mode .left-panel { gap: 14px; }
+  body.basic-mode .audio-viz,
+  body.basic-mode .band-effects-panel,
+  body.basic-mode .effects-section { padding: 14px 16px; }
+
+  .audio-response-card {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .audio-response-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .audio-response-title {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+  }
+
+  .audio-response-current {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--accent2);
+    text-transform: uppercase;
+  }
+
+  .audio-response-buttons {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .audio-response-btn {
+    min-width: 0;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 4px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .audio-response-btn:hover {
+    color: var(--accent2);
+    border-color: var(--accent2);
+  }
+
+  .audio-response-btn.active {
+    color: white;
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .audio-response-hint {
+    margin-top: 7px;
+    font-size: 10px;
+    line-height: 1.35;
+    color: var(--text-dim);
+  }
 
   .status-text {
     font-size: 11px;
@@ -241,8 +319,14 @@
     box-shadow: -18px 0 55px rgba(0,0,0,0.55);
     z-index: 190;
     overflow-y: auto;
+    visibility: hidden;
+    pointer-events: none;
   }
-  body.settings-open .settings-drawer { transform: translateX(0); }
+  body.settings-open .settings-drawer {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
   .settings-panel-head {
     position: sticky;
     top: 0;
@@ -348,8 +432,6 @@
     gap: 8px;
     padding: 9px 0;
   }
-  .pro-deep { display: block; }
-  body.basic-mode .pro-deep { display: none !important; }
   body.ui-compact .left-panel,
   body.ui-compact .right-panel { padding: 12px; }
   body.ui-compact .left-panel { gap: 10px; }
@@ -1295,15 +1377,15 @@
   /* === Performance Pads === */
   .pad-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 6px;
     margin-top: 8px;
   }
   /* Size variants — adjust columns + base font size */
-  .pad-grid.size-sm { grid-template-columns: repeat(6, 1fr); gap: 4px; }
-  .pad-grid.size-md { grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .pad-grid.size-lg { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .pad-grid.size-xl { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .pad-grid.size-sm { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+  .pad-grid.size-md { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+  .pad-grid.size-lg { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .pad-grid.size-xl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .pad-grid.size-sm .perf-pad { padding: 4px 2px; font-size: 9px; }
   .pad-grid.size-sm .pad-key { font-size: 11px; }
   .pad-grid.size-sm .pad-name { font-size: 8px; }
@@ -1315,7 +1397,8 @@
   .pad-grid.size-xl .pad-name { font-size: 13px; }
 
   .perf-pad {
-    aspect-ratio: 1;
+    min-height: 72px;
+    height: clamp(72px, 6.8vw, 112px);
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1342,6 +1425,8 @@
     transform: scale(0.96);
   }
   .perf-pad.assigned { border-color: var(--accent); }
+  body.basic-mode .pad-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  body.basic-mode .perf-pad { height: clamp(64px, 5.2vw, 92px); min-height: 64px; }
   .pad-key {
     font-size: 14px;
     font-weight: 800;
@@ -1602,8 +1687,9 @@
   <div class="connection">
     <div class="header-fft" id="headerFft" title="Live FFT spectrum"></div>
     <div class="beat-pulse" id="beatPulseDot" title="Beat pulse + kick onset"></div>
-    <div class="mode-switch" title="Switch between simple AudioLink control and Pro VJ workflow">
+    <div class="mode-switch" title="Switch between Basic, Normal, and Pro VJ workflows">
       <button id="modeBasicBtn" onclick="setUIMode('basic')">BASIC</button>
+      <button id="modeNormalBtn" onclick="setUIMode('normal')">NORMAL</button>
       <button id="modeProBtn" onclick="setUIMode('pro')">PRO</button>
     </div>
     <span class="autosave-status saved" id="autosaveStatus" title="Backend save status">Saved</span>
@@ -1618,7 +1704,7 @@
 
 <!-- Global Settings Drawer -->
 <div class="settings-backdrop" id="settingsBackdrop" onclick="toggleSettingsDrawer(false)"></div>
-<aside class="settings-drawer" id="settingsDrawer" aria-label="VJLink settings">
+<aside class="settings-drawer" id="settingsDrawer" aria-label="VJLink settings" aria-hidden="true" inert>
   <div class="settings-panel-head">
     <div>
       <div class="settings-panel-title">Settings</div>
@@ -1645,10 +1731,11 @@
       <div class="settings-row">
         <div>
           <div class="settings-label">UI Mode</div>
-          <div class="settings-note">Basic keeps the live surface lean. Pro opens the workbench.</div>
+          <div class="settings-note">Basic is the live deck. Normal keeps the current control surface. Pro opens everything.</div>
         </div>
         <select id="settingsUiMode" class="settings-select" onchange="setUIMode(this.value);syncSettingsPanel()">
           <option value="basic">Basic</option>
+          <option value="normal">Normal</option>
           <option value="pro">Pro</option>
         </select>
       </div>
@@ -1695,7 +1782,7 @@
       </div>
       <div class="settings-action-row">
         <button class="quick-btn" onclick="resetUiPreferences()">Reset UI Preferences</button>
-        <button class="quick-btn" onclick="setUIMode(uiMode === 'pro' ? 'basic' : 'pro');syncSettingsPanel()">Toggle Basic/Pro</button>
+        <button class="quick-btn" onclick="cycleUIMode();syncSettingsPanel()">Cycle Mode</button>
       </div>
     </div>
   </div>
@@ -1703,6 +1790,19 @@
   <div class="settings-pane" id="settingsPane_audiolink">
     <div class="settings-group">
       <div class="settings-group-title">AudioLink</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label">Response Preset</div>
+          <div class="settings-note">General AudioLink response shaping.</div>
+        </div>
+        <select id="settingsAudioResponse" class="settings-select" onchange="applyAudioResponsePreset(this.value);syncSettingsPanel()">
+          <option value="raw">Raw</option>
+          <option value="punchy">Punchy</option>
+          <option value="balanced">Balanced</option>
+          <option value="smooth">Smooth</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
       <div class="settings-row">
         <div>
           <div class="settings-label">Master Gain</div>
@@ -1956,6 +2056,21 @@
         </div>
       </div>
 
+      <div class="audio-response-card">
+        <div class="audio-response-header">
+          <span class="audio-response-title">AudioLink Response</span>
+          <span class="audio-response-current" id="audioResponseCurrent">Balanced</span>
+        </div>
+        <div class="audio-response-buttons" aria-label="AudioLink response presets">
+          <button class="audio-response-btn" data-audio-response="raw" onclick="applyAudioResponsePreset('raw')">Raw</button>
+          <button class="audio-response-btn" data-audio-response="punchy" onclick="applyAudioResponsePreset('punchy')">Punchy</button>
+          <button class="audio-response-btn active" data-audio-response="balanced" onclick="applyAudioResponsePreset('balanced')">Balanced</button>
+          <button class="audio-response-btn" data-audio-response="smooth" onclick="applyAudioResponsePreset('smooth')">Smooth</button>
+          <button class="audio-response-btn" data-audio-response="manual" onclick="applyAudioResponsePreset('manual')">Manual</button>
+        </div>
+        <div class="audio-response-hint" id="audioResponseHint">Balanced response for general AudioLink-driven visuals.</div>
+      </div>
+
       <!-- BPM & Beat -->
       <div class="beat-section">
         <div class="bpm-display">
@@ -2018,7 +2133,7 @@
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">
         <button class="mini-btn" onclick="applyTriggerPreset('tight')">Tight Trigger</button>
-        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Hardtechno Trigger</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Punchy Trigger</button>
         <button class="mini-btn" onclick="applyTriggerPreset('smooth')">Smooth Visual</button>
       </div>
     </div>
@@ -2331,7 +2446,7 @@
       <div class="section-title">Per-Band Effects</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
         <button class="mini-btn" onclick="applyTriggerPreset('tight')">Tight</button>
-        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Hardtechno</button>
+        <button class="mini-btn" onclick="applyTriggerPreset('rave')">Punchy</button>
         <button class="mini-btn" onclick="applyTriggerPreset('smooth')">Smooth</button>
       </div>
       <div class="band-effects-grid" id="bandEffectsGrid">
@@ -2340,11 +2455,11 @@
     </div>
 
     <!-- ===== PERFORMANCE PADS ===== -->
-    <div class="pro-panel" style="margin-top:12px">
+    <div class="pro-panel normal-plus" style="margin-top:12px">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
         <span>Performance Pads</span>
         <button id="padEditBtn" onclick="togglePadEditMode()" class="mini-btn"
-          style="font-size:10px;padding:3px 10px;text-transform:uppercase">🔒 PLAY</button>
+          style="font-size:10px;padding:3px 10px;text-transform:uppercase">PLAY</button>
       </div>
 
       <!-- Bank selector -->
@@ -2680,13 +2795,13 @@ const effectCategories = {
   plasma: { label: 'Plasma', effects: ['plasma_classic','lava_lamp','liquid_metal'] },
   particle: { label: 'Particles', effects: ['fire_emitter','galaxy_spiral','particle_storm','toxic_sludge'] },
   fractal: { label: 'Fractals', effects: ['mandelbrot_zoom','julia_set','ifs_fractal'] },
-  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala','type_animator','halo_text_logo_tunnel'] },
+  geometric: { label: 'Geometric', effects: ['kaleidoscope','voronoi','sacred_geometry','beat_blocks','beat_rings','logo_runner','logo_pulse','acid_mandala','type_animator','screen_ring','analog_name_field'] },
   glitch: { label: 'Glitch', effects: ['glitch_basic','rgb_split','datamosh','pixel_sort','mono_outline','ascii_art','brutalist_scan_glitch'] },
-  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','vhs_glitch','virtual_drug','vaporwave_sunset'] },
+  retro: { label: 'Retro', effects: ['matrix_rain','crt_scanlines','crt_slit_field','vhs_glitch','virtual_drug','vaporwave_sunset'] },
   '3d': { label: '3D', effects: ['sphere_field','torus_knot','metaballs','logo_extrude_3d'] },
   audio_viz: { label: 'Audio Viz', effects: ['waveform_bars','spectrum_radial','beat_flash','laser_scan'] },
   postprocess: { label: 'Post-FX', effects: ['color_grade','feedback','displacement','bloom_pro','holographic_foil'] },
-  flash: { label: 'Flash', effects: ['hardtechno_strobe','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','strobe_grid'] },
+  flash: { label: 'Flash', effects: ['hardtechno_strobe','sidewinda_flash_objects','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','strobe_grid'] },
 };
 
 const effectNames = {
@@ -2702,6 +2817,7 @@ const effectNames = {
   spectrum_radial:'Spectrum Radial', beat_flash:'Beat Flash', color_grade:'Color Grade',
   feedback:'Feedback', displacement:'Displacement',
   hardtechno_strobe:'Hardtechno Strobe Reactor',
+  sidewinda_flash_objects:'Sidewinda Flash Objects',
   strobe_hard:'Hard Strobe', strobe_color:'Color Strobe', flash_kick:'Kick Flash',
   flash_snare:'Snare Flash', strobe_invert:'Invert Strobe', flash_radial:'Radial Flash',
   strobe_gate:'Strobe Gate', flash_shake:'Flash Shake', strobe_grid:'Strobe Grid',
@@ -2711,7 +2827,9 @@ const effectNames = {
   acid_mandala:'Acid Mandala', toxic_sludge:'Toxic Sludge', virtual_drug:'Virtual Drug',
   mono_outline:'Mono Outline', bloom_pro:'Bloom Pro', vaporwave_sunset:'Vaporwave Sunset',
   holographic_foil:'Holographic Foil', type_animator:'Type Animator',
-  halo_text_logo_tunnel:'Halo Text Logo Tunnel',
+  screen_ring:'Screen Ring',
+  analog_name_field:'Analog Name Field',
+  crt_slit_field:'CRT Slit Field',
   logo_extrude_3d:'Logo Extrude 3D',
   brutalist_scan_glitch:'Brutalist Scan Glitch',
 };
@@ -2720,14 +2838,14 @@ const effectNames = {
 const NEW_EFFECTS = new Set([
   'hardtechno_strobe','acid_mandala','toxic_sludge','virtual_drug','glitch_basic',
   'mono_outline','bloom_pro','vaporwave_sunset','holographic_foil','type_animator',
-  'halo_text_logo_tunnel','logo_extrude_3d','brutalist_scan_glitch',
+  'screen_ring','analog_name_field','crt_slit_field','logo_extrude_3d','brutalist_scan_glitch','sidewinda_flash_objects',
 ]);
 
 const effectProGroups = {
   pro_main: {
     label: 'Main Visual',
     note: 'Standalone generators for the main VJ canvas',
-    effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','plasma_classic','lava_lamp','liquid_metal','fire_emitter','galaxy_spiral','particle_storm','mandelbrot_zoom','julia_set','ifs_fractal','kaleidoscope','voronoi','sacred_geometry','sphere_field','torus_knot','metaballs','logo_extrude_3d','matrix_rain','vaporwave_sunset','type_animator','halo_text_logo_tunnel','waveform_bars','spectrum_radial','laser_scan']
+    effects: ['tunnel_classic','hex_tunnel','galaxy_tunnel','plasma_classic','lava_lamp','liquid_metal','fire_emitter','galaxy_spiral','particle_storm','mandelbrot_zoom','julia_set','ifs_fractal','kaleidoscope','voronoi','sacred_geometry','sphere_field','torus_knot','metaballs','logo_extrude_3d','matrix_rain','vaporwave_sunset','type_animator','screen_ring','analog_name_field','crt_slit_field','waveform_bars','spectrum_radial','laser_scan']
   },
   pro_content: {
     label: 'Content FX',
@@ -2742,7 +2860,7 @@ const effectProGroups = {
   pro_trigger: {
     label: 'Band Trigger FX',
     note: 'Best used in Per-Band Effects slots',
-    effects: ['hardtechno_strobe','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','beat_flash','beat_rings']
+    effects: ['hardtechno_strobe','sidewinda_flash_objects','beat_cuts','strobe_hard','strobe_color','flash_kick','flash_snare','strobe_invert','flash_radial','strobe_gate','flash_shake','beat_flash','beat_rings']
   }
 };
 
@@ -2785,6 +2903,25 @@ const effectParams = {
     { name: 'pattern', label: 'Pattern', min: 0, max: 3, step: 1, default: 0, options: ['Alternate','Triplet','4 on 4','Offbeat'] },
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, default: 1.0 },
     { name: 'color_invert', label: 'Color Invert', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+  ],
+  sidewinda_flash_objects: [
+    { name: 'flash_intensity', label: 'Flash', min: 0, max: 1, step: 0.01, default: 0.75 },
+    { name: 'audio_react', label: 'Audio React', min: 0, max: 2, step: 0.05, default: 1.0 },
+    { name: 'flash_rate', label: 'Flash Rate', min: 0.25, max: 30, step: 0.05, default: 12 },
+    { name: 'object_mode', label: 'Object Mode', min: 0, max: 3, step: 1, default: 0, options: ['Off','Logo','Primitive','Mesh'] },
+    { name: 'object_count', label: 'Objects', min: 0, max: 12, step: 1, default: 3 },
+    { name: 'glitch', label: 'Glitch', min: 0, max: 1, step: 0.01, default: 0.45 },
+    { name: 'contrast', label: 'Contrast', min: 0.2, max: 4, step: 0.05, default: 1.8 },
+    { name: 'band_density', label: 'Band Density', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { name: 'tear_amount', label: 'Horizontal Tear', min: 0, max: 1, step: 0.01, default: 0.62 },
+    { name: 'smoke_density', label: 'Smoke', min: 0, max: 1, step: 0.01, default: 0.58 },
+    { name: 'object_scale', label: 'Object Scale', min: 0.2, max: 3, step: 0.01, default: 1.0 },
+    { name: 'object_spin', label: 'Object Spin', min: -3, max: 3, step: 0.01, default: 0.75 },
+    { name: 'object_depth', label: 'Depth Pulse', min: 0, max: 2, step: 0.05, default: 0.65 },
+    { name: 'logo_slot', label: 'Logo Slot', min: 0, max: 2, step: 1, default: 0, options: ['Logo 1','Logo 2','Logo 3'] },
+    { name: 'source_mix', label: 'Source Mix', min: 0, max: 1, step: 0.01, default: 0 },
+    { name: 'invert', label: 'Invert', min: 0, max: 1, step: 1, default: 0, options: ['Off','On'] },
+    { name: 'safety_enable', label: 'Safety Limit', min: 0, max: 1, step: 1, default: 1, options: ['Off','On'] },
   ],
   strobe_color: [
     { name: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.01, default: 1.0 },
@@ -3198,7 +3335,7 @@ let activePreset = -1;
 let activeEffect = '';
 let activeCategory = 'all';
 let isBlackout = false;
-let uiMode = localStorage.getItem('vjlink_ui_mode') || 'basic';
+let uiMode = normalizeUIMode(localStorage.getItem('vjlink_ui_mode') || 'basic');
 let uiDensity = localStorage.getItem('vjlink_ui_density') || 'comfortable';
 let performanceQuality = localStorage.getItem('vjlink_quality_bias') || 'balanced';
 let audioControlTimer = null;
@@ -3211,6 +3348,101 @@ let backendProfiles = {};
 let backendProfileNames = [];
 let backendProfilesAvailable = false;
 let activeSettingsTab = 'general';
+let activeAudioResponsePreset = 'balanced';
+
+const audioResponsePresets = {
+  raw: {
+    label: 'Raw',
+    hint: 'Minimal smoothing for direct AudioLink levels.',
+    master_gain: 1.0,
+    fall_rate: 0.20,
+    attack: 1.0,
+    release: 0.08,
+    raw_mix: 1.0,
+    kick_threshold: 0.025,
+    snare_threshold: 0.035,
+    hat_threshold: 0.035,
+    onset_boost: 1.45,
+    peak_decay: 0.982,
+    bass_weight: 1.0,
+    mid_weight: 1.0,
+    treble_weight: 1.0
+  },
+  punchy: {
+    label: 'Punchy',
+    hint: 'Kick-heavy response with fast hits and controlled release.',
+    master_gain: 1.35,
+    fall_rate: 0.16,
+    attack: 0.95,
+    release: 0.12,
+    raw_mix: 0.72,
+    kick_threshold: 0.03,
+    snare_threshold: 0.04,
+    hat_threshold: 0.04,
+    onset_boost: 1.35,
+    peak_decay: 0.985,
+    bass_weight: 1.35,
+    mid_weight: 0.95,
+    treble_weight: 0.85
+  },
+  balanced: {
+    label: 'Balanced',
+    hint: 'Balanced response for general AudioLink-driven visuals.',
+    master_gain: 1.0,
+    fall_rate: 0.08,
+    attack: 0.72,
+    release: 0.22,
+    raw_mix: 0.25,
+    kick_threshold: 0.05,
+    snare_threshold: 0.04,
+    hat_threshold: 0.04,
+    onset_boost: 1.0,
+    peak_decay: 0.995,
+    bass_weight: 1.0,
+    mid_weight: 1.0,
+    treble_weight: 1.0
+  },
+  smooth: {
+    label: 'Smooth',
+    hint: 'Smoother motion with slower decay for continuous material.',
+    master_gain: 0.9,
+    fall_rate: 0.04,
+    attack: 0.45,
+    release: 0.42,
+    raw_mix: 0.08,
+    kick_threshold: 0.07,
+    snare_threshold: 0.06,
+    hat_threshold: 0.06,
+    onset_boost: 0.8,
+    peak_decay: 0.998,
+    bass_weight: 0.9,
+    mid_weight: 1.05,
+    treble_weight: 1.0
+  },
+  manual: {
+    label: 'Manual',
+    hint: 'Uses the current Master Gain and Fall Speed slider values.',
+    manual: true
+  }
+};
+
+const effectBasicGroups = {
+  basic_live: {
+    label: 'Live Deck',
+    note: 'Fast looks for a livestream DJ screen',
+    effects: ['screen_ring','analog_name_field','crt_slit_field','sidewinda_flash_objects','logo_pulse','logo_runner','beat_rings','waveform_bars','spectrum_radial','laser_scan']
+  },
+  basic_triggers: {
+    label: 'Triggers',
+    note: 'Pad and AudioLink-friendly hit effects',
+    effects: ['sidewinda_flash_objects','hardtechno_strobe','beat_cuts','flash_kick','flash_snare','strobe_gate','flash_shake','beat_flash']
+  },
+  basic_brand: {
+    label: 'Brand',
+    note: 'Logo and name-focused visuals',
+    effects: ['screen_ring','analog_name_field','logo_extrude_3d','logo_pulse','logo_runner','type_animator']
+  }
+};
 
 function unwrapResponseData(resp) {
   return resp?.responseData?.responseData || resp?.responseData || resp || {};
@@ -3328,6 +3560,14 @@ function applyPaletteToUI(pid) {
   });
 }
 
+const SCREEN_RING_EFFECT_ID = 'screen_ring';
+const LEGACY_SCREEN_RING_EFFECT_ID = ['halo', 'text', 'logo', 'tunnel'].join('_');
+
+function normalizeEffectId(effectId) {
+  const id = effectId || '';
+  return id === LEGACY_SCREEN_RING_EFFECT_ID ? SCREEN_RING_EFFECT_ID : id;
+}
+
 function applyCanonicalStateToUI(data) {
   if (!data || data.success === false) return;
   canonicalApplyInProgress = true;
@@ -3341,9 +3581,12 @@ function applyCanonicalStateToUI(data) {
     if (state.ui_density || state.uiDensity) setUiDensity(state.ui_density || state.uiDensity);
     if (state.performance_quality || state.quality_bias) setPerformanceQuality(state.performance_quality || state.quality_bias);
 
-    const active = state.active_effect || state.effect_id || state.current_effect;
+    const active = normalizeEffectId(state.active_effect || state.effect_id || state.current_effect);
     if (active !== undefined) {
       activeEffect = active || '';
+      if (activeEffect && state.main_params) {
+        mainParamCache[activeEffect] = Object.assign({}, getMainParamCache(activeEffect), state.main_params);
+      }
       renderEffects();
       renderParams();
     }
@@ -3379,6 +3622,10 @@ function applyCanonicalStateToUI(data) {
       if (gainEl) gainEl.value = Math.round(gain * 100);
       if (fallEl) fallEl.value = Math.round(fall * 100);
       updateAudioControlLabels(gain, fall);
+    }
+    if (state.audio_response_profile || state.audio_response_preset || state.audio_response || state.audioResponsePreset) {
+      const responsePreset = state.audio_response_profile || state.audio_response_preset || state.audioResponsePreset || state.audio_response;
+      setAudioResponseUI(typeof responsePreset === 'string' ? responsePreset : (responsePreset.profile || responsePreset.preset));
     }
 
     if (typeof state.palette_id === 'number') applyPaletteToUI(state.palette_id);
@@ -3425,15 +3672,22 @@ function applyCanonicalStateToUI(data) {
 
     if (state.main_params && activeEffect) {
       Object.entries(state.main_params).forEach(([pname, pval]) => {
+        setMainParamValue(pname, pval);
         const slider = document.getElementById('paramSlider_' + pname);
+        const select = document.getElementById('paramSelect_' + pname);
         const valEl = document.getElementById('paramVal_' + pname);
         if (slider) slider.value = pval;
-        if (valEl && typeof pval === 'number') valEl.textContent = pval.toFixed(2);
+        if (select) select.value = pval;
+        if (valEl && typeof pval === 'number') {
+          const params = effectParams[activeEffect] || [];
+          const pdef = params.find(p => p.name === pname);
+          valEl.textContent = formatParamValue(pdef, pval);
+        }
       });
     }
     if (state.halo_ring_text) {
       applyHaloRingTextState(state.halo_ring_text);
-      if (activeEffect === 'halo_text_logo_tunnel') pushHaloRingTextToShader();
+      if (activeEffect === 'screen_ring') pushHaloRingTextToShader();
     }
     paramBandMappings = Object.assign({}, state.main_param_mappings || state.param_mappings || {});
     bandParamMappings = Object.assign({}, state.band_param_mappings || {});
@@ -3466,30 +3720,54 @@ async function bootstrapCanonicalState() {
   await refreshProfileList();
 }
 
+function normalizeUIMode(mode) {
+  return ['basic', 'normal', 'pro'].includes(mode) ? mode : 'basic';
+}
+
+function cycleUIMode() {
+  const order = ['basic', 'normal', 'pro'];
+  const idx = order.indexOf(uiMode);
+  setUIMode(order[(idx + 1) % order.length]);
+}
+
 function setUIMode(mode) {
-  uiMode = (mode === 'pro') ? 'pro' : 'basic';
+  uiMode = normalizeUIMode(mode);
   localStorage.setItem('vjlink_ui_mode', uiMode);
   document.body.classList.toggle('pro-mode', uiMode === 'pro');
-  document.body.classList.toggle('basic-mode', uiMode !== 'pro');
+  document.body.classList.toggle('normal-mode', uiMode === 'normal');
+  document.body.classList.toggle('basic-mode', uiMode === 'basic');
 
   const basicBtn = document.getElementById('modeBasicBtn');
+  const normalBtn = document.getElementById('modeNormalBtn');
   const proBtn = document.getElementById('modeProBtn');
-  if (basicBtn) basicBtn.classList.toggle('active', uiMode !== 'pro');
+  if (basicBtn) basicBtn.classList.toggle('active', uiMode === 'basic');
+  if (normalBtn) normalBtn.classList.toggle('active', uiMode === 'normal');
   if (proBtn) proBtn.classList.toggle('active', uiMode === 'pro');
   const settingsMode = document.getElementById('settingsUiMode');
   if (settingsMode) settingsMode.value = uiMode;
 
   if (uiMode !== 'pro' && effectProGroups[activeCategory])
     activeCategory = 'all';
+  if (uiMode !== 'basic' && effectBasicGroups[activeCategory])
+    activeCategory = 'all';
+  if (uiMode === 'basic' && effectCategories[activeCategory])
+    activeCategory = 'all';
   renderCategories();
   renderEffects();
+  renderParams();
   updateProWorkbench();
   scheduleAutosave();
 }
 
 function toggleSettingsDrawer(open) {
-  document.body.classList.toggle('settings-open', !!open);
-  if (open) syncSettingsPanel();
+  const isOpen = !!open;
+  document.body.classList.toggle('settings-open', isOpen);
+  const drawer = document.getElementById('settingsDrawer');
+  if (drawer) {
+    drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    drawer.inert = !isOpen;
+  }
+  if (isOpen) syncSettingsPanel();
 }
 
 function setUiDensity(value) {
@@ -3542,6 +3820,7 @@ function syncSettingsPanel() {
   const aiMode = document.getElementById('settingsAiMode');
   const audioGain = document.getElementById('settingsAudioMasterGain');
   const audioFall = document.getElementById('settingsAudioFallRate');
+  const audioResponse = document.getElementById('settingsAudioResponse');
   const gpuQuality = document.getElementById('settingsGpuQuality');
   const padBankEl = document.getElementById('settingsPadBank');
   const padCountEl = document.getElementById('settingsPadCount');
@@ -3556,6 +3835,7 @@ function syncSettingsPanel() {
   if (aiMode && typeof VJ_AI !== 'undefined') aiMode.value = VJ_AI.mode || 'off';
   if (audioGain) audioGain.value = document.getElementById('audioMasterGain')?.value || '100';
   if (audioFall) audioFall.value = document.getElementById('audioFallRate')?.value || '8';
+  if (audioResponse) audioResponse.value = activeAudioResponsePreset;
   if (gpuQuality) gpuQuality.value = String(activeQuality);
   if (padBankEl) padBankEl.value = (typeof activeBank !== 'undefined' ? activeBank : 'A');
   if (padCountEl) padCountEl.value = String(padCount || 12);
@@ -4047,12 +4327,92 @@ function updateAudioControlLabels(masterGain, fallRate) {
   if (fallVal) fallVal.textContent = fallRate.toFixed(2);
 }
 
+function getManualAudioResponseValues() {
+  const gainEl = document.getElementById('audioMasterGain');
+  const fallEl = document.getElementById('audioFallRate');
+  return {
+    master_gain: Math.max(0.25, Math.min(3.0, parseFloat(gainEl?.value || '100') / 100)),
+    fall_rate: Math.max(0.01, Math.min(0.50, parseFloat(fallEl?.value || '8') / 100))
+  };
+}
+
+function buildAudioResponsePayload(presetId) {
+  const id = audioResponsePresets[presetId] ? presetId : 'balanced';
+  const preset = audioResponsePresets[id];
+  const sliderValues = preset.manual ? getManualAudioResponseValues() : {};
+  const payload = Object.assign({}, preset, sliderValues);
+  delete payload.hint;
+  delete payload.manual;
+  delete payload.label;
+  delete payload.bass_weight;
+  delete payload.mid_weight;
+  delete payload.treble_weight;
+  if (payload.raw_mix === undefined) {
+    const fall = payload.fall_rate ?? 0.08;
+    payload.raw_mix = Math.max(0.0, Math.min(1.0, 0.35 - fall * 0.8));
+  }
+  if (payload.attack === undefined) payload.attack = 0.65;
+  if (payload.release === undefined) payload.release = payload.fall_rate ?? 0.08;
+  if (payload.kick_threshold === undefined) payload.kick_threshold = 0.05;
+  if (payload.snare_threshold === undefined) payload.snare_threshold = 0.04;
+  if (payload.hat_threshold === undefined) payload.hat_threshold = 0.04;
+  if (payload.onset_boost === undefined) payload.onset_boost = 1.0;
+  if (payload.peak_decay === undefined) payload.peak_decay = 0.995;
+  payload.profile = id;
+  payload.preset = id;
+  payload.mode = id;
+  payload.response = id;
+  return payload;
+}
+
+function setAudioResponseUI(presetId) {
+  const id = audioResponsePresets[presetId] ? presetId : 'balanced';
+  activeAudioResponsePreset = id;
+  const preset = audioResponsePresets[id];
+  document.querySelectorAll('[data-audio-response]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.audioResponse === id);
+  });
+  const current = document.getElementById('audioResponseCurrent');
+  const hint = document.getElementById('audioResponseHint');
+  const settings = document.getElementById('settingsAudioResponse');
+  if (current) current.textContent = preset.label;
+  if (hint) hint.textContent = preset.hint;
+  if (settings) settings.value = id;
+}
+
+async function applyAudioResponsePreset(presetId, options = {}) {
+  const id = audioResponsePresets[presetId] ? presetId : 'balanced';
+  const payload = buildAudioResponsePayload(id);
+  setAudioResponseUI(id);
+
+  const gainEl = document.getElementById('audioMasterGain');
+  const fallEl = document.getElementById('audioFallRate');
+  if (!audioResponsePresets[id].manual) {
+    if (gainEl) gainEl.value = Math.round(payload.master_gain * 100);
+    if (fallEl) fallEl.value = Math.round(payload.fall_rate * 100);
+  }
+  updateAudioControlLabels(payload.master_gain, payload.fall_rate);
+  syncSettingsPanel();
+
+  if (options.skipRequest) return null;
+  const resp = await sendRequest('SetAudioResponse', payload);
+  if (!audioResponsePresets[id].manual) {
+    await sendRequest('SetAudioControls', {
+      master_gain: payload.master_gain,
+      fall_rate: payload.fall_rate,
+      preserve_response: true
+    });
+  }
+  return resp;
+}
+
 function setAudioControlsFromUI() {
   const gainEl = document.getElementById('audioMasterGain');
   const fallEl = document.getElementById('audioFallRate');
   const masterGain = Math.max(0.25, Math.min(3.0, parseFloat(gainEl.value) / 100));
   const fallRate = Math.max(0.01, Math.min(0.50, parseFloat(fallEl.value) / 100));
   updateAudioControlLabels(masterGain, fallRate);
+  setAudioResponseUI('manual');
 
   if (audioControlTimer) clearTimeout(audioControlTimer);
   audioControlTimer = setTimeout(() => {
@@ -4060,6 +4420,7 @@ function setAudioControlsFromUI() {
       master_gain: masterGain,
       fall_rate: fallRate
     });
+    sendRequest('SetAudioResponse', buildAudioResponsePayload('manual'));
   }, 70);
 }
 
@@ -4069,7 +4430,8 @@ async function resetAudioControls() {
   if (gainEl) gainEl.value = 100;
   if (fallEl) fallEl.value = 8;
   updateAudioControlLabels(1.0, 0.08);
-  await sendRequest('SetAudioControls', { master_gain: 1.0, fall_rate: 0.08 });
+  await sendRequest('SetAudioControls', { master_gain: 1.0, fall_rate: 0.08, preserve_response: true });
+  await applyAudioResponsePreset('balanced');
 }
 
 let sensitivitySynced = false;
@@ -4103,6 +4465,8 @@ async function syncAudioControlsFromServer() {
     if (gainEl) gainEl.value = Math.round(gain * 100);
     if (fallEl) fallEl.value = Math.round(fall * 100);
     updateAudioControlLabels(gain, fall);
+    const responsePreset = d.audio_response_profile || d.audio_response_preset || d.audio_response || d.audioResponsePreset;
+    if (responsePreset) setAudioResponseUI(typeof responsePreset === 'string' ? responsePreset : (responsePreset.profile || responsePreset.preset));
   }
 }
 
@@ -4219,6 +4583,46 @@ function getProfiles() {
   return Object.assign({}, backendProfiles);
 }
 
+function buildProfileSavePayload(name, snapshot) {
+  return {
+    name,
+    profile_name: name,
+    state_json: JSON.stringify(snapshot),
+    state: snapshot,
+    settings: snapshot
+  };
+}
+
+function extractProfileSettingsFromResponse(data, name) {
+  if (!data) return null;
+  if (data.state && typeof data.state === 'object') return data.state;
+  if (data.profile && typeof data.profile === 'object') return data.profile;
+  if (data.settings && typeof data.settings === 'object') return data.settings;
+  if (typeof data.state_json === 'string' && data.state_json.trim()) {
+    try {
+      return JSON.parse(data.state_json);
+    } catch (e) {
+      console.warn('Profile state_json could not be parsed', e);
+    }
+  }
+  const flatProfileKeys = [
+    'active_effect',
+    'bands',
+    'halo_ring_text',
+    'main_params',
+    'main_param_mappings',
+    'band_param_mappings',
+    'audio_response',
+    'audio_response_profile',
+    'audio_response_preset',
+    'ui_mode'
+  ];
+  if (flatProfileKeys.some(key => Object.prototype.hasOwnProperty.call(data, key))) {
+    return data;
+  }
+  return backendProfiles[name] || null;
+}
+
 async function refreshProfileList() {
   const sel = document.getElementById('profileSelect');
   if (!sel) return;
@@ -4260,6 +4664,9 @@ function captureCurrentSettings() {
     logo_path3: document.getElementById('logoPathInput3')?.value || '',
     transparent_bg: document.getElementById('toggleTransparentBg')?.checked || false,
     debug_overlay: document.getElementById('toggleDebugOverlay')?.checked || false,
+    audio_response_profile: activeAudioResponsePreset,
+    audio_response_preset: activeAudioResponsePreset,
+    audio_response: buildAudioResponsePayload(activeAudioResponsePreset),
     audio_master_gain: (parseFloat(document.getElementById('audioMasterGain')?.value || '100') / 100),
     audio_fall_rate: (parseFloat(document.getElementById('audioFallRate')?.value || '8') / 100),
     /* Band slots with full params */
@@ -4279,14 +4686,21 @@ function captureCurrentSettings() {
     band_param_mappings: Object.assign({}, bandParamMappings),
     halo_ring_text: normalizeHaloRingTextState(haloRingTextState),
     /* Main effect param values from current sliders */
-    main_params: {}
+    main_params: Object.assign({}, getMainParamCache())
   };
   /* Read main effect slider values from DOM */
-  if (activeEffect) {
+  if (activeEffect && activeBandIndex < 0) {
     const params = effectParams[activeEffect] || [];
     params.forEach(p => {
       const slider = document.getElementById('paramSlider_' + p.name);
-      if (slider) settings.main_params[p.name] = parseFloat(slider.value);
+      const select = document.getElementById('paramSelect_' + p.name);
+      if (slider) {
+        settings.main_params[p.name] = parseFloat(slider.value);
+        setMainParamValue(p.name, settings.main_params[p.name]);
+      } else if (select) {
+        settings.main_params[p.name] = parseFloat(select.value);
+        setMainParamValue(p.name, settings.main_params[p.name]);
+      }
     });
   }
   return settings;
@@ -4342,11 +4756,18 @@ async function applyProfile(settings) {
     updateAudioControlLabels(gain, fall);
     await sendRequest('SetAudioControls', { master_gain: gain, fall_rate: fall });
   }
+  if (settings.audio_response_profile || settings.audio_response_preset || settings.audio_response || settings.audioResponsePreset) {
+    const preset = settings.audio_response_profile || settings.audio_response_preset || settings.audio_response?.profile || settings.audio_response?.preset || settings.audio_response || settings.audioResponsePreset;
+    await applyAudioResponsePreset(preset);
+  }
 
   /* --- Main effect: always set, even when unchanged or empty.
    *     Empty effect_id clears the chain on the backend. --- */
-  const newActive = settings.active_effect || '';
+  const newActive = normalizeEffectId(settings.active_effect || '');
   activeEffect = newActive;
+  if (settings.main_params && newActive) {
+    mainParamCache[newActive] = Object.assign({}, getMainParamCache(newActive), settings.main_params);
+  }
   await sendRequest('SetEffect', { effect_id: newActive });
   renderEffects();
   renderParams();
@@ -4359,11 +4780,16 @@ async function applyProfile(settings) {
   /* Main effect params */
   if (settings.main_params && newActive) {
     for (const [pname, pval] of Object.entries(settings.main_params)) {
+      setMainParamValue(pname, pval, newActive);
       const slider = document.getElementById('paramSlider_' + pname);
-      if (slider) {
-        slider.value = pval;
-        const valEl = document.getElementById('paramVal_' + pname);
-        if (valEl) valEl.textContent = parseFloat(pval).toFixed(2);
+      const select = document.getElementById('paramSelect_' + pname);
+      const valEl = document.getElementById('paramVal_' + pname);
+      if (slider) slider.value = pval;
+      if (select) select.value = pval;
+      if (valEl) {
+        const params = effectParams[newActive] || [];
+        const pdef = params.find(p => p.name === pname);
+        valEl.textContent = formatParamValue(pdef, pval);
       }
       await sendRequest('SetParam', { param: pname, value: pval });
     }
@@ -4371,14 +4797,14 @@ async function applyProfile(settings) {
 
   if (settings.halo_ring_text) {
     applyHaloRingTextState(settings.halo_ring_text);
-    if (newActive === 'halo_text_logo_tunnel') await pushHaloRingTextToShader();
+    if (newActive === 'screen_ring') await pushHaloRingTextToShader();
   }
 
   /* --- Band slots: always send all 4 (empty effect_id = clear) --- */
   for (let i = 0; i < 4; i++) {
     const saved = (Array.isArray(settings.bands) ? settings.bands[i] : null)
                   || { effect: '', threshold: 0.3, intensity: 1.0, attack: 0.65, release: 0.18, hold: 6, blend_mode: 1, blend_alpha: 1.0, paramCache: {} };
-    bandSlots[i].effect = saved.effect || '';
+    bandSlots[i].effect = normalizeEffectId(saved.effect || '');
     bandSlots[i].threshold = (typeof saved.threshold === 'number') ? saved.threshold : 0.3;
     bandSlots[i].intensity = (typeof saved.intensity === 'number') ? saved.intensity : 1.0;
     bandSlots[i].attack = (typeof saved.attack === 'number') ? saved.attack : 0.65;
@@ -4429,7 +4855,7 @@ async function saveProfile() {
   }
   const snapshot = captureCurrentSettings();
   snapshot.schema_version = 2;
-  const resp = await sendRequest('SaveProfileV2', { name, profile_name: name, state: snapshot, settings: snapshot });
+  const resp = await sendRequest('SaveProfileV2', buildProfileSavePayload(name, snapshot));
   const data = unwrapResponseData(resp);
   if (!resp || data.success === false) {
     setAutosaveStatus('failed', data.error || 'Profile save failed');
@@ -4452,11 +4878,13 @@ async function loadProfile() {
   if (!name) return;
   const resp = await sendRequest('LoadProfileV2', { name, profile_name: name });
   const data = unwrapResponseData(resp);
-  const settings = data.state || data.profile || data.settings || backendProfiles[name];
+  const settings = extractProfileSettingsFromResponse(data, name);
   if (!resp || data.success === false || !settings) {
     setAutosaveStatus('failed', data.error || 'Profile load failed');
     return;
   }
+  backendProfiles[name] = settings;
+  if (!backendProfileNames.includes(name)) backendProfileNames.push(name);
   applyCanonicalStateToUI(settings);
   if (data.applied === false) await applyProfile(settings);
   await bootstrapCanonicalState();
@@ -4483,15 +4911,11 @@ async function saveLegacyProfilesToBackend(legacy) {
   let saved = 0;
   for (const [name, settings] of entries) {
     if (!name || !settings) continue;
-    const resp = await sendRequest('SaveProfileV2', {
-      name,
-      profile_name: name,
-      state: Object.assign({ schema_version: 2 }, settings),
-      settings: Object.assign({ schema_version: 2 }, settings)
-    });
+    const snapshot = Object.assign({ schema_version: 2 }, settings);
+    const resp = await sendRequest('SaveProfileV2', buildProfileSavePayload(name, snapshot));
     const data = unwrapResponseData(resp);
     if (resp && data.success !== false) {
-      backendProfiles[name] = settings;
+      backendProfiles[name] = snapshot;
       if (!backendProfileNames.includes(name)) backendProfileNames.push(name);
       saved++;
     }
@@ -4570,6 +4994,8 @@ async function selectEffect(effectId) {
   effectClickLock = true;
   if (effectClickTimer) clearTimeout(effectClickTimer);
   effectClickTimer = setTimeout(() => { effectClickLock = false; }, 3000);
+  activeBandIndex = -1;
+  effectId = normalizeEffectId(effectId);
 
   if (activeEffect === effectId) {
     activeEffect = '';
@@ -4579,6 +5005,7 @@ async function selectEffect(effectId) {
     activeEffect = effectId;
     await sendRequest('SetEffect', { effect_id: effectId });
     renderParams();
+    void loadEffectMetadataForEffect(effectId);
   }
   renderEffects();
 }
@@ -4590,13 +5017,15 @@ async function setBandParam(bandIndex, name, value) {
 }
 
 async function setParam(name, value) {
+  const numeric = parseFloat(value);
+  setMainParamValue(name, numeric);
   if (!ws || !connected) {
     /* Flash warning if not connected */
     const el = document.getElementById('paramVal_' + name);
     if (el) { el.style.color = 'var(--red)'; setTimeout(() => { el.style.color = ''; }, 300); }
     return;
   }
-  const resp = await sendRequest('SetParam', { param: name, value: parseFloat(value) });
+  const resp = await sendRequest('SetParam', { param: name, value: numeric });
   /* Flash green on success */
   const el = document.getElementById('paramVal_' + name);
   if (el) {
@@ -4615,6 +5044,8 @@ function setParamBandMapping(paramName, band) {
     if (!paramBandMappings[paramName]) {
       const params = effectParams[activeEffect] || effectParams._default;
       const p = params.find(pp => pp.name === paramName);
+      const slider = document.getElementById('paramSlider_' + paramName);
+      const baseValue = slider ? parseFloat(slider.value) : (p ? getMainParamValue(p) : 0);
       paramBandMappings[paramName] = {
         band: band,
         min: p ? p.min : 0,
@@ -4624,7 +5055,7 @@ function setParamBandMapping(paramName, band) {
         curve: 0,
         smoothing: 0.35,
         smoothValue: 0,
-        baseValue: p ? p.default : 0
+        baseValue: baseValue
       };
     } else {
       paramBandMappings[paramName].band = band;
@@ -4731,6 +5162,38 @@ const randomizableParams = [
 
 let randomIntervals = {}; /* "bandIdx:paramName" -> intervalId */
 let activeBandIndex = -1; /* -1 = main effect, 0-3 = band slot */
+let mainParamCache = {}; /* effectId -> { paramName: value, _rnd_paramName: bool } */
+
+function getMainParamCache(effectId = activeEffect) {
+  if (!effectId) return {};
+  if (!mainParamCache[effectId]) mainParamCache[effectId] = {};
+  return mainParamCache[effectId];
+}
+
+function getMainParamValue(p, effectId = activeEffect) {
+  if (!p || !p.name) return 0;
+  const cache = getMainParamCache(effectId);
+  const cached = cache[p.name];
+  return (typeof cached === 'number' && Number.isFinite(cached)) ? cached : p.default;
+}
+
+function setMainParamValue(paramName, value, effectId = activeEffect) {
+  if (!effectId || !paramName) return;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return;
+  getMainParamCache(effectId)[paramName] = numeric;
+}
+
+function setMainParamFlag(name, enabled, effectId = activeEffect) {
+  if (!effectId || !name) return;
+  getMainParamCache(effectId)[name] = !!enabled;
+}
+
+function formatParamValue(p, value) {
+  const decimals = p && p.step >= 1 ? 0 : 2;
+  const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return numeric.toFixed(decimals);
+}
 
 function getParamDropdownOptions(p) {
   if (p.options) return p.options;
@@ -4766,6 +5229,7 @@ function startRandomParam(paramName, min, max, step, bandIdx) {
       setBandParam(bandIdx, paramName, val);
       bandSlots[bandIdx].paramCache[paramName] = val;
     } else {
+      setMainParamValue(paramName, val);
       setParam(paramName, val);
     }
     /* Only update UI if this band's tab is currently visible */
@@ -4810,6 +5274,8 @@ function toggleRandomParam(paramName, min, max, step, checkbox) {
   /* Cache RND state in active band slot */
   if (activeBandIndex >= 0) {
     bandSlots[activeBandIndex].paramCache['_rnd_' + paramName] = checkbox.checked;
+  } else {
+    setMainParamFlag('_rnd_' + paramName, checkbox.checked);
   }
 }
 
@@ -4828,7 +5294,7 @@ function renderParams() {
     return;
   }
 
-  const params = effectParams[activeEffect] || effectParams._default;
+  const params = getParamsForMode(activeEffect);
   const name = effectNames[activeEffect] || activeEffect;
 
   let html = '';
@@ -4842,11 +5308,28 @@ function renderParams() {
   html += `<div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:12px;padding:6px 10px;background:rgba(0,217,255,0.08);border-radius:6px;border:1px solid rgba(0,217,255,0.24)">
     ${name}</div>`;
 
+  if (uiMode === 'basic') {
+    html += `<div style="font-size:11px;color:var(--text-dim);margin:-4px 0 10px 0">
+      Basic quick controls. Switch to Normal or Pro for the full parameter set.</div>`;
+  } else if (uiMode === 'normal') {
+    html += `<div style="font-size:11px;color:var(--text-dim);margin:-4px 0 10px 0">
+      Normal controls. Pro mode groups every advanced and modulation parameter.</div>`;
+  }
+
+  let lastGroup = '';
   params.forEach(p => {
+    const group = p.group || 'Controls';
+    if (shouldShowParamGroups() && group !== lastGroup) {
+      lastGroup = group;
+      html += `<div style="font-size:10px;font-weight:800;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:12px 0 6px">${group}</div>`;
+    }
     const dropdownOptions = getParamDropdownOptions(p);
     const isDropdown = dropdownOptions && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
     const audioMapping = paramBandMappings[p.name];
+    const cachedVal = getMainParamValue(p);
+    const displayVal = formatParamValue(p, cachedVal);
+    const rndCached = !!getMainParamCache()['_rnd_' + p.name];
 
     html += `<div class="param-slider">
       <div class="control-label" style="display:flex;align-items:center;gap:4px">
@@ -4855,27 +5338,28 @@ function renderParams() {
     /* Random toggle */
     if (isRandomizable) {
       html += `<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;color:var(--orange)" title="Randomize">
-        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)"
+        <input type="checkbox" style="width:12px;height:12px;accent-color:var(--orange)" ${rndCached ? 'checked' : ''}
           onchange="toggleRandomParam('${p.name}',${p.min},${p.max},${p.step},this)">
         RND</label>`;
     }
 
-    html += `<span class="control-value" id="paramVal_${p.name}">${p.default.toFixed(p.step >= 1 ? 0 : 2)}</span>
+    html += `<span class="control-value" id="paramVal_${p.name}">${displayVal}</span>
       </div>`;
 
     if (isDropdown) {
       /* Dropdown select */
       const options = dropdownOptions;
+      const selIdx = Math.round(cachedVal);
       html += `<select id="paramSelect_${p.name}" style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px"
-        onchange="document.getElementById('paramVal_${p.name}').textContent=this.value;setParam('${p.name}',this.selectedIndex)">`;
+        onchange="setMainParamValue('${p.name}',this.selectedIndex);document.getElementById('paramVal_${p.name}').textContent=this.value;setParam('${p.name}',this.selectedIndex)">`;
       options.forEach((opt, idx) => {
-        html += `<option value="${idx}" ${idx === p.default ? 'selected' : ''}>${opt}</option>`;
+        html += `<option value="${idx}" ${idx === selIdx ? 'selected' : ''}>${opt}</option>`;
       });
       html += `</select>`;
     } else {
       /* Regular slider */
-      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.default}"
-        oninput="document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setParam('${p.name}',this.value);if(paramBandMappings['${p.name}'])paramBandMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
+      html += `<input type="range" id="paramSlider_${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${cachedVal}"
+        oninput="setMainParamValue('${p.name}',parseFloat(this.value));document.getElementById('paramVal_${p.name}').textContent=parseFloat(this.value).toFixed(${p.step >= 1 ? 0 : 2});setParam('${p.name}',this.value);if(paramBandMappings['${p.name}'])paramBandMappings['${p.name}'].baseValue=parseFloat(this.value)">`;
     }
 
     /* Audio band mapping */
@@ -4902,7 +5386,7 @@ function renderParams() {
     html += renderCustomWordsPanel();
   }
 
-  if (activeEffect === 'halo_text_logo_tunnel') {
+  if (activeEffect === 'screen_ring') {
     html += renderHaloRingTextPanel();
   }
 
@@ -4912,12 +5396,17 @@ function renderParams() {
     const wrap = document.getElementById('paramBandAmountWrap_' + paramName);
     if (wrap) renderParamBandAmount(paramName, wrap.parentElement);
   });
+  params.forEach(p => {
+    if (getMainParamCache()['_rnd_' + p.name]) {
+      startRandomParam(p.name, p.min, p.max, p.step, -1);
+    }
+  });
 
   /* Hook up Type Animator custom-words handlers */
   if (activeEffect === 'type_animator') {
     initCustomWordsPanel();
   }
-  if (activeEffect === 'halo_text_logo_tunnel') {
+  if (activeEffect === 'screen_ring') {
     initHaloRingTextPanel();
   }
 }
@@ -5111,7 +5600,7 @@ function tickCustomWords(state) {
   }
 }
 
-/* === HALO TEXT LOGO TUNNEL: FREE RING TEXT === */
+/* === SCREEN RING: FREE RING TEXT === */
 const HALO_RING_TEXT_KEY = 'vjlink_halo_ring_text_v1';
 let haloRingTextState = {
   enabled: true,
@@ -5125,7 +5614,7 @@ function loadHaloRingTextState() {
     if (!raw) return;
     const data = JSON.parse(raw);
     if (Array.isArray(data.rings) &&
-        data.rings.join('|') === 'HALO WHO?|VJLINK|HARDTECHNO|VOID?') {
+        data.rings.join('|').replace(/\s/g, '').toUpperCase().includes('HALOWHO?')) {
       data.enabled = true;
       data.mode = 1;
       data.rings = ['BOSO', 'BOSO', 'BOSO', 'BOSO'];
@@ -5177,7 +5666,7 @@ function applyHaloRingTextState(data, persist = true) {
 loadHaloRingTextState();
 
 async function pushHaloRingTextToShader() {
-  if (!connected || activeEffect !== 'halo_text_logo_tunnel') return;
+  if (!connected || activeEffect !== 'screen_ring') return;
   await sendRequest('SetParam', { param: 'ring_text_active', value: haloRingTextState.enabled ? 1 : 0 });
   await sendRequest('SetParam', { param: 'ring_text_mode', value: haloRingTextState.mode });
   for (let ring = 1; ring <= 4; ring++) {
@@ -5206,7 +5695,7 @@ function renderHaloRingTextPanel() {
   return `
   <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--accent)">HALO RING TEXT</span>
+      <span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--accent)">SCREEN RING TEXT</span>
       <label style="display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;color:var(--text-dim)">
         <input type="checkbox" id="haloRingEnabled" ${haloRingTextState.enabled ? 'checked' : ''}>
         <span>Use Custom</span>
@@ -5334,6 +5823,17 @@ function renderCategories() {
   const container = document.getElementById('categoryBtns');
   container.innerHTML = '';
 
+  if (uiMode === 'basic') {
+    Object.entries(effectBasicGroups).forEach(([key, group]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn' + (activeCategory === key ? ' active' : '');
+      btn.textContent = group.label;
+      btn.title = group.note;
+      btn.onclick = () => { activeCategory = key; renderCategories(); renderEffects(); };
+      container.appendChild(btn);
+    });
+  }
+
   if (uiMode === 'pro') {
     Object.entries(effectProGroups).forEach(([key, group]) => {
       const btn = document.createElement('button');
@@ -5347,17 +5847,19 @@ function renderCategories() {
 
   const allBtn = document.createElement('button');
   allBtn.className = 'cat-btn' + (activeCategory === 'all' ? ' active' : '');
-  allBtn.textContent = 'All';
+  allBtn.textContent = uiMode === 'basic' ? 'All Basic' : 'All';
   allBtn.onclick = () => { activeCategory = 'all'; renderCategories(); renderEffects(); };
   container.appendChild(allBtn);
 
-  Object.entries(effectCategories).forEach(([key, cat]) => {
-    const btn = document.createElement('button');
-    btn.className = 'cat-btn' + (activeCategory === key ? ' active' : '');
-    btn.textContent = cat.label;
-    btn.onclick = () => { activeCategory = key; renderCategories(); renderEffects(); };
-    container.appendChild(btn);
-  });
+  if (uiMode !== 'basic') {
+    Object.entries(effectCategories).forEach(([key, cat]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn' + (activeCategory === key ? ' active' : '');
+      btn.textContent = cat.label;
+      btn.onclick = () => { activeCategory = key; renderCategories(); renderEffects(); };
+      container.appendChild(btn);
+    });
+  }
 }
 
 /* === Effect Favorites + Tooltips (v1.3.1) === */
@@ -5423,10 +5925,12 @@ function renderEffects() {
   `;
   grid.appendChild(toolbar);
 
-  const categories = effectProGroups[activeCategory]
+  const categories = (uiMode === 'basic' && effectBasicGroups[activeCategory])
+    ? [[activeCategory, effectBasicGroups[activeCategory]]]
+    : effectProGroups[activeCategory]
     ? [[activeCategory, effectProGroups[activeCategory]]]
     : (activeCategory === 'all'
-      ? Object.entries(effectCategories)
+      ? (uiMode === 'basic' ? Object.entries(effectBasicGroups) : Object.entries(effectCategories))
       : [[activeCategory, effectCategories[activeCategory]]]);
 
   /* Collect favs to show first if showing all */
@@ -5728,7 +6232,7 @@ function renderBandParams(bandIndex) {
   /* Stop random intervals from main params */
   Object.keys(randomIntervals).forEach(k => stopRandomParam(k));
 
-  const params = effectParams[slot.effect] || effectParams._default;
+  const params = getParamsForMode(slot.effect, true);
   const name = effectNames[slot.effect] || slot.effect;
 
   let html = `<div style="font-size:13px;font-weight:700;color:${bandColorVars[bandIndex]};margin-bottom:10px;padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid ${bandColorVars[bandIndex]}30">
@@ -5751,7 +6255,13 @@ function renderBandParams(bandIndex) {
   </div>`;
 
   /* Effect-specific params (with dropdowns + RND) */
+  let lastGroup = '';
   params.forEach(p => {
+    const group = p.group || 'Controls';
+    if (shouldShowParamGroups() && group !== lastGroup) {
+      lastGroup = group;
+      html += `<div style="font-size:10px;font-weight:800;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:12px 0 6px">${group}</div>`;
+    }
     const dropdownOptions = getParamDropdownOptions(p);
     const isDropdown = dropdownOptions && p.step >= 1;
     const isRandomizable = randomizableParams.includes(p.name);
@@ -5926,7 +6436,7 @@ async function applyTriggerPreset(kind) {
     ],
     rave: [
       { effect: 'hardtechno_strobe', threshold: 0.34, attack: 0.95, release: 0.16, hold: 8 },
-      { effect: 'strobe_grid', threshold: 0.32, attack: 0.80, release: 0.14, hold: 7 },
+      { effect: 'sidewinda_flash_objects', threshold: 0.32, attack: 0.88, release: 0.14, hold: 7 },
       { effect: 'beat_rings', threshold: 0.30, attack: 0.72, release: 0.13, hold: 6 },
       { effect: 'flash_shake', threshold: 0.28, attack: 0.70, release: 0.12, hold: 5 },
     ],
@@ -6327,7 +6837,7 @@ function buildVJLinkFilterSettings(effectId) {
   const params = effectParams[effectId] || [];
 
   params.forEach(p => {
-    let value = p.default;
+    let value = getMainParamValue(p, effectId);
     if (effectId === activeEffect) {
       const slider = document.getElementById('paramSlider_' + p.name);
       const select = document.getElementById('paramSelect_' + p.name);
@@ -6790,11 +7300,13 @@ function savePadFromCurrent(idx) {
     alert('Select an effect first to save it to the pad.');
     return;
   }
-  const params = {};
+  const params = Object.assign({}, getMainParamCache());
   const effParams = effectParams[activeEffect] || [];
   effParams.forEach(p => {
     const slider = document.getElementById('paramSlider_' + p.name);
+    const select = document.getElementById('paramSelect_' + p.name);
     if (slider) params[p.name] = parseFloat(slider.value);
+    if (select) params[p.name] = parseFloat(select.value);
   });
   const logos = [];
   for (let li = 0; li < 3; li++) {
@@ -6862,6 +7374,7 @@ async function triggerPad(idx) {
   await new Promise(r => setTimeout(r, 80));
   if (pad.params) {
     for (const [pname, pval] of Object.entries(pad.params)) {
+      setMainParamValue(pname, pval, pad.effect);
       await sendRequest('SetParam', { param: pname, value: pval });
     }
   }
@@ -7452,8 +7965,12 @@ const HIDDEN_META_PARAMS = new Set([
 ]);
 
 function normalizeMetaParam(p) {
-  const uniform = p.id || p.name;
-  if (!uniform || HIDDEN_META_PARAMS.has(uniform) || /^text_char_\d+$/.test(uniform) || /^ring\d+_char_\d+$/.test(uniform)) return null;
+  const uniform = p.param || p.id || p.name;
+  const hidden = !!p.hidden ||
+    HIDDEN_META_PARAMS.has(uniform) ||
+    /^text_char_\d+$/.test(uniform) ||
+    /^ring\d+_char_\d+$/.test(uniform);
+  if (!uniform || hidden) return null;
   const label = p.label || (p.id ? p.name : null) || uniform
     .replace(/^pp_/, '')
     .replace(/_/g, ' ')
@@ -7461,6 +7978,15 @@ function normalizeMetaParam(p) {
   return {
     name: uniform,
     label,
+    type: p.type || 'float',
+    group: p.group || 'Controls',
+    basic: !!p.basic,
+    advanced: !!p.advanced,
+    pro: !!p.pro,
+    hidden: false,
+    audioTarget: p.audio_target || p.audioTarget || null,
+    save: p.save !== false,
+    uiHint: p.ui_hint || p.uiHint || '',
     min: Number.isFinite(Number(p.min)) ? Number(p.min) : 0,
     max: Number.isFinite(Number(p.max)) ? Number(p.max) : 1,
     step: Number.isFinite(Number(p.step)) ? Number(p.step) : 0.01,
@@ -7471,45 +7997,217 @@ function normalizeMetaParam(p) {
 
 function mergeParamList(existing, incoming) {
   const out = [];
-  const seen = new Set();
-  [...(existing || []), ...(incoming || [])].forEach(p => {
-    if (!p || !p.name || seen.has(p.name)) return;
-    seen.add(p.name);
+  const index = new Map();
+  (existing || []).forEach(p => {
+    if (!p || !p.name || index.has(p.name)) return;
+    index.set(p.name, out.length);
     out.push(p);
+  });
+  (incoming || []).forEach(p => {
+    if (!p || !p.name) return;
+    if (index.has(p.name)) {
+      const pos = index.get(p.name);
+      out[pos] = { ...out[pos], ...p };
+    } else {
+      index.set(p.name, out.length);
+      out.push(p);
+    }
   });
   return out;
 }
 
-async function loadEffectMetadataParams() {
+const BASIC_PARAM_LIMIT = 12;
+const BASIC_PARAM_LIMIT_BY_EFFECT = {
+  screen_ring: 14,
+  analog_name_field: 12,
+  crt_slit_field: 10,
+};
+const BASIC_PARAM_PRIORITY = {
+  screen_ring: [
+    'center_logo_slot', 'main_text', 'screen_count', 'screen_gap',
+    'screen_spacing', 'screen_text_scale', 'screen_swing', 'ring_radius',
+    'ring_speed', 'beat_pulse', 'glitch_enable', 'glitch_amount',
+    'mono_contrast', 'scanlines'
+  ],
+  analog_name_field: [
+    'main_text', 'alt_text', 'name_layers', 'text_scale',
+    'text_spread', 'drift_speed', 'rotation_speed', 'line_density',
+    'line_width', 'glitch_amount', 'tear_amount', 'audio_react'
+  ],
+  crt_slit_field: [
+    'line_density', 'line_width', 'rotation', 'rotation_speed',
+    'drift_speed', 'tear_amount', 'glitch_amount', 'brightness',
+    'contrast', 'audio_react'
+  ],
+  sidewinda_flash_objects: [
+    'flash_intensity', 'audio_react', 'flash_rate', 'object_mode',
+    'object_count', 'glitch', 'contrast', 'safety_enable'
+  ],
+  logo_extrude_3d: [
+    'logo_slot', 'depth', 'bevel', 'size',
+    'rotation_y', 'beat_bounce', 'audio_react', 'glow'
+  ],
+};
+
+function getParamsForMode(effectId, forBand = false) {
+  const raw = effectParams[effectId] || effectParams._default || [];
+  const visible = raw.filter(p => p && p.name && !p.hidden);
+  const basicLimit = forBand ? 6 : (BASIC_PARAM_LIMIT_BY_EFFECT[effectId] || BASIC_PARAM_LIMIT);
+
+  if (uiMode === 'pro') return visible;
+  if (uiMode === 'normal') {
+    return visible.filter(p => !p.proOnly);
+  }
+
+  const priority = BASIC_PARAM_PRIORITY[effectId] || [];
+  const prioritized = [];
+  priority.forEach(name => {
+    const found = visible.find(p => p.name === name);
+    if (found && !prioritized.includes(found)) prioritized.push(found);
+  });
+
+  visible.forEach(p => {
+    if (prioritized.length >= basicLimit) return;
+    if (p.basic && !prioritized.includes(p)) prioritized.push(p);
+  });
+
+  if (prioritized.length === 0) {
+    visible.slice(0, forBand ? 5 : basicLimit).forEach(p => prioritized.push(p));
+  }
+
+  return prioritized.slice(0, basicLimit);
+}
+
+function shouldShowParamGroups() {
+  return uiMode === 'pro';
+}
+
+const effectMetadataStatus = new Map();
+
+function getEffectMetadataIds() {
   const ids = new Set();
   Object.values(effectCategories).forEach(cat => (cat.effects || []).forEach(id => ids.add(id)));
   Object.keys(effectNames).forEach(id => ids.add(id));
+  return [...ids];
+}
 
-  const jobs = [...ids].map(async id => {
-    const urls = [`effects_meta/${id}.json`, `effects_meta/flash/${id}.json`];
-    for (const url of urls) {
+function getEffectMetadataUrls(id) {
+  const flashMetaIds = new Set(effectCategories.flash?.effects || []);
+  return flashMetaIds.has(id)
+    ? [`effects_meta/flash/${id}.json`, `effects_meta/${id}.json`]
+    : [`effects_meta/${id}.json`];
+}
+
+function getPriorityEffectMetadataIds() {
+  const priority = new Set();
+  if (activeEffect) priority.add(activeEffect);
+  if (Array.isArray(bandSlots)) {
+    bandSlots.forEach(slot => { if (slot && slot.effect) priority.add(slot.effect); });
+  }
+
+  const activeGroups = (uiMode === 'basic' && effectBasicGroups[activeCategory])
+    ? [effectBasicGroups[activeCategory]]
+    : effectProGroups[activeCategory]
+    ? [effectProGroups[activeCategory]]
+    : (activeCategory === 'all')
+      ? (uiMode === 'basic' ? Object.values(effectBasicGroups) : Object.values(effectCategories))
+      : [effectCategories[activeCategory]];
+
+  activeGroups.forEach(group => (group?.effects || []).forEach(id => priority.add(id)));
+
+  ['screen_ring', 'analog_name_field', 'crt_slit_field', 'sidewinda_flash_objects', 'logo_extrude_3d', 'glitch_basic']
+    .forEach(id => priority.add(id));
+
+  return [...priority].filter(Boolean);
+}
+
+function refreshAfterMetadataLoad(ids) {
+  if (ids.includes(activeEffect)) {
+    renderParams();
+    renderParamTabs();
+  }
+  renderEffects();
+}
+
+async function loadSingleEffectMetadata(id) {
+  if (!id) return false;
+  const existing = effectMetadataStatus.get(id);
+  if (existing?.state === 'loaded' || existing?.state === 'missing') return false;
+  if (existing?.promise) return existing.promise;
+
+  const promise = (async () => {
+    for (const url of getEffectMetadataUrls(id)) {
       try {
-        const resp = await fetch(url, { cache: 'no-store' });
+        const resp = await fetch(url, { cache: 'default' });
         if (!resp.ok) continue;
         const meta = await resp.json();
         if (meta && meta.name) effectNames[id] = meta.name;
-        const params = Array.isArray(meta.params)
-          ? meta.params.map(normalizeMetaParam).filter(Boolean)
-          : [];
+        const sourceParams = Array.isArray(meta.controls) && meta.controls.length
+          ? meta.controls
+          : (Array.isArray(meta.params) ? meta.params : []);
+        const params = sourceParams.map(normalizeMetaParam).filter(Boolean);
         if (params.length) effectParams[id] = mergeParamList(effectParams[id], params);
-        return;
+        effectMetadataStatus.set(id, { state: 'loaded' });
+        return true;
       } catch (err) {
         /* Try fallback path. */
       }
     }
-  });
+    effectMetadataStatus.set(id, { state: 'missing' });
+    return false;
+  })();
 
-  await Promise.all(jobs);
+  effectMetadataStatus.set(id, { state: 'loading', promise });
+  return promise;
+}
+
+async function loadEffectMetadataForEffect(effectId) {
+  const changed = await loadSingleEffectMetadata(effectId);
+  if (changed && effectId === activeEffect) {
+    renderParams();
+    renderParamTabs();
+    renderEffects();
+  }
+  return changed;
+}
+
+async function loadEffectMetadataBatch(ids, options = {}) {
+  const batchSize = options.batchSize || 6;
+  const renderAfter = options.renderAfter !== false;
+  const loaded = [];
+  const uniqueIds = [...new Set(ids || [])].filter(Boolean);
+  for (let i = 0; i < uniqueIds.length; i += batchSize) {
+    const batch = uniqueIds.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(id => loadSingleEffectMetadata(id)));
+    results.forEach((changed, idx) => { if (changed) loaded.push(batch[idx]); });
+    if (renderAfter && loaded.length) refreshAfterMetadataLoad(loaded);
+  }
+  return loaded;
+}
+
+function queueRemainingEffectMetadata(priorityIds) {
+  const priority = new Set(priorityIds || []);
+  const remaining = getEffectMetadataIds().filter(id => !priority.has(id));
+  const run = async () => {
+    await loadEffectMetadataBatch(remaining, { batchSize: 4, renderAfter: false });
+    console.log('[VJLink] Background metadata params loaded for Web UI');
+  };
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(run, { timeout: 1500 });
+  } else {
+    setTimeout(run, 250);
+  }
+}
+
+async function loadEffectMetadataParams() {
   renderParams();
-  if (typeof renderEffectButtons === 'function') renderEffectButtons();
-  else renderEffects();
+  renderEffects();
   renderParamTabs();
-  console.log('[VJLink] Metadata params loaded for Web UI');
+
+  const priorityIds = getPriorityEffectMetadataIds();
+  await loadEffectMetadataBatch(priorityIds, { batchSize: 6, renderAfter: true });
+  queueRemainingEffectMetadata(priorityIds);
+  console.log('[VJLink] Priority metadata params loaded for Web UI');
 }
 
 loadEffectMetadataParams();
@@ -7633,6 +8331,7 @@ setQuantize(0);
 const _origSelectEffect_v120 = (typeof selectEffect === 'function') ? selectEffect : null;
 if (_origSelectEffect_v120) {
   selectEffect = async function(eid) {
+    activeBandIndex = -1;
     /* When chain is active (more than just slot 0), don't override via SetEffect */
     if (effectChain.filter(s => s.effect).length > 1) {
       effectChain[0].effect = eid;

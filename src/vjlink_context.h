@@ -150,6 +150,15 @@ struct vjlink_context {
     float            band_sensitivity[4]; /* user gain per band, default 1.0 */
     float            audio_master_gain;    /* global gain before band normalize */
     float            audio_fall_rate;      /* smoothed band decay/fall speed */
+    float            audio_attack_rate;    /* AudioLink response rise speed */
+    float            audio_release_rate;   /* AudioLink response fall speed */
+    float            audio_raw_mix;        /* 0=smoothed, 1=raw transient response */
+    float            kick_onset_threshold; /* bass transient threshold */
+    float            snare_onset_threshold;/* low/high-mid transient threshold */
+    float            hat_onset_threshold;  /* treble transient threshold */
+    float            onset_boost;          /* onset spike multiplier */
+    float            peak_decay_rate;      /* peak meter decay per FFT hop */
+    char             audio_response_profile[32]; /* raw/punchy/balanced/smooth/manual */
     int              palette_id;           /* 0=Default 1=Hardtechno 2=Rawstyle 3=Acid 4=Cyber 5=Mono */
     float            macro_energy;          /* 0..1 — Performance macro: drives intensity/contrast */
     float            macro_chaos;           /* 0..1 — Performance macro: glitch/noise/distortion */

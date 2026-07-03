@@ -1,0 +1,269 @@
+/*
+ * VJLink - Analog Name Field
+ * Drifting monochrome name field with rotating vertical slit lines,
+ * CRT contrast, flicker, bloom, and AudioLink response.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2 resolution;
+uniform float time;
+uniform float4 bands;
+uniform float4 bands_raw;
+uniform float beat_phase;
+uniform float kick_onset;
+uniform float snare_onset;
+uniform float onset_strength;
+uniform float rms;
+uniform float quality;
+
+uniform float main_text;
+uniform float alt_text;
+uniform float name_layers;
+uniform float text_scale;
+uniform float text_spread;
+uniform float drift_speed;
+uniform float rotation_speed;
+uniform float line_density;
+uniform float line_width;
+uniform float line_rotation;
+uniform float glitch_amount;
+uniform float tear_amount;
+uniform float scanlines;
+uniform float depth_blur;
+uniform float bloom_amount;
+uniform float mono_contrast;
+uniform float flicker;
+uniform float smoke;
+uniform float invert;
+uniform float audio_react;
+uniform float noise_seed;
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float noise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float a = hash21(i + noise_seed);
+    float b = hash21(i + float2(1.0, 0.0) + noise_seed);
+    float c = hash21(i + float2(0.0, 1.0) + noise_seed);
+    float d = hash21(i + float2(1.0, 1.0) + noise_seed);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float2 rot2(float2 p, float a)
+{
+    float s = sin(a);
+    float c = cos(a);
+    return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
+
+float segH(float2 p, float y, float x0, float x1, float w)
+{
+    float gate = smoothstep(x0 - w, x0 + w, p.x) * smoothstep(x1 + w, x1 - w, p.x);
+    return gate * smoothstep(w, 0.0, abs(p.y - y));
+}
+
+float segV(float2 p, float x, float y0, float y1, float w)
+{
+    float gate = smoothstep(y0 - w, y0 + w, p.y) * smoothstep(y1 + w, y1 - w, p.y);
+    return gate * smoothstep(w, 0.0, abs(p.x - x));
+}
+
+float charMask(int ch, float2 p)
+{
+    float w = 0.075;
+    float top = segH(p,  0.34, -0.30, 0.30, w);
+    float mid = segH(p,  0.00, -0.28, 0.28, w);
+    float bot = segH(p, -0.34, -0.30, 0.30, w);
+    float lu  = segV(p, -0.34,  0.00, 0.34, w);
+    float ll  = segV(p, -0.34, -0.34, 0.00, w);
+    float ru  = segV(p,  0.34,  0.00, 0.34, w);
+    float rl  = segV(p,  0.34, -0.34, 0.00, w);
+    float d1 = smoothstep(w, 0.0, abs((p.x + p.y) * 0.72)) * smoothstep(0.58, 0.08, length(p));
+    float d2 = smoothstep(w, 0.0, abs((p.x - p.y) * 0.72)) * smoothstep(0.58, 0.08, length(p));
+
+    float m = 0.0;
+    if (ch == 1) m = max(max(top, mid), max(lu, max(ru, max(ll, rl))));
+    else if (ch == 2) m = max(max(top, mid), max(bot, max(lu, max(ll, max(ru, rl)))));
+    else if (ch == 3) m = max(max(top, bot), max(lu, ll));
+    else if (ch == 4) m = max(max(top, bot), max(lu, max(ll, max(ru, rl))));
+    else if (ch == 5) m = max(max(top, mid), max(bot, max(lu, ll)));
+    else if (ch == 6) m = max(max(top, mid), max(lu, ll));
+    else if (ch == 7) m = max(max(top, bot), max(lu, max(ll, max(mid, rl))));
+    else if (ch == 8) m = max(mid, max(lu, max(ll, max(ru, rl))));
+    else if (ch == 9) m = max(max(top, bot), segV(p, 0.0, -0.34, 0.34, w));
+    else if (ch == 10) m = max(bot, max(rl, ru));
+    else if (ch == 11) m = max(max(lu, ll), max(d1, d2));
+    else if (ch == 12) m = max(bot, max(lu, ll));
+    else if (ch == 13) m = max(max(lu, ll), max(max(ru, rl), max(d1, d2) * 0.8));
+    else if (ch == 14) m = max(max(lu, ll), max(max(ru, rl), d2));
+    else if (ch == 15) m = max(max(top, bot), max(lu, max(ll, max(ru, rl))));
+    else if (ch == 16) m = max(max(top, mid), max(lu, max(ru, ll)));
+    else if (ch == 17) m = max(max(top, bot), max(lu, max(ll, max(ru, max(rl, d2)))));
+    else if (ch == 18) m = max(max(top, mid), max(lu, max(ll, max(ru, d2))));
+    else if (ch == 19) m = max(max(top, mid), max(bot, max(lu, rl)));
+    else if (ch == 20) m = max(top, segV(p, 0.0, -0.34, 0.34, w));
+    else if (ch == 21) m = max(bot, max(lu, max(ll, max(ru, rl))));
+    else if (ch == 22) m = max(d1, d2);
+    else if (ch == 23) m = max(max(lu, ll), max(max(ru, rl), max(d1, d2)));
+    else if (ch == 24) m = max(d1, d2);
+    else if (ch == 25) m = max(d1, max(d2, segV(p, 0.0, -0.34, 0.0, w)));
+    else if (ch == 26) m = max(max(top, bot), d1);
+    else if (ch == 38) m = max(max(top, ru), max(mid, segV(p, 0.0, -0.34, -0.22, w)));
+    return saturate(m);
+}
+
+int wordLength(int choice)
+{
+    if (choice == 1) return 6;
+    if (choice == 2) return 4;
+    if (choice == 3) return 10;
+    if (choice == 4) return 5;
+    if (choice == 5) return 5;
+    return 4;
+}
+
+int wordLetter(int choice, int pos)
+{
+    if (choice == 1) {
+        if (pos == 0) return 22; if (pos == 1) return 10; if (pos == 2) return 12; if (pos == 3) return 9; if (pos == 4) return 14; if (pos == 5) return 11; return 0;
+    }
+    if (choice == 2) {
+        if (pos == 0) return 18; if (pos == 1) return 1; if (pos == 2) return 22; if (pos == 3) return 5; return 0;
+    }
+    if (choice == 3) {
+        if (pos == 0) return 8; if (pos == 1) return 1; if (pos == 2) return 18; if (pos == 3) return 4; if (pos == 4) return 20; if (pos == 5) return 5; if (pos == 6) return 3; if (pos == 7) return 8; if (pos == 8) return 14; if (pos == 9) return 15; return 0;
+    }
+    if (choice == 4) {
+        if (pos == 0) return 22; if (pos == 1) return 15; if (pos == 2) return 9; if (pos == 3) return 4; if (pos == 4) return 38; return 0;
+    }
+    if (choice == 5) {
+        if (pos == 0) return 7; if (pos == 1) return 1; if (pos == 2) return 20; if (pos == 3) return 5; if (pos == 4) return 38; return 0;
+    }
+    if (pos == 0) return 2; if (pos == 1) return 15; if (pos == 2) return 19; if (pos == 3) return 15; return 0;
+}
+
+float wordMask(int choice, float2 cell)
+{
+    int len = wordLength(choice);
+    float x = saturate(cell.x + 0.5);
+    int idx = (int)floor(x * (float)len);
+    if (idx < 0 || idx >= len) return 0.0;
+    float2 local = float2(frac(x * (float)len) - 0.5, cell.y);
+    return charMask(wordLetter(choice, idx), local);
+}
+
+float nameLayer(float2 p, int i, float drive)
+{
+    float fi = (float)i;
+    float depth = fi / 8.0;
+    float2 offset = float2(
+        hash11(fi * 17.0 + noise_seed) - 0.5,
+        hash11(fi * 23.0 + noise_seed) - 0.5) * text_spread;
+    offset += float2(sin(time * (0.09 + depth * 0.08) + fi * 2.1),
+                     cos(time * (0.07 + depth * 0.05) + fi * 1.4)) * text_spread * 0.25;
+    float angle = (hash11(fi * 31.0 + noise_seed) - 0.5) * 0.44 +
+                  time * rotation_speed * (0.05 + depth * 0.05);
+    float scale = max(text_scale, 0.05) * lerp(1.55, 0.45, depth) * (1.0 + drive * 0.04);
+    float2 q = rot2(p - offset, angle);
+    float jitter = (hash11(floor(q.y * 38.0) + floor(time * 20.0) + fi) - 0.5) * glitch_amount * 0.10;
+    float2 cell = float2((q.x + jitter) / (scale * 1.95), q.y / (scale * 0.48));
+    int choice = ((i & 1) == 0) ? (int)floor(main_text + 0.5) : (int)floor(alt_text + 0.5);
+    float mask = wordMask(choice, cell);
+    float plane = smoothstep(0.62, 0.48, max(abs(cell.x), abs(cell.y) * 1.25));
+    float focus = 1.0 - saturate(abs(depth - 0.42) * (1.2 + depth_blur));
+    float blur = lerp(0.38, 1.0, focus);
+    float flick = 0.74 + 0.26 * hash11(floor(time * 9.0) + fi * 13.0 + noise_seed);
+    return mask * plane * blur * lerp(0.95, 0.34, depth) * flick;
+}
+
+float slitField(float2 uv, float drive)
+{
+    float2 p = uv - 0.5;
+    p = rot2(p, line_rotation + time * rotation_speed * 0.12);
+    float density = max(line_density, 4.0);
+    float x = p.x + (noise2(float2(p.y * 4.0, time * 0.18)) - 0.5) * (0.02 + drive * 0.045);
+    float f = frac(x * density);
+    float core = 1.0 - smoothstep(line_width * 0.12, line_width, abs(f - 0.5));
+    float broken = step(0.20, noise2(float2(floor(x * density) * 0.071, floor(uv.y * 18.0 + time * 4.0))));
+    float vgate = smoothstep(0.02, 0.22, uv.y) * smoothstep(0.99, 0.20, uv.y);
+    return saturate((core + core * drive * 0.6) * broken * vgate);
+}
+
+float4 PSAnalogNameField(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float bass = max(bands.x, bands_raw.x);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
+    float drive = saturate((onset_strength + rms + hit) * max(audio_react, 0.0));
+
+    float tearLine = floor(uv.y * 48.0);
+    float tear = (hash11(tearLine + floor(time * 18.0) + noise_seed) - 0.5) * tear_amount * (0.02 + drive * 0.06);
+    uv.x = saturate(uv.x + tear * step(0.78 - drive * 0.2, hash11(tearLine * 3.1 + floor(time * 12.0))));
+
+    float aspect = resolution.x / max(resolution.y, 1.0);
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    p += float2(sin(time * drift_speed * 0.12), cos(time * drift_speed * 0.10)) * 0.10;
+
+    float names = 0.0;
+    int layers = (int)clamp(floor(name_layers + 0.5), 1.0, 8.0);
+    for (int i = 0; i < 8; i++) {
+        if (i >= layers) break;
+        names += nameLayer(p, i, drive);
+    }
+
+    float lines = slitField(uv, drive);
+    float haze = smoothstep(0.36, 0.92,
+        noise2(p * 2.3 + time * 0.10) * 0.65 +
+        noise2(p * 6.0 - time * 0.15 + 19.0) * 0.35) * smoke;
+    float white = names * 0.88 + lines * (0.28 + drive * 0.45) + haze * 0.18;
+    white += pow(saturate(names + lines * 0.4), 2.0) * bloom_amount * (0.20 + hit * 0.38);
+
+    float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
+    white *= lerp(1.0, 0.52 + scan * 0.64, saturate(scanlines));
+    float signal = 0.84 + 0.16 * hash11(floor(time * 26.0) + floor(uv.y * 37.0) + noise_seed);
+    white *= lerp(1.0, signal, saturate(flicker) * (0.45 + drive * 0.45));
+    white = saturate((white - 0.42) * max(mono_contrast, 0.1) + 0.42);
+    white = smoothstep(0.20, 0.86, white);
+    white = lerp(white, 1.0 - white, (invert > 0.5) ? 1.0 : 0.0);
+    return float4(float3(white, white, white), white);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSAnalogNameField(vert_in);
+    }
+}

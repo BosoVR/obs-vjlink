@@ -28,15 +28,6 @@
 #define GAIN_HIGHMID  2.8f
 #define GAIN_TREBLE   5.0f
 
-/* Smoothing rates.
- * Attack < 1.0 prevents instant jumps that make effects frantic.
- * Decay > 0.9 gives smooth falloff that follows musical dynamics. */
-#define ATTACK_RATE  0.4f
-#define DECAY_RATE   0.93f
-
-/* Peak hold decay per frame */
-#define PEAK_DECAY   0.995f
-
 /* Chronotensity parameters (AudioLink-inspired cumulative energy) */
 #define CHRONO_RISE_RATE   0.15f   /* how fast chronotensity rises on energy */
 #define CHRONO_DECAY_RATE  0.992f  /* slow decay in silence */
@@ -227,22 +218,31 @@ static void extract_bands(struct vjlink_audio_engine *engine)
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++)
 		engine->bands_raw[i] = raw[i];
 
-	/* Smooth with attack/decay */
+	/* Smooth with user-tunable AudioLink-style attack/release. */
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
-		float fall = ctx->audio_fall_rate;
+		float attack = ctx->audio_attack_rate;
+		float fall = ctx->audio_release_rate;
+		if (attack < 0.01f)
+			attack = 0.01f;
+		if (attack > 1.0f)
+			attack = 1.0f;
 		if (fall < 0.01f)
 			fall = 0.01f;
-		if (fall > 0.50f)
-			fall = 0.50f;
+		if (fall > 0.80f)
+			fall = 0.80f;
 		float rate = (raw[i] > engine->bands_smoothed[i])
-			? ATTACK_RATE : fall;
+			? attack : fall;
 		engine->bands_smoothed[i] += rate * (raw[i] - engine->bands_smoothed[i]);
 
 		/* Peak hold with slow decay */
 		if (engine->bands_smoothed[i] > engine->bands_peak[i])
 			engine->bands_peak[i] = engine->bands_smoothed[i];
-		else
-			engine->bands_peak[i] *= PEAK_DECAY;
+		else {
+			float decay = ctx->peak_decay_rate;
+			if (decay < 0.80f) decay = 0.80f;
+			if (decay > 0.9999f) decay = 0.9999f;
+			engine->bands_peak[i] *= decay;
+		}
 	}
 
 	/* Chronotensity: cumulative energy that rises on beats, decays in silence
@@ -265,9 +265,19 @@ static void extract_bands(struct vjlink_audio_engine *engine)
 		                   + engine->bands_smoothed[VJLINK_BAND_HIGHMID]) * 0.5f);
 		float hat_diff = raw[VJLINK_BAND_TREBLE] - engine->bands_smoothed[VJLINK_BAND_TREBLE];
 
-		float kick = kick_diff > 0.05f ? kick_diff * 4.0f : 0.0f;
-		float snare = snare_diff > 0.04f ? snare_diff * 4.0f : 0.0f;
-		float hat = hat_diff > 0.04f ? hat_diff * 4.0f : 0.0f;
+		float kick_thr = ctx->kick_onset_threshold;
+		float snare_thr = ctx->snare_onset_threshold;
+		float hat_thr = ctx->hat_onset_threshold;
+		float boost = ctx->onset_boost;
+		if (kick_thr < 0.0f) kick_thr = 0.0f;
+		if (snare_thr < 0.0f) snare_thr = 0.0f;
+		if (hat_thr < 0.0f) hat_thr = 0.0f;
+		if (boost < 0.1f) boost = 0.1f;
+		if (boost > 4.0f) boost = 4.0f;
+
+		float kick = kick_diff > kick_thr ? kick_diff * 4.0f * boost : 0.0f;
+		float snare = snare_diff > snare_thr ? snare_diff * 4.0f * boost : 0.0f;
+		float hat = hat_diff > hat_thr ? hat_diff * 4.0f * boost : 0.0f;
 
 		if (kick > 1.0f) kick = 1.0f;
 		if (snare > 1.0f) snare = 1.0f;
@@ -352,8 +362,12 @@ static void write_audio_texture(struct vjlink_audio_engine *engine)
 	}
 
 	/* Update global context bands */
+	float raw_mix = ctx->audio_raw_mix;
+	if (raw_mix < 0.0f) raw_mix = 0.0f;
+	if (raw_mix > 1.0f) raw_mix = 1.0f;
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
-		ctx->bands[i] = engine->bands_smoothed[i];
+		ctx->bands[i] = engine->bands_smoothed[i] * (1.0f - raw_mix) +
+		                engine->bands_raw[i] * raw_mix;
 		ctx->bands_peak[i] = engine->bands_peak[i];
 		ctx->bands_raw[i] = engine->bands_raw[i];
 		ctx->chronotensity[i] = engine->chronotensity[i] / CHRONO_MAX;

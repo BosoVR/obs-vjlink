@@ -97,6 +97,10 @@ static void load_effect_metadata(struct vjlink_effect_entry *entry)
 	if (!root)
 		return;
 
+	memset(entry->params, 0, sizeof(entry->params));
+	memset(entry->param_handles, 0, sizeof(entry->param_handles));
+	entry->param_count = 0;
+
 	/* Override display name if present */
 	cJSON *name_item = cJSON_GetObjectItem(root, "name");
 	if (name_item && name_item->valuestring)
@@ -450,13 +454,15 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 	 * D3D11 skips the entire draw call if any param is unbound
 	 * ("Not all shader parameters were set").
 	 * Pattern from obs-shaderfilter: enumerate all params, set
-	 * type-appropriate defaults, skip ViewProj (auto-bound).
+	 * type-appropriate defaults so hot-reload and partial metadata
+	 * changes never leave a new uniform uninitialized.
 	 */
 	{
 		size_t num_params = gs_effect_get_num_params(entry->effect);
 		for (size_t i = 0; i < num_params; i++) {
 			gs_eparam_t *param = gs_effect_get_param_by_idx(
 				entry->effect, i);
+
 			struct gs_effect_param_info info;
 			gs_effect_get_param_info(param, &info);
 
@@ -495,7 +501,10 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 			}
 			case GS_SHADER_PARAM_MATRIX4X4: {
 				struct matrix4 m;
-				matrix4_identity(&m);
+				if (info.name && strcmp(info.name, "ViewProj") == 0)
+					gs_matrix_get(&m);
+				else
+					matrix4_identity(&m);
 				gs_effect_set_matrix4(param, &m);
 				break;
 			}
@@ -617,13 +626,17 @@ void vjlink_effect_bind_uniforms(struct vjlink_effect_entry *entry,
 	if (entry->p_pad_index)
 		gs_effect_set_float(entry->p_pad_index, (float)ctx->pad_index);
 
-	/* Logo textures (up to 3 user-selected images) */
-	if (entry->p_logo_tex && ctx->logo_texture)
-		gs_effect_set_texture(entry->p_logo_tex, ctx->logo_texture);
-	if (entry->p_logo_tex2 && ctx->logo_texture2)
-		gs_effect_set_texture(entry->p_logo_tex2, ctx->logo_texture2);
-	if (entry->p_logo_tex3 && ctx->logo_texture3)
-		gs_effect_set_texture(entry->p_logo_tex3, ctx->logo_texture3);
+	/* Logo textures (up to 3 user-selected images). Keep explicit
+	 * fallbacks here so logo-driven shaders never draw with unset slots. */
+	if (entry->p_logo_tex)
+		gs_effect_set_texture(entry->p_logo_tex,
+			ctx->logo_texture ? ctx->logo_texture : g_fallback_tex);
+	if (entry->p_logo_tex2)
+		gs_effect_set_texture(entry->p_logo_tex2,
+			ctx->logo_texture2 ? ctx->logo_texture2 : g_fallback_tex);
+	if (entry->p_logo_tex3)
+		gs_effect_set_texture(entry->p_logo_tex3,
+			ctx->logo_texture3 ? ctx->logo_texture3 : g_fallback_tex);
 }
 
 void vjlink_effect_bind_custom_params(struct vjlink_effect_entry *entry,
@@ -747,6 +760,8 @@ bool vjlink_effect_check_hot_reload(struct vjlink_effect_entry *entry)
 	entry->p_logo_tex2 = NULL;
 	entry->p_logo_tex3 = NULL;
 	memset(entry->param_handles, 0, sizeof(entry->param_handles));
+
+	load_effect_metadata(entry);
 
 	/* Reload */
 	bool ok = vjlink_effect_ensure_loaded(entry);

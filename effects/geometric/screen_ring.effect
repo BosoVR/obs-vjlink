@@ -1,5 +1,5 @@
 /*
- * VJLink - Halo Text Logo Tunnel
+ * VJLink - Screen Ring
  * Monochrome harsh-contrast logo tunnel with repeated glyph rings,
  * barcode columns, scanlines, smoke noise, and optional tearing.
  */
@@ -53,6 +53,29 @@ uniform float mesh_kind;
 uniform float mesh_text_lane;
 uniform float mesh_alpha;
 uniform float mesh_scene_mix;
+uniform float true3d_mode;
+uniform float screen_count;
+uniform float screen_width;
+uniform float screen_height;
+uniform float screen_gap;
+uniform float screen_spacing;
+uniform float screen_depth;
+uniform float screen_tilt;
+uniform float screen_y_motion;
+uniform float screen_swing;
+uniform float screen_orbit_speed;
+uniform float screen_text_scale;
+uniform float screen_segments;
+uniform float screen_arc;
+uniform float logo_spin_x;
+uniform float logo_spin_y;
+uniform float logo_spin_z;
+uniform float volumetric_text = 0.72;
+uniform float depth_blur = 0.62;
+uniform float slit_scan = 0.82;
+uniform float slat_density = 84.0;
+uniform float signal_flicker = 0.48;
+uniform float bloom_amount = 0.58;
 
 uniform float ring1_char_0; uniform float ring1_char_1; uniform float ring1_char_2; uniform float ring1_char_3;
 uniform float ring1_char_4; uniform float ring1_char_5; uniform float ring1_char_6; uniform float ring1_char_7;
@@ -215,6 +238,7 @@ float glyphBit(int letter, int cx, int cy)
 
 int wordLength(int choice)
 {
+    if (choice == 0) return 4;
     if (choice == 1) return 6;
     if (choice == 2) return 4;
     if (choice == 3) return 10;
@@ -226,6 +250,9 @@ int wordLength(int choice)
 
 int wordLetter(int choice, int pos)
 {
+    if (choice == 0) {
+        if (pos == 0) return 2; if (pos == 1) return 15; if (pos == 2) return 19; if (pos == 3) return 15; return 0;
+    }
     if (choice == 1) {
         if (pos == 0) return 22; if (pos == 1) return 10; if (pos == 2) return 12; if (pos == 3) return 9; if (pos == 4) return 14; if (pos == 5) return 11; return 0;
     }
@@ -245,15 +272,10 @@ int wordLetter(int choice, int pos)
         if (pos == 0) return 2; if (pos == 1) return 15; if (pos == 2) return 19; if (pos == 3) return 15; return 0;
     }
 
-    if (pos == 0) return 8;
-    if (pos == 1) return 1;
-    if (pos == 2) return 12;
+    if (pos == 0) return 2;
+    if (pos == 1) return 15;
+    if (pos == 2) return 19;
     if (pos == 3) return 15;
-    if (pos == 4) return 27;
-    if (pos == 5) return 23;
-    if (pos == 6) return 8;
-    if (pos == 7) return 15;
-    if (pos == 8) return 38;
     return 0;
 }
 
@@ -393,12 +415,133 @@ float barcodeMask(float2 uv, float drive)
     return bars * width * vertical * barcode_columns;
 }
 
+float2 rot2(float2 p, float a)
+{
+    float s = sin(a);
+    float c = cos(a);
+    return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
+
+float sampleHaloLaneWord(int lane, float2 cell)
+{
+    float word = 0.0;
+    if (ring_text_active > 0.5 && ring_text_mode > 0.5)
+        word = sampleCustomRingWord(lane, cell);
+    if (word <= 0.0) {
+        int txt = (int)floor(main_text + 0.5);
+        if (lane == 1) txt = (int)floor(ring_text_1 + 0.5);
+        else if (lane == 2) txt = (int)floor(ring_text_2 + 0.5);
+        else if (lane == 3) txt = (int)floor(ring_text_3 + 0.5);
+        else txt = (int)floor(ring_text_4 + 0.5);
+        word = sampleWord(txt, cell);
+    }
+    return word;
+}
+
+float depthTextLayer(float2 uv, int layer, float aspect, float drive)
+{
+    float fi = (float)layer;
+    float z = fi / 5.0;
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+
+    float2 center = float2(
+        sin(time * (0.08 + z * 0.06) + fi * 2.11) * (0.42 + z * 0.52),
+        cos(time * (0.07 + z * 0.04) + fi * 1.37) * (0.18 + z * 0.22));
+    center += float2(
+        hash11(fi * 17.0 + noise_seed) - 0.5,
+        hash11(fi * 23.0 + noise_seed) - 0.5) * 0.26;
+
+    float scale = lerp(1.28, 0.34, z) * (1.0 + drive * beat_pulse * 0.045);
+    float angle = (hash11(fi * 31.0 + noise_seed) - 0.5) * 0.36 +
+                  sin(time * 0.15 + fi) * tunnel_drift * 0.08;
+    float2 q = rot2(p - center, angle);
+    q.x += sin(q.y * 4.2 + time * 0.23 + fi) * screen_swing * 0.025;
+
+    float2 cell = float2(q.x / max(scale * 2.25, 0.001),
+                         q.y / max(scale * 0.54, 0.001));
+    int lane = (layer - (layer / 4) * 4) + 1;
+    float blur = depth_blur * (0.010 + pow(abs(z - 0.45), 1.15) * 0.075);
+
+    float word = sampleHaloLaneWord(lane, cell) * 0.42;
+    word += sampleHaloLaneWord(lane, cell + float2( blur, 0.0)) * 0.15;
+    word += sampleHaloLaneWord(lane, cell - float2( blur, 0.0)) * 0.15;
+    word += sampleHaloLaneWord(lane, cell + float2(0.0,  blur)) * 0.14;
+    word += sampleHaloLaneWord(lane, cell - float2(0.0,  blur)) * 0.14;
+
+    float plane = smoothstep(0.62, 0.48, max(abs(cell.x), abs(cell.y) * 1.25));
+    float focus = 1.0 - saturate(abs(z - 0.42) * (1.15 + depth_blur));
+    float fog_fade = lerp(0.98, 0.34, z) * (0.45 + focus * 0.55);
+    float flick = 0.72 + 0.28 * hash11(floor(time * 10.0) + fi * 19.0 + noise_seed);
+    return word * plane * fog_fade * flick;
+}
+
+float volumetricTextMask(float2 uv, float aspect, float drive)
+{
+    float mask = 0.0;
+    int max_layers = (quality < 0.5) ? 4 : 6;
+    for (int i = 0; i < 6; i++) {
+        if (i >= max_layers)
+            break;
+        mask += depthTextLayer(uv, i, aspect, drive);
+    }
+    return saturate(mask * volumetric_text);
+}
+
+float slitScanMask(float2 uv, float drive)
+{
+    float density = max(slat_density, 8.0);
+    float warp = (noise2(float2(uv.x * 4.0, uv.y * 2.2 + time * 0.13) + noise_seed) - 0.5) *
+                 (0.018 + drive * 0.045);
+    float x = uv.x + warp;
+    float id = floor(x * density);
+    float f = frac(x * density);
+    float core = 1.0 - smoothstep(0.010, 0.075, abs(f - 0.5));
+    float curtain = 1.0 - smoothstep(0.08, 0.43, abs(f - 0.5));
+    float broken = step(0.22, noise2(float2(id * 0.071 + noise_seed, floor(uv.y * 18.0 + time * 5.0))));
+    float vertical_gate = smoothstep(0.04, 0.28, uv.y) * smoothstep(0.98, 0.18, uv.y);
+    return saturate((core + curtain * 0.22) * broken * vertical_gate * slit_scan);
+}
+
+float3 rotX3(float3 v, float a)
+{
+    float s = sin(a), c = cos(a);
+    return float3(v.x, v.y * c - v.z * s, v.y * s + v.z * c);
+}
+
+float3 rotY3(float3 v, float a)
+{
+    float s = sin(a), c = cos(a);
+    return float3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+}
+
+float3 rotZ3(float3 v, float a)
+{
+    float s = sin(a), c = cos(a);
+    return float3(v.x * c - v.y * s, v.x * s + v.y * c, v.z);
+}
+
+float boxIntersect(float3 ro, float3 rd, float3 b)
+{
+    float3 inv = 1.0 / max(abs(rd), float3(0.0001, 0.0001, 0.0001));
+    inv *= sign(rd);
+    float3 t0 = (-b - ro) * inv;
+    float3 t1 = ( b - ro) * inv;
+    float3 tn = min(t0, t1);
+    float3 tf = max(t0, t1);
+    float tnear = max(max(tn.x, tn.y), tn.z);
+    float tfar = min(min(tf.x, tf.y), tf.z);
+    return (tfar >= max(tnear, 0.0)) ? tnear : -1.0;
+}
+
 float4 PSHaloTextLogoTunnelMesh(VertMeshOut vert_in) : TARGET
 {
     float bass = max(bands.x, bands_raw.x);
     float beat = pow(saturate(1.0 - beat_phase), 3.0);
     float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
-    float drive = saturate(glitch_amount * glitch_enable + audio_glitch * (onset_strength + hit + rms * 0.4));
+    float glitch_drive = (glitch_enable > 0.5)
+        ? saturate(glitch_amount + audio_glitch * (onset_strength + hit + rms * 0.4))
+        : 0.0;
     float3 n = normalize(vert_in.normal);
     float shade = 0.30 + saturate(dot(n, normalize(float3(-0.25, 0.45, -0.86)))) * 0.55;
     shade += pow(1.0 - saturate(abs(n.z)), 1.5) * 0.35;
@@ -412,9 +555,9 @@ float4 PSHaloTextLogoTunnelMesh(VertMeshOut vert_in) : TARGET
         float2 p = (vert_in.uv - 0.5) * 2.0;
         float fallback_logo = smoothstep(0.58, 0.50, length(p)) - smoothstep(0.22, 0.28, length(p));
         mask = max(mask, fallback_logo * 0.7);
-    } else {
+    } else if (mesh_kind < 2.5) {
         int lane = (int)clamp(floor(mesh_text_lane + 0.5), 1.0, 4.0);
-        float jitter = (hash21(float2(floor(vert_in.uv.y * 24.0), floor(time * 18.0))) - 0.5) * drive * 0.12;
+        float jitter = (hash21(float2(floor(vert_in.uv.y * 24.0), floor(time * 18.0))) - 0.5) * glitch_drive * 0.12;
         float2 cell = float2(vert_in.uv.x - 0.5 + jitter, (vert_in.uv.y - 0.5) * 0.95);
         if (ring_text_active > 0.5 && ring_text_mode > 0.5)
             mask = sampleCustomRingWord(lane, cell);
@@ -426,6 +569,13 @@ float4 PSHaloTextLogoTunnelMesh(VertMeshOut vert_in) : TARGET
             else txt = (int)floor(ring_text_4 + 0.5);
             mask = sampleWord(txt, cell);
         }
+    } else {
+        float2 p = abs(vert_in.uv - 0.5) * 2.0;
+        float edge = smoothstep(1.0, 0.92, max(p.x, p.y));
+        float scan_bg = sin(vert_in.uv.y * resolution.y * 0.85 + time * 1.2) * 0.5 + 0.5;
+        float scratch = step(0.86, noise2(vert_in.uv * float2(46.0, 13.0) + time * 0.13));
+        float haze = noise2(vert_in.uv * 5.5 + time * 0.06);
+        mask = edge * (0.22 + scan_bg * 0.13 + scratch * 0.22 + haze * 0.16);
     }
 
     float scan = sin(vert_in.uv.y * resolution.y * 1.4) * 0.5 + 0.5;
@@ -446,58 +596,167 @@ float4 PSHaloTextLogoTunnel(VertInOut vert_in) : TARGET
     float bass = max(bands.x, bands_raw.x);
     float beat = pow(saturate(1.0 - beat_phase), 3.0);
     float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
-    float drive = saturate(glitch_amount * glitch_enable + audio_glitch * (onset_strength + hit + rms * 0.4));
+    float glitch_drive = (glitch_enable > 0.5)
+        ? saturate(glitch_amount + audio_glitch * (onset_strength + hit + rms * 0.4))
+        : 0.0;
 
     float tear_line = floor(uv.y * 42.0);
-    float tear = (hash11(tear_line + floor(time * 18.0) + noise_seed) - 0.5) * drive * 0.09;
-    float tear_on = step(0.82 - drive * 0.25, hash11(tear_line * 2.1 + floor(time * 12.0)));
+    float tear = (hash11(tear_line + floor(time * 18.0) + noise_seed) - 0.5) * glitch_drive * 0.09;
+    float tear_on = step(0.82 - glitch_drive * 0.25, hash11(tear_line * 2.1 + floor(time * 12.0)));
     uv.x += tear * tear_on;
     uv = saturate(uv);
 
     float aspect = resolution.x / max(resolution.y, 1.0);
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
-    p += float2(sin(time * 0.12), cos(time * 0.10)) * tunnel_drift * 0.12;
 
-    float mask = 0.0;
-    int max_rings = (quality < 0.5) ? 6 : 10;
-    for (int i = 0; i < 10; i++) {
-        if (i >= max_rings)
-            break;
-        mask = max(mask, ringTextMask(p, i, hit));
+    float cam_dist = lerp(4.2, 5.8, saturate(perspective));
+    float3 ro = float3(0.0, 0.10 + sin(time * 0.16) * tunnel_drift * 0.12, -cam_dist);
+    float3 ta = float3(0.0, 0.0, 0.0);
+    float3 ww = normalize(ta - ro);
+    float3 uu = normalize(cross(ww, float3(0.0, 1.0, 0.0)));
+    float3 vv = cross(uu, ww);
+    float3 rd = normalize(p.x * uu + p.y * vv + 1.48 * ww);
+
+    float best_t = 1e6;
+    float band_mask = 0.0;
+    float band_shade = 0.0;
+    float screens_f = clamp(screen_count, 1.0, 5.0);
+    int screens = (int)floor(screens_f + 0.5);
+    float base_radius = max(screen_gap, 0.15) * (0.82 + ring_radius * 0.55);
+    float ring_spacing = max(screen_spacing, 0.02);
+    float depth_scale = max(screen_depth, 0.02) * (0.76 + saturate(perspective) * 0.72);
+    float height = max(screen_height, 0.08) * (1.0 + hit * beat_pulse * 0.10);
+    float repeat_count = max(1.0, screen_width * 1.35);
+    float text_scale = clamp(screen_text_scale, 0.35, 2.25);
+    float orbit_speed = screen_orbit_speed * 0.50 + ring_speed * 0.12;
+    float half_arc = clamp(screen_arc, 24.0, 360.0) * 0.00872664625;
+
+    for (int i = 0; i < 5; i++) {
+        if (i >= screens) break;
+
+        float fi = float(i);
+        float centered = fi - (screens_f - 1.0) * 0.5;
+        float radius = base_radius + centered * ring_spacing;
+        float y_center = centered * ring_spacing * 0.42 +
+                         sin(time * ring_speed * 0.40 + fi * 1.9) * screen_y_motion * 0.28 +
+                         hit * beat_pulse * 0.10 * sin(fi + 1.3);
+        float phase = time * orbit_speed + fi * 1.37;
+        float lane_phase = phase + screen_swing * 0.16 * sin(time * 0.63 + fi);
+        int lane = (i - (i / 4) * 4) + 1;
+
+        float a = rd.x * rd.x + rd.z * rd.z / max(depth_scale * depth_scale, 0.001);
+        float b = 2.0 * (ro.x * rd.x + ro.z * rd.z / max(depth_scale * depth_scale, 0.001));
+        float c = ro.x * ro.x + ro.z * ro.z / max(depth_scale * depth_scale, 0.001) - radius * radius;
+        float disc = b * b - 4.0 * a * c;
+        if (disc <= 0.0 || abs(a) < 0.0001) continue;
+
+        float sq = sqrt(disc);
+        float t0 = (-b - sq) / (2.0 * a);
+        float t1 = (-b + sq) / (2.0 * a);
+        float t = (t0 > 0.0) ? t0 : t1;
+        if (t <= 0.0 || t >= best_t) continue;
+
+        float3 hitp = ro + rd * t;
+        float local_y = hitp.y - y_center;
+        float tilt_y = local_y + sin(atan2(hitp.z / max(depth_scale, 0.001), hitp.x) + lane_phase) * screen_tilt * 0.0025;
+        if (abs(tilt_y) > height * 0.5) continue;
+
+        float theta = atan2(hitp.z / max(depth_scale, 0.001), hitp.x) + lane_phase;
+        float arc_gate = smoothstep(half_arc + 0.12, half_arc, abs(atan2(sin(theta), cos(theta))));
+        if (arc_gate <= 0.001) continue;
+
+        float y_norm = tilt_y / max(height, 0.001);
+        float edge = smoothstep(0.50, 0.34, abs(y_norm)) * arc_gate;
+        float angle01 = theta / 6.2831853;
+        float jitter = (hash21(float2(floor(angle01 * 96.0), floor(time * 18.0))) - 0.5) * glitch_drive * 0.12;
+        float2 cell = float2(
+            (frac(angle01 * repeat_count + jitter) - 0.5) / text_scale,
+            y_norm / text_scale);
+
+        float word = 0.0;
+        if (ring_text_active > 0.5 && ring_text_mode > 0.5)
+            word = sampleCustomRingWord(lane, cell);
+        if (word <= 0.0) {
+            int txt = (int)floor(main_text + 0.5);
+            if (lane == 1) txt = (int)floor(ring_text_1 + 0.5);
+            else if (lane == 2) txt = (int)floor(ring_text_2 + 0.5);
+            else if (lane == 3) txt = (int)floor(ring_text_3 + 0.5);
+            else txt = (int)floor(ring_text_4 + 0.5);
+            word = sampleWord(txt, cell);
+        }
+
+        float depth_light = 0.56 + 0.44 * saturate((hitp.z / max(depth_scale, 0.001) + radius) / max(radius * 2.0, 0.01));
+        float scan_back = 0.06 + 0.12 * (sin(cell.x * 80.0 + time * 0.6) * 0.5 + 0.5);
+        best_t = t;
+        band_mask = max(word, edge * (0.26 + scan_back)) * edge;
+        band_shade = depth_light;
     }
 
-    float2 logo_p = p / max(logo_size * (1.0 + hit * beat_pulse * 0.12), 0.05) + 0.5;
+    float ls = max(logo_size, 0.05) * (0.70 + hit * beat_pulse * 0.08);
+    float rx = time * logo_spin_x * 1.05 + sin(time * 0.41) * 0.08;
+    float ry = time * logo_spin_y * 1.05 + 0.32 + sin(time * 0.60) * 0.10;
+    float rz = time * logo_spin_z * 1.05 + sin(time * 0.17) * 0.07;
+    float3 logo_ro = ro;
+    float3 logo_rd = rd;
+    logo_ro = rotZ3(rotY3(rotX3(logo_ro, -rx), -ry), -rz);
+    logo_rd = rotZ3(rotY3(rotX3(logo_rd, -rx), -ry), -rz);
+    float box_t = boxIntersect(logo_ro, logo_rd,
+                               float3(ls * 0.58, ls * 0.44,
+                                      0.20 + hit * beat_pulse * 0.08));
     float logo_mask = 0.0;
-    if (logo_p.x >= 0.0 && logo_p.x <= 1.0 && logo_p.y >= 0.0 && logo_p.y <= 1.0) {
-        float4 l = sampleLogo(center_logo_slot, logo_p);
+    float logo_shade = 0.0;
+    if (box_t > 0.0 && box_t < best_t) {
+        float3 hp = logo_ro + logo_rd * box_t;
+        float2 luv = hp.xy / max(ls, 0.001) + 0.5;
+        float4 l = sampleLogo(center_logo_slot, luv);
         float lum = dot(l.rgb, float3(0.299, 0.587, 0.114));
         if (!isFallback(l))
-            logo_mask = smoothstep(0.12, 0.55, max(l.a, lum));
+            logo_mask = smoothstep(0.08, 0.45, max(l.a, lum));
+        float2 lp = luv - 0.5;
+        float fallback_logo = smoothstep(0.46, 0.38, length(lp)) -
+                              smoothstep(0.18, 0.24, length(lp));
+        fallback_logo = max(fallback_logo,
+                            smoothstep(0.06, 0.03, abs(lp.x)) *
+                            smoothstep(0.36, 0.18, abs(lp.y)) * 0.7);
+        logo_mask = max(logo_mask, fallback_logo);
+        float side_depth = saturate(abs(hp.z) / (0.20 + hit * 0.08));
+        float rim = pow(saturate(1.0 - max(abs(lp.x), abs(lp.y)) * 2.0), 0.7);
+        logo_shade = 0.72 + side_depth * 0.28 + rim * 0.20;
     }
-    float fallback_logo = smoothstep(0.28, 0.24, length(p)) - smoothstep(0.10, 0.13, length(p));
-    logo_mask = max(logo_mask, fallback_logo * 0.85);
+
+    float depth_text = volumetricTextMask(uv, aspect, glitch_drive + hit);
+    float slits = slitScanMask(uv, glitch_drive + bands.z + bands.w);
 
     float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
     float scan_mask = lerp(1.0, 0.50 + scan * 0.65, saturate(scanlines));
-    float bars = barcodeMask(uv, drive);
+    float bars = barcodeMask(uv, glitch_drive);
 
     float smoke_a = noise2(p * 2.4 + time * 0.11);
     float smoke_b = noise2(p * 6.3 - time * 0.18 + 23.0);
     float haze = smoothstep(0.35, 0.92, smoke_a * 0.65 + smoke_b * 0.35) * smoke;
     float vignette = smoothstep(1.8, 0.2, length(p));
 
-    float white = mask * (0.85 + hit * beat_pulse * 0.6);
-    white = max(white, logo_mask * (1.1 + hit * 0.9));
-    white = max(white, bars * (0.40 + drive * 0.55));
+    float white = band_mask * band_shade * (0.95 + hit * beat_pulse * 0.65);
+    white = max(white, depth_text * (0.52 + hit * beat_pulse * 0.55));
+    white = max(white, logo_mask * logo_shade * (1.15 + hit * 0.9));
+    white = max(white, bars * (0.40 + glitch_drive * 0.55));
+    white = max(white, slits * (0.20 + bands.z * 0.22 + bands.w * 0.18 + glitch_drive * 0.25));
     white += haze * 0.22 * (0.4 + vignette);
 
-    float black_breaks = noise2(uv * float2(90.0, 38.0) + floor(time * 12.0)) * drive;
-    white *= lerp(1.0, step(0.22, black_breaks), drive * 0.35);
+    float black_breaks = noise2(uv * float2(90.0, 38.0) + floor(time * 12.0)) * glitch_drive;
+    white *= lerp(1.0, step(0.22, black_breaks), glitch_drive * 0.35);
+    white *= lerp(1.0, 0.70 + slits * 0.55, saturate(slit_scan * 0.28));
     white *= scan_mask;
 
     if (strobe_hits > 0.001)
         white += hit * strobe_hits * 0.55;
+
+    float flicker = 0.84 + 0.16 * hash11(floor(time * 28.0) + floor(uv.y * 42.0) + noise_seed);
+    white *= lerp(1.0, flicker, saturate(signal_flicker) * (0.55 + glitch_drive * 0.45));
+
+    float bloom_src = saturate(band_mask + depth_text + logo_mask + bars * 0.35 + slits * 0.22);
+    white += pow(bloom_src, 2.0) * bloom_amount * (0.22 + hit * beat_pulse * 0.48);
 
     float contrast = max(mono_contrast, 0.1);
     white = saturate((white - 0.42) * contrast + 0.42);

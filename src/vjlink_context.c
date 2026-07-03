@@ -40,6 +40,16 @@ bool vjlink_context_init(void)
 		ctx->band_sensitivity[i] = 1.0f;
 	ctx->audio_master_gain = 1.0f;
 	ctx->audio_fall_rate = 0.08f;
+	ctx->audio_attack_rate = 0.65f;
+	ctx->audio_release_rate = 0.22f;
+	ctx->audio_raw_mix = 0.25f;
+	ctx->kick_onset_threshold = 0.05f;
+	ctx->snare_onset_threshold = 0.04f;
+	ctx->hat_onset_threshold = 0.04f;
+	ctx->onset_boost = 1.0f;
+	ctx->peak_decay_rate = 0.995f;
+	strncpy(ctx->audio_response_profile, "balanced",
+	        sizeof(ctx->audio_response_profile) - 1);
 	ctx->palette_id = 0;
 	ctx->macro_energy = 0.5f;
 	ctx->macro_chaos = 0.0f;

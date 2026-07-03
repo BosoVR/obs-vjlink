@@ -27,6 +27,15 @@ static void apply_band_blend_mode(enum vjlink_blend_mode mode)
 	}
 }
 
+static bool is_continuous_visual_slot(const struct vjlink_band_slot *slot)
+{
+	if (!slot || !slot->effect_id[0])
+		return false;
+
+	return strcmp(slot->effect_id, "screen_ring") == 0 ||
+	       strcmp(slot->effect_id, "logo_extrude_3d") == 0;
+}
+
 void vjlink_band_effects_init(struct vjlink_band_effects *bfx,
                                uint32_t width, uint32_t height)
 {
@@ -261,7 +270,9 @@ static void render_band_slot(struct vjlink_band_effects *bfx,
                               struct vjlink_band_slot *slot,
                               gs_texture_t *input_tex)
 {
-	if (!slot->entry || !slot->enabled || slot->current_activation <= 0.001f)
+	bool continuous_visual = is_continuous_visual_slot(slot);
+	if (!slot->entry || !slot->enabled ||
+	    (!continuous_visual && slot->current_activation <= 0.001f))
 		return;
 
 	if (!vjlink_effect_ensure_loaded(slot->entry))
@@ -297,7 +308,10 @@ static void render_band_slot(struct vjlink_band_effects *bfx,
 	/* Bind band_activation uniform */
 	if (slot->entry->p_band_activation)
 		gs_effect_set_float(slot->entry->p_band_activation,
-		                    slot->current_activation * slot->blend_alpha);
+		                    (continuous_visual
+		                     ? fmaxf(slot->current_activation, 0.85f)
+		                     : slot->current_activation) *
+		                    slot->blend_alpha);
 
 	/* Bind custom parameter values (from band slot or defaults) */
 	vjlink_effect_bind_custom_params(slot->entry,
@@ -325,7 +339,9 @@ gs_texture_t *vjlink_band_effects_render(struct vjlink_band_effects *bfx,
 	/* Check if any band has activation > 0 */
 	bool any_active = false;
 	for (int i = 0; i < VJLINK_NUM_BANDS; i++) {
-		if (bfx->slots[i].enabled && bfx->slots[i].current_activation > 0.001f) {
+		if (bfx->slots[i].enabled &&
+		    (bfx->slots[i].current_activation > 0.001f ||
+		     is_continuous_visual_slot(&bfx->slots[i]))) {
 			any_active = true;
 			break;
 		}
@@ -373,7 +389,9 @@ gs_texture_t *vjlink_band_effects_render(struct vjlink_band_effects *bfx,
 		int i = bfx->render_order[oi];
 		if (i < 0 || i >= VJLINK_NUM_BANDS) i = oi; /* defensive */
 		struct vjlink_band_slot *slot = &bfx->slots[i];
-		if (!slot->enabled || slot->current_activation <= 0.001f)
+		if (!slot->enabled ||
+		    (!is_continuous_visual_slot(slot) &&
+		     slot->current_activation <= 0.001f))
 			continue;
 
 		/* Render the effect to its own render target */

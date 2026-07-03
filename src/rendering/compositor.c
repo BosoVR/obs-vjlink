@@ -4,6 +4,7 @@
 #include "rendering/engine3d.h"
 #include "audio/audio_texture.h"
 #include <obs-module.h>
+#include <graphics/matrix4.h>
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -45,6 +46,65 @@ static gs_texture_t *create_opaque_black_tex(uint32_t width, uint32_t height)
 	gs_texture_t *tex = gs_texture_create(width, height, GS_RGBA, 1, &ptr, 0);
 	free(data);
 	return tex;
+}
+
+static void bind_internal_effect_defaults(gs_effect_t *effect,
+                                          gs_texture_t *fallback_tex)
+{
+	if (!effect)
+		return;
+
+	size_t num_params = gs_effect_get_num_params(effect);
+	for (size_t i = 0; i < num_params; i++) {
+		gs_eparam_t *param = gs_effect_get_param_by_idx(effect, i);
+		struct gs_effect_param_info info;
+
+		gs_effect_get_param_info(param, &info);
+		switch (info.type) {
+		case GS_SHADER_PARAM_TEXTURE:
+			if (fallback_tex)
+				gs_effect_set_texture(param, fallback_tex);
+			break;
+		case GS_SHADER_PARAM_FLOAT:
+			gs_effect_set_float(param, 0.0f);
+			break;
+		case GS_SHADER_PARAM_INT:
+			gs_effect_set_int(param, 0);
+			break;
+		case GS_SHADER_PARAM_BOOL:
+			gs_effect_set_bool(param, false);
+			break;
+		case GS_SHADER_PARAM_VEC2: {
+			struct vec2 z;
+			vec2_zero(&z);
+			gs_effect_set_vec2(param, &z);
+			break;
+		}
+		case GS_SHADER_PARAM_VEC3: {
+			struct vec4 z;
+			vec4_zero(&z);
+			gs_effect_set_val(param, &z, sizeof(float) * 3);
+			break;
+		}
+		case GS_SHADER_PARAM_VEC4: {
+			struct vec4 z;
+			vec4_zero(&z);
+			gs_effect_set_vec4(param, &z);
+			break;
+		}
+		case GS_SHADER_PARAM_MATRIX4X4: {
+			struct matrix4 m;
+			if (info.name && strcmp(info.name, "ViewProj") == 0)
+				gs_matrix_get(&m);
+			else
+				matrix4_identity(&m);
+			gs_effect_set_matrix4(param, &m);
+			break;
+		}
+		default:
+			break;
+		}
+	}
 }
 
 struct vjlink_compositor *vjlink_compositor_create_renderer(uint32_t width,
@@ -275,7 +335,7 @@ static bool node_uses_true3d_mesh(const struct vjlink_effect_node *node)
 		return false;
 
 	return strcmp(node->entry->id, "logo_extrude_3d") == 0 ||
-	       strcmp(node->entry->id, "halo_text_logo_tunnel") == 0;
+	       strcmp(node->entry->id, "screen_ring") == 0;
 }
 
 static void set_effect_float_by_name(struct vjlink_effect_entry *entry,
@@ -393,13 +453,16 @@ static bool render_effect_node_3d_scene(struct vjlink_compositor *comp,
 		(const float (*)[4])node->param_values);
 	bind_chain_audio_activation(node->entry);
 
+	bool is_screen_ring = strcmp(node->entry->id, "screen_ring") == 0;
+
 	/* No-black safety: draw the shader's proven fullscreen path first.
 	 * If a GPU/driver rejects the mesh pass, the user still sees a usable
 	 * visual instead of a black frame. Meshes are then layered on top. */
 	gs_blend_state_push();
 	gs_enable_blending(false);
 	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
-	set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.0f);
+	set_effect_float_by_name(node->entry, "true3d_mode", 0.0f);
+	set_effect_float_by_name(node->entry, "mesh_scene_mix", is_screen_ring ? 1.0f : 0.0f);
 	draw_fullscreen_effect_draw(node->entry, comp->width, comp->height);
 	gs_blend_state_pop();
 
@@ -411,7 +474,6 @@ static bool render_effect_node_3d_scene(struct vjlink_compositor *comp,
 	float bounce_enabled = node_param_value(node, "beat_bounce", 1.0f) > 0.5f;
 	float bounce = bounce_enabled ? hit * react : 0.0f;
 	float aspect = (float)comp->width / fmaxf((float)comp->height, 1.0f);
-	bool is_halo = strcmp(node->entry->id, "halo_text_logo_tunnel") == 0;
 
 	enum gs_cull_mode old_cull = gs_get_cull_mode();
 	gs_blend_state_push();
@@ -421,49 +483,32 @@ static bool render_effect_node_3d_scene(struct vjlink_compositor *comp,
 	gs_enable_depth_test(true);
 	gs_depth_function(GS_LEQUAL);
 
-	gs_perspective(is_halo ? 54.0f : 48.0f, aspect, 0.05f, 100.0f);
+	gs_perspective(is_screen_ring ? 54.0f : 48.0f, aspect, 0.05f, 100.0f);
 
 	struct vjlink_mesh *cube = vjlink_engine3d_get_mesh(comp->engine3d,
 	                                                    VJLINK_MESH_CUBE);
 
-	if (is_halo) {
-		float ring_count = clampf_local(node_param_value(node, "ring_count", 8.0f),
-		                                1.0f, 10.0f);
-		float ring_speed = node_param_value(node, "ring_speed", 1.15f);
-		float radius = node_param_value(node, "ring_radius", 0.62f);
-		float text_thickness = node_param_value(node, "text_thickness", 0.09f);
+	if (is_screen_ring) {
 		float logo_size = node_param_value(node, "logo_size", 0.42f);
 		float pulse = node_param_value(node, "beat_pulse", 0.68f);
-		float drift = node_param_value(node, "tunnel_drift", 0.42f);
-		float depth_span = 7.5f + node_param_value(node, "perspective", 0.82f) * 5.0f;
-		int max_rings = (int)ring_count;
-		if (max_rings > 10)
-			max_rings = 10;
-
-		for (int i = max_rings - 1; i >= 0; i--) {
-			float t = (float)i / fmaxf(ring_count - 1.0f, 1.0f);
-			float phase = ctx->elapsed_time * ring_speed * 0.22f + t;
-			float z = 3.2f + t * depth_span - hit * pulse * 1.2f;
-			float lane = (float)((i % 4) + 1);
-			float scale = (1.0f + t * 3.0f) * radius * (1.0f + hit * pulse * 0.15f);
-			float x = sinf(ctx->elapsed_time * 0.38f + i * 1.9f) * drift * 0.18f;
-			float y = cosf(ctx->elapsed_time * 0.31f + i * 1.3f) * drift * 0.12f;
-			float ry = sinf(phase * 1.8f) * 0.36f;
-			float rz = phase * 0.75f;
-			draw_mesh_object(node->entry, cube, 2.0f, lane, 0.80f,
-			                 x, y, z,
-			                 scale * 1.85f, text_thickness * 2.0f, 0.035f,
-			                 0.0f, ry, rz);
-		}
+		float logo_spin_x = node_param_value(node, "logo_spin_x", 0.08f);
+		float logo_spin_y = node_param_value(node, "logo_spin_y", 0.28f);
+		float logo_spin_z = node_param_value(node, "logo_spin_z", 0.03f);
 
 		draw_mesh_object(node->entry, cube, 1.0f, 0.0f, 1.0f,
 		                 0.0f, 0.0f, 2.45f - bounce * 0.35f,
 		                 logo_size * 2.0f * (1.0f + bounce * 0.18f),
 		                 logo_size * 2.0f * (1.0f + bounce * 0.18f),
 		                 0.18f + bounce * 0.18f,
-		                 -12.0f * VJLINK_DEG_TO_RAD,
-		                 (20.0f + sinf(ctx->elapsed_time * 0.6f) * 8.0f) * VJLINK_DEG_TO_RAD,
-		                 sinf(ctx->elapsed_time * 0.17f) * 0.08f);
+		                 (-12.0f + sinf(ctx->elapsed_time * 0.41f) * 5.0f +
+		                  ctx->elapsed_time * logo_spin_x * 60.0f) *
+		                 VJLINK_DEG_TO_RAD,
+		                 (20.0f + sinf(ctx->elapsed_time * 0.6f) * 8.0f +
+		                  ctx->elapsed_time * logo_spin_y * 60.0f) *
+		                 VJLINK_DEG_TO_RAD,
+		                 (sinf(ctx->elapsed_time * 0.17f) * 4.5f +
+		                  ctx->elapsed_time * logo_spin_z * 60.0f) *
+		                 VJLINK_DEG_TO_RAD);
 	} else {
 		float size = node_param_value(node, "size", 0.38f);
 		float depth = node_param_value(node, "depth", 0.62f);
@@ -490,11 +535,8 @@ static bool render_effect_node_3d_scene(struct vjlink_compositor *comp,
 	gs_enable_depth_test(false);
 	gs_set_cull_mode(old_cull);
 
-	if (is_halo) {
-		set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.42f);
-		draw_fullscreen_effect_draw(node->entry, comp->width, comp->height);
-		set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.0f);
-	}
+	set_effect_float_by_name(node->entry, "true3d_mode", 0.0f);
+	set_effect_float_by_name(node->entry, "mesh_scene_mix", 0.0f);
 
 	gs_blend_state_pop();
 	gs_texrender_end(node->output);
@@ -778,6 +820,8 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp,
 				gs_blend_state_push();
 				gs_enable_blending(false);
 
+				bind_internal_effect_defaults(comp->luma_alpha_effect,
+				                              prev_output);
 				gs_effect_set_texture(comp->luma_alpha_image, prev_output);
 				while (gs_effect_loop(comp->luma_alpha_effect, "Draw")) {
 					gs_draw_sprite(prev_output, 0, comp->width, comp->height);
@@ -844,6 +888,7 @@ gs_texture_t *vjlink_compositor_render(struct vjlink_compositor *comp,
 				gs_blend_state_push();
 				gs_enable_blending(false);
 
+				bind_internal_effect_defaults(comp->debug_effect, prev_output);
 				gs_effect_set_texture(comp->debug_image, prev_output);
 				if (comp->debug_resolution) {
 					struct vec2 res;

@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "effect_id": "crt_slit_field",
+  "name": "CRT Slit Field",
+  "category": "retro",
+  "role": "generator",
+  "performance_group": "main_visual",
+  "quality_cost": "low",
+  "requires_input": false,
+  "description": "Standalone rotating CRT slit-line field with tearing, smoke haze, flicker, bloom, and AudioLink response.",
+  "author": "VJLink",
+  "controls": [
+    { "param": "line_density", "label": "Line Density", "type": "float", "default": 82, "min": 6, "max": 220, "step": 1, "group": "Transform", "basic": true, "advanced": false, "audio_target": "treble", "save": true },
+    { "param": "line_width", "label": "Line Width", "type": "float", "default": 0.14, "min": 0.02, "max": 0.55, "step": 0.01, "group": "Transform", "basic": true, "advanced": false, "audio_target": null, "save": true },
+    { "param": "rotation", "label": "Rotation", "type": "float", "default": 0.08, "min": -3.14, "max": 3.14, "step": 0.01, "group": "Transform", "basic": true, "advanced": false, "audio_target": null, "save": true },
+    { "param": "rotation_speed", "label": "Rotation Speed", "type": "float", "default": 0.72, "min": -4, "max": 4, "step": 0.01, "group": "Transform", "basic": true, "advanced": false, "audio_target": "mid", "save": true },
+    { "param": "drift_speed", "label": "Drift Speed", "type": "float", "default": 1.0, "min": -4, "max": 4, "step": 0.01, "group": "Transform", "basic": true, "advanced": false, "audio_target": "low_mid", "save": true },
+    { "param": "tear_amount", "label": "Horizontal Tear", "type": "float", "default": 0.46, "min": 0, "max": 1, "step": 0.01, "group": "Glitch", "basic": true, "advanced": false, "audio_target": "kick", "save": true },
+    { "param": "glitch_amount", "label": "Glitch Breakup", "type": "float", "default": 0.38, "min": 0, "max": 1, "step": 0.01, "group": "Glitch", "basic": true, "advanced": false, "audio_target": "onset", "save": true },
+    { "param": "brightness", "label": "Brightness", "type": "float", "default": 0.92, "min": 0, "max": 3, "step": 0.01, "group": "Color", "basic": true, "advanced": false, "audio_target": "energy", "save": true },
+    { "param": "contrast", "label": "Contrast", "type": "float", "default": 2.25, "min": 0.2, "max": 5, "step": 0.05, "group": "Color", "basic": true, "advanced": false, "audio_target": null, "save": true },
+    { "param": "bloom_amount", "label": "Bloom", "type": "float", "default": 0.52, "min": 0, "max": 2, "step": 0.01, "group": "Color", "basic": false, "advanced": true, "audio_target": "kick", "save": true },
+    { "param": "flicker", "label": "Signal Flicker", "type": "float", "default": 0.50, "min": 0, "max": 1.5, "step": 0.01, "group": "Glitch", "basic": false, "advanced": true, "audio_target": "onset", "save": true },
+    { "param": "smoke", "label": "Smoke Haze", "type": "float", "default": 0.34, "min": 0, "max": 1, "step": 0.01, "group": "Texture/Input", "basic": false, "advanced": true, "audio_target": "rms", "save": true },
+    { "param": "invert", "label": "Invert", "type": "bool", "default": 0, "min": 0, "max": 1, "step": 1, "group": "Color", "basic": false, "advanced": true, "audio_target": null, "save": true, "options": ["Off", "On"] },
+    { "param": "audio_react", "label": "Audio React", "type": "float", "default": 1.0, "min": 0, "max": 3, "step": 0.01, "group": "AudioLink", "basic": true, "advanced": false, "audio_target": "energy", "save": true },
+    { "param": "noise_seed", "label": "Noise Seed", "type": "float", "default": 41, "min": 0, "max": 999, "step": 1, "group": "Performance", "basic": false, "advanced": true, "audio_target": null, "save": true }
+  ],
+  "audio_link": {
+    "enabled": true,
+    "inputs": ["bands", "bands_raw", "beat_phase", "kick_onset", "snare_onset", "onset_strength", "rms"],
+    "targets": ["line_density", "rotation_speed", "drift_speed", "tear_amount", "glitch_amount", "brightness", "bloom_amount", "flicker", "smoke", "audio_react"]
+  },
+  "params": [
+    { "id": "line_density", "name": "Line Density", "type": "float", "default": 82, "min": 6, "max": 220, "step": 1 },
+    { "id": "line_width", "name": "Line Width", "type": "float", "default": 0.14, "min": 0.02, "max": 0.55, "step": 0.01 },
+    { "id": "rotation", "name": "Rotation", "type": "float", "default": 0.08, "min": -3.14, "max": 3.14, "step": 0.01 },
+    { "id": "rotation_speed", "name": "Rotation Speed", "type": "float", "default": 0.72, "min": -4, "max": 4, "step": 0.01 },
+    { "id": "drift_speed", "name": "Drift Speed", "type": "float", "default": 1.0, "min": -4, "max": 4, "step": 0.01 },
+    { "id": "tear_amount", "name": "Horizontal Tear", "type": "float", "default": 0.46, "min": 0, "max": 1, "step": 0.01 },
+    { "id": "glitch_amount", "name": "Glitch Breakup", "type": "float", "default": 0.38, "min": 0, "max": 1, "step": 0.01 },
+    { "id": "brightness", "name": "Brightness", "type": "float", "default": 0.92, "min": 0, "max": 3, "step": 0.01 },
+    { "id": "contrast", "name": "Contrast", "type": "float", "default": 2.25, "min": 0.2, "max": 5, "step": 0.05 },
+    { "id": "bloom_amount", "name": "Bloom", "type": "float", "default": 0.52, "min": 0, "max": 2, "step": 0.01 },
+    { "id": "flicker", "name": "Signal Flicker", "type": "float", "default": 0.50, "min": 0, "max": 1.5, "step": 0.01 },
+    { "id": "smoke", "name": "Smoke Haze", "type": "float", "default": 0.34, "min": 0, "max": 1, "step": 0.01 },
+    { "id": "invert", "name": "Invert", "type": "float", "default": 0, "min": 0, "max": 1, "step": 1 },
+    { "id": "audio_react", "name": "Audio React", "type": "float", "default": 1.0, "min": 0, "max": 3, "step": 0.01 },
+    { "id": "noise_seed", "name": "Noise Seed", "type": "float", "default": 41, "min": 0, "max": 999, "step": 1 }
+  ]
+}

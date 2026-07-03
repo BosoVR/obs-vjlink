@@ -1,4 +1,5 @@
 #include "vjlink_state.h"
+#include "../vjlink_context.h"
 #include "presets/cjson/cJSON.h"
 
 #include <obs-module.h>
@@ -30,6 +31,53 @@ static void set_default_state(void)
 	copy_string(g_state.ui_mode, sizeof(g_state.ui_mode), "basic");
 	copy_string(g_state.ai_mode, sizeof(g_state.ai_mode), "off");
 	g_state.strobe_safety = 1.0;
+	copy_string(g_state.audio_response_profile,
+	            sizeof(g_state.audio_response_profile), "balanced");
+	g_state.audio_attack_rate = 0.65;
+	g_state.audio_release_rate = 0.22;
+	g_state.audio_raw_mix = 0.25;
+	g_state.kick_onset_threshold = 0.05;
+	g_state.snare_onset_threshold = 0.04;
+	g_state.hat_onset_threshold = 0.04;
+	g_state.onset_boost = 1.0;
+	g_state.peak_decay_rate = 0.995;
+}
+
+static double clamp_double(double value, double min_value, double max_value)
+{
+	if (value < min_value)
+		return min_value;
+	if (value > max_value)
+		return max_value;
+	return value;
+}
+
+static void apply_audio_response_to_context(void)
+{
+	struct vjlink_context *ctx = vjlink_get_context();
+	if (!ctx)
+		return;
+
+	copy_string(ctx->audio_response_profile,
+	            sizeof(ctx->audio_response_profile),
+	            g_state.audio_response_profile);
+	ctx->audio_attack_rate = (float)clamp_double(g_state.audio_attack_rate,
+	                                             0.01, 1.0);
+	ctx->audio_release_rate = (float)clamp_double(g_state.audio_release_rate,
+	                                              0.01, 0.80);
+	ctx->audio_fall_rate = ctx->audio_release_rate;
+	ctx->audio_raw_mix = (float)clamp_double(g_state.audio_raw_mix,
+	                                         0.0, 1.0);
+	ctx->kick_onset_threshold = (float)clamp_double(
+		g_state.kick_onset_threshold, 0.0, 1.0);
+	ctx->snare_onset_threshold = (float)clamp_double(
+		g_state.snare_onset_threshold, 0.0, 1.0);
+	ctx->hat_onset_threshold = (float)clamp_double(
+		g_state.hat_onset_threshold, 0.0, 1.0);
+	ctx->onset_boost = (float)clamp_double(g_state.onset_boost,
+	                                       0.1, 4.0);
+	ctx->peak_decay_rate = (float)clamp_double(g_state.peak_decay_rate,
+	                                           0.80, 0.9999);
 }
 
 static void build_state_path(void)
@@ -173,6 +221,28 @@ static cJSON *state_to_json(void)
 	cJSON_AddNumberToObject(root, "strobe_safety", g_state.strobe_safety);
 	cJSON_AddStringToObject(root, "state_path", g_state_path);
 
+	cJSON *audio_response = cJSON_AddObjectToObject(root, "audio_response");
+	if (audio_response) {
+		cJSON_AddStringToObject(audio_response, "profile",
+		                        g_state.audio_response_profile);
+		cJSON_AddNumberToObject(audio_response, "attack",
+		                         g_state.audio_attack_rate);
+		cJSON_AddNumberToObject(audio_response, "release",
+		                         g_state.audio_release_rate);
+		cJSON_AddNumberToObject(audio_response, "raw_mix",
+		                         g_state.audio_raw_mix);
+		cJSON_AddNumberToObject(audio_response, "kick_threshold",
+		                         g_state.kick_onset_threshold);
+		cJSON_AddNumberToObject(audio_response, "snare_threshold",
+		                         g_state.snare_onset_threshold);
+		cJSON_AddNumberToObject(audio_response, "hat_threshold",
+		                         g_state.hat_onset_threshold);
+		cJSON_AddNumberToObject(audio_response, "onset_boost",
+		                         g_state.onset_boost);
+		cJSON_AddNumberToObject(audio_response, "peak_decay",
+		                         g_state.peak_decay_rate);
+	}
+
 	cJSON *chain = cJSON_AddArrayToObject(root, "chain");
 	for (uint32_t i = 0;
 	     chain && i < g_state.chain_count && i < VJLINK_STATE_MAX_CHAIN_SLOTS;
@@ -293,6 +363,39 @@ static void parse_state(cJSON *root)
 	item = cJSON_GetObjectItem(root, "strobe_safety");
 	if (cJSON_IsNumber(item))
 		g_state.strobe_safety = item->valuedouble;
+
+	cJSON *audio_response = cJSON_GetObjectItem(root, "audio_response");
+	if (cJSON_IsObject(audio_response)) {
+		item = cJSON_GetObjectItem(audio_response, "profile");
+		if (cJSON_IsString(item))
+			copy_string(g_state.audio_response_profile,
+			            sizeof(g_state.audio_response_profile),
+			            item->valuestring);
+		item = cJSON_GetObjectItem(audio_response, "attack");
+		if (cJSON_IsNumber(item))
+			g_state.audio_attack_rate = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "release");
+		if (cJSON_IsNumber(item))
+			g_state.audio_release_rate = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "raw_mix");
+		if (cJSON_IsNumber(item))
+			g_state.audio_raw_mix = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "kick_threshold");
+		if (cJSON_IsNumber(item))
+			g_state.kick_onset_threshold = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "snare_threshold");
+		if (cJSON_IsNumber(item))
+			g_state.snare_onset_threshold = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "hat_threshold");
+		if (cJSON_IsNumber(item))
+			g_state.hat_onset_threshold = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "onset_boost");
+		if (cJSON_IsNumber(item))
+			g_state.onset_boost = item->valuedouble;
+		item = cJSON_GetObjectItem(audio_response, "peak_decay");
+		if (cJSON_IsNumber(item))
+			g_state.peak_decay_rate = item->valuedouble;
+	}
 
 	cJSON *chain = cJSON_GetObjectItem(root, "chain");
 	if (cJSON_IsArray(chain)) {
@@ -445,6 +548,8 @@ static void parse_state(cJSON *root)
 		}
 		g_state.profile_count = count;
 	}
+
+	apply_audio_response_to_context();
 }
 
 bool vjlink_state_init(void)
@@ -678,4 +783,29 @@ void vjlink_state_free_profile_list(char **names, uint32_t count)
 	for (uint32_t i = 0; i < count; i++)
 		bfree(names[i]);
 	bfree(names);
+}
+
+void vjlink_state_set_audio_response(const char *profile, double attack,
+                                     double release, double raw_mix,
+                                     double kick_threshold,
+                                     double snare_threshold,
+                                     double hat_threshold,
+                                     double onset_boost,
+                                     double peak_decay)
+{
+	if (!g_initialized)
+		vjlink_state_init();
+
+	copy_string(g_state.audio_response_profile,
+	            sizeof(g_state.audio_response_profile),
+	            (profile && *profile) ? profile : "manual");
+	g_state.audio_attack_rate = clamp_double(attack, 0.01, 1.0);
+	g_state.audio_release_rate = clamp_double(release, 0.01, 0.80);
+	g_state.audio_raw_mix = clamp_double(raw_mix, 0.0, 1.0);
+	g_state.kick_onset_threshold = clamp_double(kick_threshold, 0.0, 1.0);
+	g_state.snare_onset_threshold = clamp_double(snare_threshold, 0.0, 1.0);
+	g_state.hat_onset_threshold = clamp_double(hat_threshold, 0.0, 1.0);
+	g_state.onset_boost = clamp_double(onset_boost, 0.1, 4.0);
+	g_state.peak_decay_rate = clamp_double(peak_decay, 0.80, 0.9999);
+	apply_audio_response_to_context();
 }

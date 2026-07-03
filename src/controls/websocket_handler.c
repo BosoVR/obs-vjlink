@@ -323,6 +323,24 @@ static void handle_get_state(obs_data_t *request_data,
 	                    (double)ctx->audio_master_gain);
 	obs_data_set_double(response_data, "audio_fall_rate",
 	                    (double)ctx->audio_fall_rate);
+	obs_data_set_string(response_data, "audio_response_profile",
+	                    ctx->audio_response_profile);
+	obs_data_set_double(response_data, "audio_attack_rate",
+	                    (double)ctx->audio_attack_rate);
+	obs_data_set_double(response_data, "audio_release_rate",
+	                    (double)ctx->audio_release_rate);
+	obs_data_set_double(response_data, "audio_raw_mix",
+	                    (double)ctx->audio_raw_mix);
+	obs_data_set_double(response_data, "kick_onset_threshold",
+	                    (double)ctx->kick_onset_threshold);
+	obs_data_set_double(response_data, "snare_onset_threshold",
+	                    (double)ctx->snare_onset_threshold);
+	obs_data_set_double(response_data, "hat_onset_threshold",
+	                    (double)ctx->hat_onset_threshold);
+	obs_data_set_double(response_data, "onset_boost",
+	                    (double)ctx->onset_boost);
+	obs_data_set_double(response_data, "peak_decay_rate",
+	                    (double)ctx->peak_decay_rate);
 	obs_data_set_double(response_data, "elapsed_time",
 	                    (double)ctx->elapsed_time);
 
@@ -1098,13 +1116,111 @@ static void handle_set_audio_controls(obs_data_t *request_data,
 		if (fall > 0.50)
 			fall = 0.50;
 		ctx->audio_fall_rate = (float)fall;
+		if (!obs_data_get_bool(request_data, "preserve_response"))
+			ctx->audio_release_rate = (float)fall;
 	}
+
+	vjlink_state_set_audio_response(ctx->audio_response_profile,
+	                                (double)ctx->audio_attack_rate,
+	                                (double)ctx->audio_release_rate,
+	                                (double)ctx->audio_raw_mix,
+	                                (double)ctx->kick_onset_threshold,
+	                                (double)ctx->snare_onset_threshold,
+	                                (double)ctx->hat_onset_threshold,
+	                                (double)ctx->onset_boost,
+	                                (double)ctx->peak_decay_rate);
+	vjlink_state_save_default();
 
 	obs_data_set_bool(response_data, "success", true);
 	obs_data_set_double(response_data, "audio_master_gain",
 	                    (double)ctx->audio_master_gain);
 	obs_data_set_double(response_data, "audio_fall_rate",
 	                    (double)ctx->audio_fall_rate);
+}
+
+static double clamp_audio_double(double value, double min_value,
+                                 double max_value)
+{
+	if (value < min_value)
+		return min_value;
+	if (value > max_value)
+		return max_value;
+	return value;
+}
+
+static void handle_set_audio_response(obs_data_t *request_data,
+                                      obs_data_t *response_data, void *priv)
+{
+	UNUSED_PARAMETER(priv);
+
+	struct vjlink_context *ctx = vjlink_get_context();
+	const char *profile = obs_data_get_string(request_data, "profile");
+	double attack = obs_data_has_user_value(request_data, "attack")
+		? obs_data_get_double(request_data, "attack")
+		: (double)ctx->audio_attack_rate;
+	double release = obs_data_has_user_value(request_data, "release")
+		? obs_data_get_double(request_data, "release")
+		: (double)ctx->audio_release_rate;
+	double raw_mix = obs_data_has_user_value(request_data, "raw_mix")
+		? obs_data_get_double(request_data, "raw_mix")
+		: (double)ctx->audio_raw_mix;
+	double kick_threshold = obs_data_has_user_value(request_data, "kick_threshold")
+		? obs_data_get_double(request_data, "kick_threshold")
+		: (double)ctx->kick_onset_threshold;
+	double snare_threshold = obs_data_has_user_value(request_data, "snare_threshold")
+		? obs_data_get_double(request_data, "snare_threshold")
+		: (double)ctx->snare_onset_threshold;
+	double hat_threshold = obs_data_has_user_value(request_data, "hat_threshold")
+		? obs_data_get_double(request_data, "hat_threshold")
+		: (double)ctx->hat_onset_threshold;
+	double onset_boost = obs_data_has_user_value(request_data, "onset_boost")
+		? obs_data_get_double(request_data, "onset_boost")
+		: (double)ctx->onset_boost;
+	double peak_decay = obs_data_has_user_value(request_data, "peak_decay")
+		? obs_data_get_double(request_data, "peak_decay")
+		: (double)ctx->peak_decay_rate;
+
+	attack = clamp_audio_double(attack, 0.01, 1.0);
+	release = clamp_audio_double(release, 0.01, 0.80);
+	raw_mix = clamp_audio_double(raw_mix, 0.0, 1.0);
+	kick_threshold = clamp_audio_double(kick_threshold, 0.0, 1.0);
+	snare_threshold = clamp_audio_double(snare_threshold, 0.0, 1.0);
+	hat_threshold = clamp_audio_double(hat_threshold, 0.0, 1.0);
+	onset_boost = clamp_audio_double(onset_boost, 0.1, 4.0);
+	peak_decay = clamp_audio_double(peak_decay, 0.80, 0.9999);
+
+	strncpy(ctx->audio_response_profile,
+	        (profile && *profile) ? profile : "manual",
+	        sizeof(ctx->audio_response_profile) - 1);
+	ctx->audio_response_profile[sizeof(ctx->audio_response_profile) - 1] = '\0';
+	ctx->audio_attack_rate = (float)attack;
+	ctx->audio_release_rate = (float)release;
+	ctx->audio_fall_rate = (float)release;
+	ctx->audio_raw_mix = (float)raw_mix;
+	ctx->kick_onset_threshold = (float)kick_threshold;
+	ctx->snare_onset_threshold = (float)snare_threshold;
+	ctx->hat_onset_threshold = (float)hat_threshold;
+	ctx->onset_boost = (float)onset_boost;
+	ctx->peak_decay_rate = (float)peak_decay;
+
+	vjlink_state_set_audio_response(ctx->audio_response_profile,
+	                                attack, release, raw_mix,
+	                                kick_threshold, snare_threshold,
+	                                hat_threshold, onset_boost,
+	                                peak_decay);
+	vjlink_state_save_default();
+
+	obs_data_set_bool(response_data, "success", true);
+	obs_data_set_string(response_data, "profile",
+	                    ctx->audio_response_profile);
+	obs_data_set_double(response_data, "attack", attack);
+	obs_data_set_double(response_data, "release", release);
+	obs_data_set_double(response_data, "raw_mix", raw_mix);
+	obs_data_set_double(response_data, "kick_threshold", kick_threshold);
+	obs_data_set_double(response_data, "snare_threshold", snare_threshold);
+	obs_data_set_double(response_data, "hat_threshold", hat_threshold);
+	obs_data_set_double(response_data, "onset_boost", onset_boost);
+	obs_data_set_double(response_data, "peak_decay", peak_decay);
 }
 
 /* Pending chain replacement, applied on render thread */
@@ -1401,6 +1517,8 @@ static void register_all_requests(void)
 	                        handle_set_sensitivity, NULL);
 	vendor_request_register(g_vendor, "SetAudioControls",
 	                        handle_set_audio_controls, NULL);
+	vendor_request_register(g_vendor, "SetAudioResponse",
+	                        handle_set_audio_response, NULL);
 	vendor_request_register(g_vendor, "SetChain",
 	                        handle_set_chain, NULL);
 	vendor_request_register(g_vendor, "SetOscConfig",
@@ -1441,7 +1559,7 @@ void vjlink_websocket_init(void)
 	g_ws_available = true;
 
 	blog(LOG_INFO,
-	     "[VJLink] WebSocket vendor registered (29 request types)");
+	     "[VJLink] WebSocket vendor registered (30 request types)");
 }
 
 /* Called after all OBS modules have loaded (from plugin post-load event) */
@@ -1462,7 +1580,7 @@ void vjlink_websocket_late_init(void)
 	g_ws_available = true;
 
 	blog(LOG_INFO,
-	     "[VJLink] WebSocket vendor registered late (29 request types)");
+	     "[VJLink] WebSocket vendor registered late (30 request types)");
 }
 
 void vjlink_websocket_shutdown(void)

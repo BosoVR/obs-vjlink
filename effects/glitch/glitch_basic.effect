@@ -58,8 +58,8 @@ float hash21(float2 p)
 
 float3 overlayPattern(float2 uv, float drive)
 {
-    float line = floor(uv.y * (45.0 + drive * 65.0));
-    float h = hash11(line + floor(time * 24.0));
+    float tear_line = floor(uv.y * (45.0 + drive * 65.0));
+    float h = hash11(tear_line + floor(time * 24.0));
     float active = step(0.78 - drive * 0.25, h);
     float scan = sin(uv.y * resolution.y * 3.14159) * 0.5 + 0.5;
     float snow = hash21(uv * resolution + floor(time * 90.0));

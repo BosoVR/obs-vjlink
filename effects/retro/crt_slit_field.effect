@@ -1,0 +1,139 @@
+/*
+ * VJLink - CRT Slit Field
+ * Dense rotating vertical scan/slit field with analog tearing and flicker.
+ */
+
+uniform float4x4 ViewProj;
+uniform float2 resolution;
+uniform float time;
+uniform float4 bands;
+uniform float4 bands_raw;
+uniform float beat_phase;
+uniform float kick_onset;
+uniform float snare_onset;
+uniform float onset_strength;
+uniform float rms;
+
+uniform float line_density;
+uniform float line_width;
+uniform float rotation;
+uniform float rotation_speed;
+uniform float drift_speed;
+uniform float tear_amount;
+uniform float glitch_amount;
+uniform float brightness;
+uniform float contrast;
+uniform float bloom_amount;
+uniform float flicker;
+uniform float smoke;
+uniform float invert;
+uniform float audio_react;
+uniform float noise_seed;
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float noise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float a = hash21(i + noise_seed);
+    float b = hash21(i + float2(1.0, 0.0) + noise_seed);
+    float c = hash21(i + float2(0.0, 1.0) + noise_seed);
+    float d = hash21(i + float2(1.0, 1.0) + noise_seed);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float2 rot2(float2 p, float a)
+{
+    float s = sin(a);
+    float c = cos(a);
+    return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
+
+float slitLayer(float2 uv, float density, float angle, float drive, float seed)
+{
+    float2 p = uv - 0.5;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+    p = rot2(p, angle);
+    p.x += sin(p.y * 4.0 + time * drift_speed + seed) * (0.015 + drive * 0.025);
+    float f = frac(p.x * density + seed);
+    float core = 1.0 - smoothstep(line_width * 0.12, line_width, abs(f - 0.5));
+    float broken = step(0.22, noise2(float2(floor(p.x * density) * 0.09 + seed, floor(uv.y * 22.0 + time * 4.0))));
+    float glow = 1.0 - smoothstep(line_width, line_width * 4.0, abs(f - 0.5));
+    return (core + glow * 0.20) * broken;
+}
+
+float4 PSCrtSlitField(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float bass = max(bands.x, bands_raw.x);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float hit = max(max(kick_onset, snare_onset * 0.55), beat * bass);
+    float drive = saturate((onset_strength + rms + hit) * max(audio_react, 0.0));
+
+    float tearLine = floor(uv.y * 54.0);
+    float tear = (hash11(tearLine + floor(time * 22.0) + noise_seed) - 0.5) *
+                 tear_amount * (0.025 + drive * 0.08);
+    uv.x = saturate(uv.x + tear * step(0.76 - drive * 0.24, hash11(tearLine * 2.7 + floor(time * 13.0))));
+
+    float baseAngle = rotation + time * rotation_speed * 0.16;
+    float d = max(line_density, 4.0);
+    float lines = slitLayer(uv, d, baseAngle, drive, 0.0);
+    lines += slitLayer(uv, d * 0.55, baseAngle + 1.5708, drive, 17.0) * 0.32;
+    lines += slitLayer(uv, d * 1.8, baseAngle + 0.22, drive, 31.0) * 0.18;
+
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+    float haze = smoothstep(0.30, 0.95,
+        noise2(p * 2.2 + time * 0.10) * 0.65 +
+        noise2(p * 7.0 - time * 0.17 + 29.0) * 0.35) * smoke;
+    float vignette = smoothstep(1.75, 0.2, length(p));
+    float white = lines * (brightness + drive * 0.65) + haze * 0.18 * vignette;
+    white += pow(saturate(lines), 2.0) * bloom_amount * (0.22 + hit * 0.44);
+
+    float analogBreak = noise2(float2(floor(uv.x * 96.0), floor(uv.y * 42.0 + time * 10.0))) * glitch_amount;
+    white *= lerp(1.0, step(0.20, analogBreak), glitch_amount * 0.28);
+
+    float signal = 0.82 + 0.18 * hash11(floor(time * 30.0) + floor(uv.y * 45.0) + noise_seed);
+    white *= lerp(1.0, signal, flicker * (0.52 + drive * 0.42));
+    white = saturate((white - 0.42) * max(contrast, 0.1) + 0.42);
+    white = smoothstep(0.18, 0.86, white);
+    white = lerp(white, 1.0 - white, (invert > 0.5) ? 1.0 : 0.0);
+    return float4(float3(white, white, white), white);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSCrtSlitField(vert_in);
+    }
+}

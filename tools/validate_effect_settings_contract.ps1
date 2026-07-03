@@ -87,42 +87,42 @@ if (-not (Test-Path -LiteralPath $effectsRoot)) {
     }
 }
 
-$haloShader = Join-Path $Root 'effects\geometric\halo_text_logo_tunnel.effect'
-$haloMeta = Join-Path $Root 'effects_meta\halo_text_logo_tunnel.json'
+$screenRingShader = Join-Path $Root 'effects\geometric\screen_ring.effect'
+$screenRingMeta = Join-Path $Root 'effects_meta\screen_ring.json'
 
-if (-not (Test-Path -LiteralPath $haloShader)) {
-    Add-Failure 'Missing halo_text_logo_tunnel shader.'
+if (-not (Test-Path -LiteralPath $screenRingShader)) {
+    Add-Failure 'Missing screen_ring shader.'
 } else {
-    $shaderText = Get-Content -LiteralPath $haloShader -Raw
-    if ($shaderText -notmatch 'choice == 6' -or $shaderText -notmatch 'return 2; if \(pos == 1\) return 15; if \(pos == 2\) return 19; if \(pos == 3\) return 15') {
-        Add-Failure 'Halo shader does not define BOSO as preset word 6.'
+    $shaderText = Get-Content -LiteralPath $screenRingShader -Raw
+    if ($shaderText -notmatch 'choice == 0' -or $shaderText -notmatch 'return 2; if \(pos == 1\) return 15; if \(pos == 2\) return 19; if \(pos == 3\) return 15') {
+        Add-Failure 'Screen Ring shader does not define BOSO as preset word 0.'
     }
     foreach ($ring in 1..4) {
         foreach ($idx in 0..11) {
             $uniform = "ring${ring}_char_${idx}"
             if ($shaderText -notmatch "\b$uniform\b") {
-                Add-Failure "Halo shader missing custom text uniform '$uniform'."
+                Add-Failure "Screen Ring shader missing custom text uniform '$uniform'."
                 break
             }
         }
     }
     if ($shaderText -notmatch 'customRingCharAt') {
-        Add-Failure 'Halo shader does not read custom ring text through customRingCharAt.'
+        Add-Failure 'Screen Ring shader does not read custom ring text through customRingCharAt.'
     }
 }
 
-if (-not (Test-Path -LiteralPath $haloMeta)) {
-    Add-Failure 'Missing halo_text_logo_tunnel metadata.'
+if (-not (Test-Path -LiteralPath $screenRingMeta)) {
+    Add-Failure 'Missing screen_ring metadata.'
 } else {
-    $metaText = Get-Content -LiteralPath $haloMeta -Raw
-    if ($metaText -notmatch '"BOSO"' -or $metaText -notmatch '"main_text".*"default": 6') {
-        Add-Failure 'Halo metadata does not set BOSO as the default ring text.'
+    $metaText = Get-Content -LiteralPath $screenRingMeta -Raw
+    if ($metaText -notmatch '"BOSO"' -or $metaText -notmatch '"main_text".*"default": 0') {
+        Add-Failure 'Screen Ring metadata does not set BOSO as the default ring text.'
     }
     foreach ($ring in 1..4) {
         foreach ($idx in 0..11) {
             $uniform = "ring${ring}_char_${idx}"
             if ($metaText -notmatch """$uniform""") {
-                Add-Failure "Halo metadata missing custom text param '$uniform'."
+                Add-Failure "Screen Ring metadata missing custom text param '$uniform'."
                 break
             }
         }

@@ -64,6 +64,15 @@ struct vjlink_state {
 	char ui_mode[16];
 	char ai_mode[16];
 	double strobe_safety;
+	char audio_response_profile[32];
+	double audio_attack_rate;
+	double audio_release_rate;
+	double audio_raw_mix;
+	double kick_onset_threshold;
+	double snare_onset_threshold;
+	double hat_onset_threshold;
+	double onset_boost;
+	double peak_decay_rate;
 
 	struct vjlink_saved_chain_slot chain[VJLINK_STATE_MAX_CHAIN_SLOTS];
 	uint32_t chain_count;
@@ -89,6 +98,13 @@ bool vjlink_state_load_profile(const char *name, char **out_json);
 bool vjlink_state_delete_profile(const char *name);
 bool vjlink_state_list_profiles(char ***out_names, uint32_t *out_count);
 void vjlink_state_free_profile_list(char **names, uint32_t count);
+void vjlink_state_set_audio_response(const char *profile, double attack,
+                                     double release, double raw_mix,
+                                     double kick_threshold,
+                                     double snare_threshold,
+                                     double hat_threshold,
+                                     double onset_boost,
+                                     double peak_decay);
 
 #ifdef __cplusplus
 }

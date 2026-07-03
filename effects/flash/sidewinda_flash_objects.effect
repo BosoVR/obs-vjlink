@@ -1,0 +1,261 @@
+/*
+ * VJLink - Sidewinda Flash Objects
+ * Monochrome audio-reactive flash field with torn bands, smoke noise,
+ * and optional logo/primitive/mesh-like silhouettes.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d logo_tex;
+uniform texture2d logo_tex2;
+uniform texture2d logo_tex3;
+uniform float2    resolution;
+uniform float     time;
+uniform float4    bands;
+uniform float4    bands_raw;
+uniform float     beat_phase;
+uniform float     bpm;
+uniform float     kick_onset;
+uniform float     snare_onset;
+uniform float     onset_strength;
+uniform float     rms;
+uniform float     quality;
+uniform float     has_input_source;
+uniform float     strobe_safety;
+
+uniform float flash_intensity;
+uniform float audio_react;
+uniform float flash_rate;
+uniform float object_mode;
+uniform float object_count;
+uniform float object_scale;
+uniform float object_spin;
+uniform float object_depth;
+uniform float logo_slot;
+uniform float glitch;
+uniform float contrast;
+uniform float band_density;
+uniform float tear_amount;
+uniform float smoke_density;
+uniform float source_mix;
+uniform float invert;
+uniform float safety_enable;
+
+sampler_state texSampler {
+    Filter   = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertInOut {
+    float4 pos : POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut vert_in)
+{
+    VertInOut vert_out;
+    vert_out.pos = mul(float4(vert_in.pos.xyz, 1.0), ViewProj);
+    vert_out.uv  = vert_in.uv;
+    return vert_out;
+}
+
+float hash11(float p)
+{
+    p = frac(p * 0.1031);
+    p *= p + 33.33;
+    p *= p + p;
+    return frac(p);
+}
+
+float hash21(float2 p)
+{
+    p = frac(p * float2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return frac(p.x * p.y);
+}
+
+float noise2(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+float fbm(float2 p)
+{
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += noise2(p) * amp;
+        p = p * 2.03 + float2(17.3, 9.1);
+        amp *= 0.5;
+    }
+    return v;
+}
+
+float2 rotate2(float2 p, float a)
+{
+    float s = sin(a);
+    float c = cos(a);
+    return float2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
+
+float box_mask(float2 p, float2 b)
+{
+    float2 d = abs(p) - b;
+    float dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+    return smoothstep(0.018, -0.018, dist);
+}
+
+float ring_mask(float2 p, float r, float w)
+{
+    return smoothstep(w, 0.0, abs(length(p) - r));
+}
+
+float primitive_mask(float2 p, float mode_seed)
+{
+    float box = box_mask(p, float2(0.24, 0.14));
+    float bar = box_mask(rotate2(p, 0.8), float2(0.28, 0.035));
+    float ring = ring_mask(p, 0.19, 0.028);
+    float tri = smoothstep(0.02, -0.02, max(abs(p.x) * 0.82 + p.y * 0.62, -p.y - 0.18));
+    if (mode_seed < 0.33) return max(box, bar);
+    if (mode_seed < 0.66) return max(ring, bar * 0.65);
+    return max(tri, box * 0.35);
+}
+
+float logo_mask(float2 uv)
+{
+    float4 s = logo_tex.Sample(texSampler, uv);
+    if (logo_slot > 0.5 && logo_slot < 1.5)
+        s = logo_tex2.Sample(texSampler, uv);
+    else if (logo_slot >= 1.5)
+        s = logo_tex3.Sample(texSampler, uv);
+
+    float vis = max(max(s.r, s.g), s.b) * s.a;
+    return vis;
+}
+
+float object_field(float2 uv, float drive)
+{
+    if (object_mode < 0.5 || object_count < 0.5)
+        return 0.0;
+
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= resolution.x / max(resolution.y, 1.0);
+
+    float count = clamp(floor(object_count + 0.5), 1.0, 12.0);
+    float field = 0.0;
+    for (int i = 0; i < 12; i++) {
+        float fi = (float)i;
+        float active = 1.0 - step(count, fi + 0.5);
+
+        float seed = hash11(fi * 13.17 + 4.0);
+        float angle = fi / count * 6.28318 + time * object_spin * (0.18 + seed * 0.25);
+        float radius = 0.22 + hash11(fi * 7.1) * 0.68;
+        float depth = 0.62 + 0.38 * sin(angle + time * 0.35 + seed * 4.0);
+        float2 center = float2(cos(angle), sin(angle * 0.91)) * radius;
+        center.y += (hash11(fi + 2.2) - 0.5) * 0.32;
+
+        float size = object_scale * lerp(0.11, 0.28, depth) * (1.0 + drive * 0.18);
+        float2 lp = (p - center) / max(size, 0.001);
+        lp = rotate2(lp, -angle * 0.7 - time * object_spin);
+
+        float mask = 0.0;
+        if (object_mode < 1.5) {
+            float2 luv = lp * 0.5 + 0.5;
+            mask = logo_mask(saturate(luv));
+            mask *= step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
+            mask = max(mask, primitive_mask(lp * 0.8, seed) * step(mask, 0.02) * 0.35);
+        } else if (object_mode < 2.5) {
+            mask = primitive_mask(lp, seed);
+        } else {
+            float mesh = max(box_mask(lp, float2(0.28, 0.18)), ring_mask(lp, 0.28, 0.02));
+            float wire_a = smoothstep(0.035, 0.0, abs(frac((lp.x + lp.y) * 4.0) - 0.5));
+            float wire_b = smoothstep(0.035, 0.0, abs(frac((lp.x - lp.y) * 4.0) - 0.5));
+            mask = mesh * max(wire_a, wire_b);
+        }
+
+        float shade = lerp(0.35, 1.0, depth) * (1.0 + object_depth * drive * 0.35);
+        field = max(field, mask * shade * active);
+    }
+
+    return saturate(field);
+}
+
+float4 PSSidewindaFlashObjects(VertInOut vert_in) : TARGET
+{
+    float2 uv = vert_in.uv;
+    float bass = max(bands.x, bands_raw.x);
+    float high = max(bands.w, bands_raw.w);
+    float hit = max(max(kick_onset, snare_onset * 0.78), onset_strength * 0.65);
+    float beat = pow(saturate(1.0 - beat_phase), 3.0);
+    float drive = saturate((bass * 0.55 + high * 0.18 + rms * 0.25 + hit + beat * 0.45) * max(audio_react, 0.0));
+
+    float safety_value = strobe_safety > 0.001 ? saturate(strobe_safety) : 1.0;
+    float safety = safety_enable > 0.5 ? safety_value : 1.0;
+    float rate = max(0.25, flash_rate);
+    float frame = floor(time * rate + beat_phase * 2.0);
+    float frame_hash = hash11(frame + 19.0);
+
+    float rows = lerp(12.0, 96.0, saturate(band_density));
+    float row = floor(uv.y * rows);
+    float row_hash = hash11(row + frame * 3.1);
+    float tear_gate = step(0.58 - drive * 0.25, row_hash);
+    float tear = (row_hash - 0.5) * tear_amount * glitch * (0.03 + drive * 0.18) * tear_gate;
+
+    float2 guv = uv;
+    guv.x += tear;
+    guv.y += (hash11(row * 2.7 + frame) - 0.5) * tear_gate * glitch * 0.018;
+    guv = saturate(guv);
+
+    float4 src = image.Sample(texSampler, guv);
+    float source_lum = dot(src.rgb, float3(0.299, 0.587, 0.114));
+
+    float2 aspect_uv = uv - 0.5;
+    aspect_uv.x *= resolution.x / max(resolution.y, 1.0);
+    float smoke = fbm(aspect_uv * float2(3.5, 2.1) + float2(time * 0.08, -time * 0.06));
+    float fine = hash21(uv * resolution + frame);
+    float band = step(0.58 - drive * 0.2, row_hash) * smoothstep(0.08, 0.0, abs(frac(uv.y * rows) - 0.5));
+    float columns = step(0.82 - glitch * 0.25, hash11(floor(uv.x * 84.0) + frame)) * (0.25 + high * 0.75);
+    float scan = sin(uv.y * resolution.y * 3.14159 * lerp(1.0, 4.5, saturate(band_density))) * 0.5 + 0.5;
+
+    float pulse = step(frac(time * rate + frame_hash), saturate(0.18 + drive * 0.32));
+    float flash = saturate((hit * 1.2 + beat * 0.55 + drive * 0.55) * flash_intensity * pulse * safety);
+
+    float bg = smoke * smoke_density * (0.25 + drive * 0.75);
+    bg += band * (0.18 + drive * 0.72);
+    bg += columns * glitch * 0.42;
+    bg += (fine - 0.5) * glitch * (0.12 + drive * 0.2);
+    bg *= 0.72 + scan * 0.36;
+    bg = max(bg, flash);
+
+    float objects = object_field(uv + float2(tear * 0.35, 0.0), drive);
+    float obj_edge = saturate(objects * (1.0 + drive * 0.7));
+    float lum = max(bg, obj_edge * lerp(0.62, 1.0, flash));
+
+    if (has_input_source > 0.5)
+        lum = lerp(lum, max(lum, source_lum), saturate(source_mix));
+
+    lum = saturate((lum - 0.5) * max(contrast, 0.1) + 0.5);
+    lum = smoothstep(0.02, 0.96, lum);
+    if (invert > 0.5)
+        lum = 1.0 - lum;
+
+    float alpha = saturate(max(lum, has_input_source > 0.5 ? src.a * saturate(source_mix) : 0.0));
+    return float4(float3(lum, lum, lum), alpha);
+}
+
+technique Draw
+{
+    pass
+    {
+        vertex_shader = VSDefault(vert_in);
+        pixel_shader  = PSSidewindaFlashObjects(vert_in);
+    }
+}
